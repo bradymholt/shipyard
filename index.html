@@ -231,7 +231,7 @@
 
   .board {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
     padding: 12px;
   }
@@ -260,6 +260,10 @@
     border-radius: 6px;
     padding: 8px 10px;
     box-shadow: var(--shadow);
+  }
+  .card.draft {
+    background: color-mix(in srgb, var(--fg-muted) 7%, var(--bg));
+    border-style: dashed;
   }
   .card-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
   .card-meta { font-size: 12px; color: var(--fg-muted); margin-top: 3px; overflow-wrap: anywhere; }
@@ -645,12 +649,12 @@
     return { roots, children, parents };
   }
 
-  // Board lanes: 0 Drafts, 1 Working, 2 Waiting (on reviewer), 3 Ready (approved).
+  // Board lanes: 0 Working (incl. drafts), 1 Waiting (on reviewer), 2 Ready (approved).
   function laneOf(pr) {
     if (pr.isDraft) return 0;
-    if (pr.reviewDecision === "APPROVED") return 3;
-    if ((pr.reviewRequests?.nodes || []).length > 0) return 2;
-    return 1;
+    if (pr.reviewDecision === "APPROVED") return 2;
+    if ((pr.reviewRequests?.nodes || []).length > 0) return 1;
+    return 0;
   }
 
   function prCard(pr, parent) {
@@ -667,9 +671,10 @@
     const badge = pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
       ? reviewBadge(pr)
       : "";
+    const draft = pr.isDraft ? ' <span class="draft-pill">Draft</span>' : "";
     return `
-      <div class="card">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+      <div class="card ${pr.isDraft ? "draft" : ""}">
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
         <div class="card-meta">${repoPrefix}#${pr.number} by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
@@ -716,9 +721,9 @@
       const { parents } = buildStacks(state.prs);
       const matches = state.prs.filter(matchesFilter);
       count = matches.length;
-      const laneItems = [[], [], [], []];
+      const laneItems = [[], [], []];
       for (const pr of matches) laneItems[laneOf(pr)].push(pr);
-      const defs = [["Drafts", "gray"], ["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
+      const defs = [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
       html = '<div class="board">' + defs.map(([name, color], i) => {
         const inLane = laneItems[i];
         const laneNums = new Set(inLane.map((p) => p.number));
