@@ -333,7 +333,7 @@
   <div class="toolbar">
     <div class="tabs">
       <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
-      <button class="tab" data-filter="review">Review requested <span class="count" id="count-review">–</span></button>
+      <button class="tab" data-filter="review">Waiting on my review <span class="count" id="count-review">–</span></button>
       <button class="tab" data-filter="all">All open <span class="count" id="count-all">–</span></button>
     </div>
     <input type="text" id="search" placeholder="Filter by title, author, or branch…">
@@ -713,11 +713,14 @@
     ).length;
     $("#count-all").textContent = state.prs.length;
 
-    $("#view-list").classList.toggle("active", state.view === "list");
-    $("#view-board").classList.toggle("active", state.view === "board");
+    const boardAllowed = state.filter === "mine";
+    const effectiveView = boardAllowed && state.view === "board" ? "board" : "list";
+    document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
+    $("#view-list").classList.toggle("active", effectiveView === "list");
+    $("#view-board").classList.toggle("active", effectiveView === "board");
 
     let html = "", count = 0;
-    if (state.view === "board") {
+    if (effectiveView === "board") {
       const { parents } = buildStacks(state.prs);
       const matches = state.prs.filter(matchesFilter);
       count = matches.length;
