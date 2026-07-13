@@ -22,10 +22,10 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 
 - **Views**: add any mix of repos (`owner/repo`), orgs, or usernames and switch between them
 - **List view**: GitHub-style list with review status, current reviewers (avatars with per-reviewer state), CI check status, labels, and comment counts
-- **Board view**: swim lanes for Working / Waiting / Ready, with drafts styled distinctly in Working
+- **Board view**: swim lanes for Working / Waiting / Ready on the My PRs tab, with drafts styled distinctly in Working
 - **Stacked PRs**: PRs based on another open PR's branch are nested under their parent in both views
 - **Priority sort**: ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
-- **Filters**: My PRs / Review requested / All open tabs, plus text filter across title, author, branch, and repo
+- **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo
 
 ## Setup
 
