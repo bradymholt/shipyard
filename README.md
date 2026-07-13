@@ -4,6 +4,20 @@ A single-file GitHub pull request dashboard, hosted on GitHub Pages. It shows op
 
 **Live:** https://bradymholt.github.io/pr-review-dashboard/
 
+## Screenshots
+
+### List view
+
+Priority-sorted list with review status, reviewers, CI checks, and stacked PRs nested under their parent:
+
+![List view](docs/list-view.png)
+
+### Board view
+
+Swim lanes by PR state - Drafts, Working, Waiting (on a reviewer), and Ready (approved):
+
+![Board view](docs/board-view.png)
+
 ## Features
 
 - **Views**: add any mix of repos (`owner/repo`), orgs, or usernames and switch between them
