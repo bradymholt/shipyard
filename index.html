@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR Review Dashboard</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-subtle: #f6f8fa;
+    --bg-inset: #eff2f5;
+    --border: #d1d9e0;
+    --fg: #1f2328;
+    --fg-muted: #59636e;
+    --accent: #0969da;
+    --green: #1a7f37;
+    --red: #cf222e;
+    --yellow: #9a6700;
+    --purple: #8250df;
+    --btn-bg: #f6f8fa;
+    --btn-hover: #eff2f5;
+    --row-hover: #f6f8fa;
+    --shadow: 0 1px 3px rgba(31,35,40,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --bg-subtle: #151b23;
+      --bg-inset: #010409;
+      --border: #3d444d;
+      --fg: #f0f6fc;
+      --fg-muted: #9198a1;
+      --accent: #4493f8;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --purple: #ab7df8;
+      --btn-bg: #212830;
+      --btn-hover: #262c36;
+      --row-hover: #151b23;
+      --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  }
+  a { color: inherit; text-decoration: none; }
+  a:hover { color: var(--accent); text-decoration: underline; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  header h1 svg { fill: var(--fg); }
+  .spacer { flex: 1; }
+
+  select, input[type="text"], input[type="password"] {
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  button {
+    background: var(--btn-bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover { background: var(--btn-hover); }
+  button.primary { background: var(--green); border-color: transparent; color: #fff; }
+  button.primary:hover { filter: brightness(1.1); }
+  button.icon-btn { padding: 5px 8px; display: inline-flex; align-items: center; }
+  button.icon-btn svg { fill: var(--fg-muted); }
+
+  .panel {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+  .panel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .panel-row + .panel-row { margin-top: 10px; }
+  .panel label { font-weight: 600; font-size: 13px; min-width: 110px; }
+  .hint { color: var(--fg-muted); font-size: 12px; }
+  .hidden { display: none !important; }
+
+  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 0; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    border: none; background: none; color: var(--fg-muted);
+    padding: 6px 12px; border-radius: 6px; font-weight: 500;
+  }
+  .tab:hover { background: var(--btn-hover); color: var(--fg); }
+  .tab.active { background: var(--bg-inset); color: var(--fg); font-weight: 600; }
+  .tab .count {
+    background: color-mix(in srgb, var(--fg-muted) 25%, transparent);
+    border-radius: 10px; padding: 0 7px; font-size: 12px; margin-left: 4px;
+  }
+  #search { flex: 1; min-width: 160px; }
+
+  .list {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .list-header {
+    background: var(--bg-subtle);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .list-header svg { fill: var(--fg-muted); }
+  .pr-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pr-row:last-child { border-bottom: none; }
+  .pr-row:hover { background: var(--row-hover); }
+  .pr-row.context { opacity: .55; }
+  .stack-elbow {
+    flex: none;
+    width: 12px; height: 12px;
+    border-left: 2px solid var(--border);
+    border-bottom: 2px solid var(--border);
+    border-bottom-left-radius: 6px;
+  }
+  .pr-icon { flex: none; margin-top: 3px; }
+  .pr-icon.open svg { fill: var(--green); }
+  .pr-icon.draft svg { fill: var(--fg-muted); }
+  .pr-main { flex: 1; min-width: 0; }
+  .pr-title { font-weight: 600; font-size: 15px; }
+  .pr-title a:hover { color: var(--accent); }
+  .label-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 10px;
+    padding: 0 8px;
+    margin-left: 6px;
+    border: 1px solid transparent;
+    vertical-align: 1px;
+  }
+  .draft-pill {
+    font-size: 11px; font-weight: 500; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: 10px; padding: 0 8px; margin-left: 6px;
+    vertical-align: 1px;
+  }
+  .pr-meta { color: var(--fg-muted); font-size: 12px; margin-top: 2px; }
+  .pr-meta .branch {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .pr-side { flex: none; display: flex; align-items: center; gap: 16px; margin-top: 2px; }
+
+  .review-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 600;
+    border-radius: 2em; padding: 2px 10px;
+  }
+  .review-badge svg { fill: currentColor; }
+  .review-badge.approved { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+  .review-badge.changes { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+  .review-badge.pending { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 14%, transparent); }
+  .review-badge.none { color: var(--fg-muted); background: color-mix(in srgb, var(--fg-muted) 12%, transparent); }
+
+  .reviewers { display: flex; align-items: center; }
+  .reviewer { position: relative; margin-left: -4px; }
+  .reviewer:first-child { margin-left: 0; }
+  .reviewer img, .reviewer .team-avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--bg);
+    display: block;
+  }
+  .reviewer .team-avatar {
+    background: var(--purple); color: #fff; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .reviewer .state-dot {
+    position: absolute; bottom: -3px; right: -3px;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .reviewer .state-dot svg { width: 11px; height: 11px; }
+  .state-approved svg { fill: var(--green); }
+  .state-changes svg { fill: var(--red); }
+  .state-pending svg { fill: var(--yellow); }
+  .state-commented svg { fill: var(--fg-muted); }
+
+  .ci { display: inline-flex; align-items: center; }
+  .ci.success svg { fill: var(--green); }
+  .ci.failure svg { fill: var(--red); }
+  .ci.pending svg { fill: var(--yellow); }
+
+  .comments { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-muted); font-size: 12px; }
+  .comments svg { fill: var(--fg-muted); }
+
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .view-toggle button { border: none; border-radius: 0; padding: 5px 10px; display: inline-flex; align-items: center; background: var(--bg); }
+  .view-toggle button + button { border-left: 1px solid var(--border); }
+  .view-toggle button svg { fill: var(--fg-muted); }
+  .view-toggle button.active { background: var(--bg-inset); }
+  .view-toggle button.active svg { fill: var(--fg); }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    padding: 12px;
+  }
+  .lane {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 140px;
+    align-self: start;
+  }
+  .lane-header { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; padding: 2px 4px; }
+  .lane-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .lane-dot.gray { background: var(--fg-muted); }
+  .lane-dot.blue { background: var(--accent); }
+  .lane-dot.yellow { background: var(--yellow); }
+  .lane-dot.green { background: var(--green); }
+  .lane-count { margin-left: auto; color: var(--fg-muted); font-weight: 500; font-size: 12px; background: color-mix(in srgb, var(--fg-muted) 18%, transparent); border-radius: 10px; padding: 0 7px; }
+  .lane-empty { color: var(--fg-muted); font-size: 12px; text-align: center; padding: 16px 0; }
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    box-shadow: var(--shadow);
+  }
+  .card-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
+  .card-meta { font-size: 12px; color: var(--fg-muted); margin-top: 3px; overflow-wrap: anywhere; }
+  .card-icons { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+  .card-stack {
+    font-size: 11px; font-weight: 500; color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: 10px; padding: 0 7px;
+  }
+  .card-nest { display: flex; gap: 6px; align-items: flex-start; }
+  .card-nest > .stack-elbow { margin-top: 2px; }
+  .card-nest > .card { flex: 1; min-width: 0; }
+  @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
+
+  .empty, .loading, .error-box { padding: 48px 16px; text-align: center; color: var(--fg-muted); }
+  .error-box { color: var(--red); }
+  .spinner {
+    width: 24px; height: 24px; margin: 0 auto 12px;
+    border: 3px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer { margin-top: 16px; color: var(--fg-muted); font-size: 12px; display: flex; gap: 12px; align-items: center; }
+
+  @media (max-width: 700px) {
+    .pr-side { flex-direction: column; align-items: flex-end; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>
+      <svg width="20" height="20" viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>
+      PR Review Dashboard
+    </h1>
+    <div class="spacer"></div>
+    <select id="repo-select" title="Repository"></select>
+    <button id="refresh-btn" class="icon-btn" title="Refresh">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/></svg>
+    </button>
+    <button id="settings-btn" class="icon-btn" title="Settings">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.018.066.079.158.212.224.231.114.454.243.668.386.123.082.233.09.299.071l1.103-.303c.644-.176 1.392.021 1.82.63.27.385.506.792.704 1.218.315.675.111 1.422-.364 1.891l-.814.806c-.049.048-.098.147-.088.294.016.257.016.515 0 .772-.01.147.038.246.088.294l.814.806c.475.469.679 1.216.364 1.891a7.977 7.977 0 0 1-.704 1.217c-.428.61-1.176.807-1.82.63l-1.102-.302c-.067-.019-.177-.011-.3.071a5.909 5.909 0 0 1-.668.386c-.133.066-.194.158-.211.224l-.29 1.106c-.168.646-.715 1.196-1.458 1.26a8.006 8.006 0 0 1-1.402 0c-.743-.064-1.289-.614-1.458-1.26l-.289-1.106c-.018-.066-.079-.158-.212-.224a5.738 5.738 0 0 1-.668-.386c-.123-.082-.233-.09-.299-.071l-1.103.303c-.644.176-1.392-.021-1.82-.63a8.12 8.12 0 0 1-.704-1.218c-.315-.675-.111-1.422.363-1.891l.815-.806c.05-.048.098-.147.088-.294a6.214 6.214 0 0 1 0-.772c.01-.147-.038-.246-.088-.294l-.815-.806C.635 6.045.431 5.298.746 4.623a7.92 7.92 0 0 1 .704-1.217c.428-.61 1.176-.807 1.82-.63l1.102.302c.067.019.177.011.3-.071.214-.143.437-.272.668-.386.133-.066.194-.158.211-.224l.29-1.106C6.009.645 6.556.095 7.299.03 7.53.01 7.764 0 8 0Zm-.571 1.525c-.036.003-.108.036-.137.146l-.289 1.105c-.147.561-.549.967-.998 1.189-.173.086-.34.183-.5.29-.417.278-.97.423-1.529.27l-1.103-.303c-.109-.03-.175.016-.195.045-.22.312-.412.644-.573.99-.014.031-.021.11.059.19l.815.806c.411.406.562.957.53 1.456a4.709 4.709 0 0 0 0 .582c.032.499-.119 1.05-.53 1.456l-.815.806c-.081.08-.073.159-.059.19.162.346.353.677.573.989.02.03.085.076.195.046l1.102-.303c.56-.153 1.113-.008 1.53.27.161.107.328.204.501.29.447.222.85.629.997 1.189l.289 1.105c.029.109.101.143.137.146a6.6 6.6 0 0 0 1.142 0c.036-.003.108-.036.137-.146l.289-1.105c.147-.561.549-.967.998-1.189.173-.086.34-.183.5-.29.417-.278.97-.423 1.529-.27l1.103.303c.109.029.175-.016.195-.045.22-.313.411-.644.573-.99.014-.031.021-.11-.059-.19l-.815-.806c-.411-.406-.562-.957-.53-1.456a4.709 4.709 0 0 0 0-.582c-.032-.499.119-1.05.53-1.456l.815-.806c.081-.08.073-.159.059-.19a6.464 6.464 0 0 0-.573-.989c-.02-.03-.085-.076-.195-.046l-1.102.303c-.56.153-1.113.008-1.53-.27a4.44 4.44 0 0 0-.501-.29c-.447-.222-.85-.629-.997-1.189l-.289-1.105c-.029-.11-.101-.143-.137-.146a6.6 6.6 0 0 0-1.142 0ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM9.5 8a1.5 1.5 0 1 0-3.001.001A1.5 1.5 0 0 0 9.5 8Z"/></svg>
+    </button>
+  </header>
+
+  <div id="settings" class="panel hidden">
+    <div class="panel-row">
+      <label for="token-input">Access token</label>
+      <input type="password" id="token-input" placeholder="ghp_… or github_pat_…" size="40" autocomplete="off">
+      <button id="save-token-btn" class="primary">Save</button>
+      <button id="clear-token-btn">Clear</button>
+      <span id="token-status" class="hint"></span>
+    </div>
+    <div class="panel-row">
+      <span></span>
+      <span class="hint">Needs <code>repo</code> scope (classic) or Pull requests: read (fine-grained). Stored only in this browser's localStorage.</span>
+    </div>
+    <div class="panel-row">
+      <label for="add-repo-input">Add view</label>
+      <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username" size="30">
+      <button id="add-repo-btn">Add</button>
+      <button id="remove-repo-btn">Remove current</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="tabs">
+      <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
+      <button class="tab" data-filter="review">Review requested <span class="count" id="count-review">–</span></button>
+      <button class="tab" data-filter="all">All open <span class="count" id="count-all">–</span></button>
+    </div>
+    <input type="text" id="search" placeholder="Filter by title, author, or branch…">
+    <div class="view-toggle">
+      <button id="view-list" title="List view">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.75 2.5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5ZM2 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
+      </button>
+      <button id="view-board" title="Board view">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25V1.75C0 .784.784 0 1.75 0ZM1.5 1.75v12.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25ZM11.75 3a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm-8.25.75a.75.75 0 0 1 1.5 0v5.5a.75.75 0 0 1-1.5 0ZM8 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 3Z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="list">
+    <div class="list-header">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>
+      <span id="list-title">Open pull requests</span>
+    </div>
+    <div id="list-body">
+      <div class="empty">Add a token and a repo, org, or user in settings (⚙) to get started.</div>
+    </div>
+  </div>
+
+  <footer>
+    <span id="last-updated"></span>
+    <span id="viewer-info"></span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const LS = {
+    TOKEN: "ghpr.token",
+    REPOS: "ghpr.repos",
+    REPO: "ghpr.currentRepo",
+    FILTER: "ghpr.filter",
+  };
+
+  const $ = (sel) => document.querySelector(sel);
+  const listBody = $("#list-body");
+
+  const state = {
+    prs: [],
+    total: 0,
+    viewer: null,
+    filter: localStorage.getItem(LS.FILTER) || "mine",
+    view: localStorage.getItem("ghpr.view") || "list",
+    search: "",
+    loading: false,
+  };
+
+  const getToken = () => localStorage.getItem(LS.TOKEN) || "";
+  const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
+  const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
+  const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
+
+  // ---------- icons ----------
+  const ICONS = {
+    pr: '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>',
+    check: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>',
+    x: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>',
+    dot: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg>',
+    clock: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028 1.352a.75.75 0 0 1-.832 1.248l-2.36-1.573A.75.75 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/></svg>',
+    comment: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
+    changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',  };
+
+  // ---------- helpers ----------
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function timeAgo(iso) {
+    const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    const units = [[31536000, "year"], [2592000, "month"], [604800, "week"], [86400, "day"], [3600, "hour"], [60, "minute"]];
+    for (const [s, name] of units) {
+      const n = Math.floor(secs / s);
+      if (n >= 1) return `${n} ${name}${n > 1 ? "s" : ""} ago`;
+    }
+    return "just now";
+  }
+
+  function labelColors(hex) {
+    const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (dark) return `color: rgb(${Math.min(r + 90, 255)},${Math.min(g + 90, 255)},${Math.min(b + 90, 255)}); background: rgba(${r},${g},${b},.18); border-color: rgba(${r},${g},${b},.35)`;
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    return `color: ${luma > 160 ? "#1f2328" : "#fff"}; background: #${hex}`;
+  }
+
+  // ---------- GitHub API ----------
+  const PR_FIELDS = `
+    number title url isDraft createdAt updatedAt headRefName baseRefName
+    repository { nameWithOwner }
+    author { login avatarUrl }
+    reviewDecision
+    labels(first: 10) { nodes { name color } }
+    comments { totalCount }
+    reviewRequests(first: 10) {
+      nodes {
+        requestedReviewer {
+          __typename
+          ... on User { login avatarUrl }
+          ... on Team { name }
+        }
+      }
+    }
+    latestReviews(first: 10) {
+      nodes { state author { login avatarUrl } }
+    }
+    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }`;
+
+  const REPO_QUERY = `
+    query($owner: String!, $name: String!) {
+      viewer { login }
+      repository(owner: $owner, name: $name) {
+        pullRequests(states: OPEN, first: 100, orderBy: { field: UPDATED_AT, direction: DESC }) {
+          totalCount
+          nodes { ${PR_FIELDS} }
+        }
+      }
+    }`;
+
+  const OWNER_QUERY = `
+    query($q: String!) {
+      viewer { login }
+      search(query: $q, type: ISSUE, first: 100) {
+        issueCount
+        nodes { ... on PullRequest { ${PR_FIELDS} } }
+      }
+    }`;
+
+  async function gql(query, variables) {
+    const res = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (res.status === 401) throw new Error("Invalid or expired token (401). Update it in settings.");
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    const json = await res.json();
+    if (json.errors?.length && !json.data) throw new Error(json.errors.map((e) => e.message).join("; "));
+    return json.data;
+  }
+
+  // Search needs org: vs user: depending on account type; look it up once and cache.
+  async function ownerQualifier(login) {
+    const cache = JSON.parse(localStorage.getItem("ghpr.ownerTypes") || "{}");
+    if (cache[login]) return cache[login];
+    const data = await gql(`query($login: String!) { repositoryOwner(login: $login) { __typename } }`, { login });
+    if (!data.repositoryOwner) throw new Error(`"${login}" is not a GitHub user or organization, or the token lacks access.`);
+    const qualifier = data.repositoryOwner.__typename === "Organization" ? "org" : "user";
+    cache[login] = qualifier;
+    localStorage.setItem("ghpr.ownerTypes", JSON.stringify(cache));
+    return qualifier;
+  }
+
+  async function fetchPRs() {
+    const target = getCurrentRepo();
+    if (!getToken()) throw new Error("No access token set. Open settings (⚙) and save a token.");
+    if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
+    if (target.includes("/")) {
+      const [owner, name] = target.split("/");
+      const data = await gql(REPO_QUERY, { owner, name });
+      if (!data.repository) throw new Error(`Repository "${target}" not found or token lacks access.`);
+      return { viewer: data.viewer.login, prs: data.repository.pullRequests.nodes, total: data.repository.pullRequests.totalCount };
+    }
+    const qualifier = await ownerQualifier(target);
+    const q = `is:pr is:open archived:false ${qualifier}:${target} sort:updated-desc`;
+    const data = await gql(OWNER_QUERY, { q });
+    const prs = data.search.nodes.filter((n) => n && n.number);
+    return { viewer: data.viewer.login, prs, total: data.search.issueCount };
+  }
+
+  // ---------- rendering ----------
+  function reviewerHtml(login, avatarUrl, stateClass, stateIcon, title) {
+    const avatar = avatarUrl
+      ? `<img src="${esc(avatarUrl)}&s=48" alt="${esc(login)}">`
+      : `<span class="team-avatar">${esc(login.slice(0, 2).toUpperCase())}</span>`;
+    return `<span class="reviewer" title="${esc(title)}">${avatar}<span class="state-dot ${stateClass}">${stateIcon}</span></span>`;
+  }
+
+  function buildReviewers(pr) {
+    const parts = [];
+    const reviewed = new Set();
+    for (const r of pr.latestReviews?.nodes || []) {
+      if (!r.author || r.author.login === pr.author?.login) continue;
+      if (reviewed.has(r.author.login)) continue;
+      reviewed.add(r.author.login);
+      const map = {
+        APPROVED: ["state-approved", ICONS.check, "approved"],
+        CHANGES_REQUESTED: ["state-changes", ICONS.changes, "requested changes"],
+        COMMENTED: ["state-commented", ICONS.comment, "commented"],
+        DISMISSED: ["state-commented", ICONS.dot, "review dismissed"],
+        PENDING: ["state-pending", ICONS.clock, "review pending"],
+      };
+      const [cls, icon, verb] = map[r.state] || map.COMMENTED;
+      parts.push(reviewerHtml(r.author.login, r.author.avatarUrl, cls, icon, `${r.author.login} ${verb}`));
+    }
+    for (const req of pr.reviewRequests?.nodes || []) {
+      const rr = req.requestedReviewer;
+      if (!rr) continue;
+      const login = rr.login || rr.name;
+      if (reviewed.has(login)) continue;
+      parts.push(reviewerHtml(login, rr.avatarUrl, "state-pending", ICONS.clock, `${login} — review requested`));
+    }
+    return parts.join("");
+  }
+
+  function reviewBadge(pr) {
+    if (pr.reviewDecision === "APPROVED")
+      return `<span class="review-badge approved">${ICONS.check} Approved</span>`;
+    if (pr.reviewDecision === "CHANGES_REQUESTED")
+      return `<span class="review-badge changes">${ICONS.changes} Changes requested</span>`;
+    return (pr.reviewRequests?.nodes || []).length > 0
+      ? `<span class="review-badge pending">${ICONS.clock} Awaiting review</span>`
+      : `<span class="review-badge none">Needs review</span>`;
+  }
+
+  function ciHtml(pr) {
+    const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
+    if (!rollup) return "";
+    const map = {
+      SUCCESS: ["success", ICONS.check, "Checks passing"],
+      FAILURE: ["failure", ICONS.x, "Checks failing"],
+      ERROR: ["failure", ICONS.x, "Checks errored"],
+      PENDING: ["pending", ICONS.dot, "Checks running"],
+      EXPECTED: ["pending", ICONS.dot, "Checks expected"],
+    };
+    const [cls, icon, title] = map[rollup.state] || map.PENDING;
+    return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
+  }
+
+  function prRow(pr, depth = 0, isContext = false, parent = null) {
+    const labels = (pr.labels?.nodes || [])
+      .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
+      .join("");
+    const draft = pr.isDraft ? '<span class="draft-pill">Draft</span>' : "";
+    const comments = pr.comments.totalCount
+      ? `<span class="comments" title="${pr.comments.totalCount} comments">${ICONS.comment}${pr.comments.totalCount}</span>`
+      : "";
+    const elbow = depth > 0 ? '<span class="stack-elbow" title="Stacked PR"></span>' : "";
+    const basedOn = parent
+      ? ` · based on <a href="${esc(parent.url)}" target="_blank" rel="noopener">#${parent.number}</a>`
+      : "";
+    const repoName = pr.repository?.nameWithOwner;
+    const repoPrefix = repoName && repoName !== getCurrentRepo()
+      ? `<a href="https://github.com/${esc(repoName)}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> `
+      : "";
+    return `
+      <div class="pr-row ${isContext ? "context" : ""}" style="padding-left: ${depth > 0 ? 23 + (depth - 1) * 29 : 16}px">
+        ${elbow}
+        <span class="pr-icon ${pr.isDraft ? "draft" : "open"}">${ICONS.pr}</span>
+        <div class="pr-main">
+          <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}${labels}</div>
+          <div class="pr-meta">
+            ${repoPrefix}#${pr.number} opened ${timeAgo(pr.createdAt)} by <strong>${esc(pr.author?.login || "ghost")}</strong>
+            · updated ${timeAgo(pr.updatedAt)}
+            · <span class="branch">${esc(pr.headRefName)}</span>${basedOn}
+          </div>
+        </div>
+        <div class="pr-side">
+          ${ciHtml(pr)}
+          ${comments}
+          <span class="reviewers">${buildReviewers(pr)}</span>
+          ${reviewBadge(pr)}
+        </div>
+      </div>`;
+  }
+
+  function matchesFilter(pr) {
+    if (state.filter === "mine" && pr.author?.login !== state.viewer) return false;
+    if (state.filter === "review" &&
+        !(pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)) return false;
+    if (state.search) {
+      const q = state.search.toLowerCase();
+      return pr.title.toLowerCase().includes(q) ||
+        (pr.author?.login || "").toLowerCase().includes(q) ||
+        (pr.repository?.nameWithOwner || "").toLowerCase().includes(q) ||
+        pr.headRefName.toLowerCase().includes(q);
+    }
+    return true;
+  }
+
+  function ciOk(pr) {
+    const ci = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state;
+    return !ci || ci === "SUCCESS";
+  }
+
+  // Ready to merge first, then actionable-by-author, then unassigned, then waiting on a reviewer.
+  function sortRank(pr) {
+    if (pr.reviewDecision === "APPROVED") return ciOk(pr) ? 0 : 1;
+    if (pr.reviewDecision === "CHANGES_REQUESTED") return 1;
+    return (pr.reviewRequests?.nodes || []).length > 0 ? 3 : 2;
+  }
+
+  function buildStacks(prs) {
+    const branchKey = (pr, ref) => `${pr.repository?.nameWithOwner || ""}#${ref}`;
+    const byHead = new Map();
+    for (const pr of prs) if (!byHead.has(branchKey(pr, pr.headRefName))) byHead.set(branchKey(pr, pr.headRefName), pr);
+    const children = new Map();
+    const parents = new Map();
+    const roots = [];
+    for (const pr of prs) {
+      const parent = byHead.get(branchKey(pr, pr.baseRefName));
+      if (parent && parent !== pr) {
+        if (!children.has(parent.number)) children.set(parent.number, []);
+        children.get(parent.number).push(pr);
+        parents.set(pr.number, parent);
+      } else {
+        roots.push(pr);
+      }
+    }
+    return { roots, children, parents };
+  }
+
+  // Board lanes: 0 Drafts, 1 Working, 2 Waiting (on reviewer), 3 Ready (approved).
+  function laneOf(pr) {
+    if (pr.isDraft) return 0;
+    if (pr.reviewDecision === "APPROVED") return 3;
+    if ((pr.reviewRequests?.nodes || []).length > 0) return 2;
+    return 1;
+  }
+
+  function prCard(pr, parent) {
+    const repoName = pr.repository?.nameWithOwner;
+    const repoPrefix = repoName && repoName !== getCurrentRepo()
+      ? `<a href="https://github.com/${esc(repoName)}" target="_blank" rel="noopener">${esc(repoName)}</a> `
+      : "";
+    const basedOn = parent
+      ? `<a class="card-stack" href="${esc(parent.url)}" target="_blank" rel="noopener" title="Stacked on #${parent.number}">↳ #${parent.number}</a>`
+      : "";
+    const comments = pr.comments.totalCount
+      ? `<span class="comments" title="${pr.comments.totalCount} comments">${ICONS.comment}${pr.comments.totalCount}</span>`
+      : "";
+    const badge = pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
+      ? reviewBadge(pr)
+      : "";
+    return `
+      <div class="card">
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+        <div class="card-meta">${repoPrefix}#${pr.number} by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
+        <div class="card-icons">
+          ${ciHtml(pr)}
+          ${comments}
+          <span class="reviewers">${buildReviewers(pr)}</span>
+          ${badge}
+          ${basedOn}
+        </div>
+      </div>`;
+  }
+
+  // A row renders if it matches the filter or any descendant does; non-matching
+  // ancestors render dimmed so a stack keeps its context.
+  function renderNode(pr, depth, children, parent, seen) {
+    if (seen.has(pr.number)) return { html: "", count: 0 };
+    seen.add(pr.number);
+    let kidsHtml = "", kidsCount = 0;
+    for (const kid of children.get(pr.number) || []) {
+      const r = renderNode(kid, depth + 1, children, pr, seen);
+      kidsHtml += r.html;
+      kidsCount += r.count;
+    }
+    const self = matchesFilter(pr);
+    if (!self && kidsCount === 0) return { html: "", count: 0 };
+    return {
+      html: prRow(pr, depth, !self, depth > 0 ? parent : null) + kidsHtml,
+      count: kidsCount + (self ? 1 : 0),
+    };
+  }
+
+  function render() {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
+    $("#count-mine").textContent = state.prs.filter((p) => p.author?.login === state.viewer).length;
+    $("#count-review").textContent = state.prs.filter((p) =>
+      (p.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)
+    ).length;
+    $("#count-all").textContent = state.prs.length;
+
+    $("#view-list").classList.toggle("active", state.view === "list");
+    $("#view-board").classList.toggle("active", state.view === "board");
+
+    let html = "", count = 0;
+    if (state.view === "board") {
+      const { parents } = buildStacks(state.prs);
+      const matches = state.prs.filter(matchesFilter);
+      count = matches.length;
+      const laneItems = [[], [], [], []];
+      for (const pr of matches) laneItems[laneOf(pr)].push(pr);
+      const defs = [["Drafts", "gray"], ["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
+      html = '<div class="board">' + defs.map(([name, color], i) => {
+        const inLane = laneItems[i];
+        const laneNums = new Set(inLane.map((p) => p.number));
+        const kids = new Map();
+        const roots = [];
+        for (const pr of inLane) {
+          const parent = parents.get(pr.number);
+          if (parent && laneNums.has(parent.number)) {
+            if (!kids.has(parent.number)) kids.set(parent.number, []);
+            kids.get(parent.number).push(pr);
+          } else {
+            roots.push(pr);
+          }
+        }
+        const seen = new Set();
+        const renderCardTree = (pr, depth) => {
+          if (seen.has(pr.number)) return "";
+          seen.add(pr.number);
+          const parent = parents.get(pr.number);
+          const chipParent = parent && !laneNums.has(parent.number) ? parent : null;
+          let out = depth === 0
+            ? prCard(pr, chipParent)
+            : `<div class="card-nest" style="margin-left: ${(depth - 1) * 14}px"><span class="stack-elbow" title="Stacked PR"></span>${prCard(pr, chipParent)}</div>`;
+          for (const kid of kids.get(pr.number) || []) out += renderCardTree(kid, depth + 1);
+          return out;
+        };
+        let laneHtml = roots.map((r) => renderCardTree(r, 0)).join("");
+        for (const pr of inLane) if (!seen.has(pr.number)) laneHtml += renderCardTree(pr, 0);
+        return `
+        <div class="lane">
+          <div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>
+          ${laneHtml || '<div class="lane-empty">None</div>'}
+        </div>`;
+      }).join("") + "</div>";
+      if (!count) html = "";
+    } else {
+      const { roots, children } = buildStacks(state.prs);
+      roots.sort((a, b) => sortRank(a) - sortRank(b) || new Date(b.updatedAt) - new Date(a.updatedAt));
+      const seen = new Set();
+      for (const root of roots) {
+        const r = renderNode(root, 0, children, null, seen);
+        html += r.html;
+        count += r.count;
+      }
+      for (const pr of state.prs) {
+        if (seen.has(pr.number)) continue;
+        const r = renderNode(pr, 0, children, null, seen);
+        html += r.html;
+        count += r.count;
+      }
+    }
+    const truncated = state.total > state.prs.length ? ` (most recent ${state.prs.length} of ${state.total})` : "";
+    $("#list-title").textContent = `${count} open pull request${count === 1 ? "" : "s"} · ${getCurrentRepo()}${truncated}`;
+    listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
+  }
+
+  async function load() {
+    if (state.loading) return;
+    state.loading = true;
+    listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+    try {
+      const { viewer, prs, total } = await fetchPRs();
+      state.viewer = viewer;
+      state.prs = prs;
+      state.total = total;
+      $("#last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      $("#viewer-info").textContent = `Signed in as ${viewer}`;
+      render();
+    } catch (err) {
+      listBody.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  // ---------- settings / repo UI ----------
+  function renderRepoSelect() {
+    const repos = getRepos();
+    const current = getCurrentRepo();
+    const sel = $("#repo-select");
+    sel.innerHTML = repos.length
+      ? repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("")
+      : '<option value="">— add a view in settings —</option>';
+  }
+
+  function renderTokenStatus() {
+    $("#token-status").textContent = getToken() ? "Token saved ✓" : "No token saved";
+  }
+
+  $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
+  $("#refresh-btn").addEventListener("click", load);
+
+  $("#save-token-btn").addEventListener("click", () => {
+    const v = $("#token-input").value.trim();
+    if (!v) return;
+    localStorage.setItem(LS.TOKEN, v);
+    $("#token-input").value = "";
+    renderTokenStatus();
+    load();
+  });
+  $("#clear-token-btn").addEventListener("click", () => {
+    localStorage.removeItem(LS.TOKEN);
+    renderTokenStatus();
+  });
+
+  $("#add-repo-btn").addEventListener("click", () => {
+    const v = $("#add-repo-input").value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/$/, "");
+    if (!/^[\w.-]+(\/[\w.-]+)?$/.test(v)) { alert("Enter owner/repo, an org, or a username"); return; }
+    const repos = getRepos();
+    if (!repos.includes(v)) { repos.push(v); setRepos(repos); }
+    localStorage.setItem(LS.REPO, v);
+    $("#add-repo-input").value = "";
+    renderRepoSelect();
+    load();
+  });
+  $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
+  $("#token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#save-token-btn").click(); });
+
+  $("#remove-repo-btn").addEventListener("click", () => {
+    const current = getCurrentRepo();
+    if (!current) return;
+    setRepos(getRepos().filter((r) => r !== current));
+    localStorage.removeItem(LS.REPO);
+    renderRepoSelect();
+    state.prs = [];
+    render();
+  });
+
+  $("#repo-select").addEventListener("change", (e) => {
+    localStorage.setItem(LS.REPO, e.target.value);
+    load();
+  });
+
+  for (const [id, view] of [["#view-list", "list"], ["#view-board", "board"]]) {
+    $(id).addEventListener("click", () => {
+      state.view = view;
+      localStorage.setItem("ghpr.view", view);
+      render();
+    });
+  }
+
+  document.querySelectorAll(".tab").forEach((tab) =>
+    tab.addEventListener("click", () => {
+      state.filter = tab.dataset.filter;
+      localStorage.setItem(LS.FILTER, state.filter);
+      render();
+    })
+  );
+
+  let searchTimer;
+  $("#search").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state.search = e.target.value.trim(); render(); }, 150);
+  });
+
+  // ---------- init ----------
+  renderRepoSelect();
+  renderTokenStatus();
+  $("#view-list").classList.toggle("active", state.view === "list");
+  $("#view-board").classList.toggle("active", state.view === "board");
+  if (getToken() && getCurrentRepo()) {
+    load();
+  } else {
+    $("#settings").classList.remove("hidden");
+  }
+
+  window.__dashboard = { load, render, state };
+})();
+</script>
+</body>
+</html>
