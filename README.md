@@ -8,7 +8,7 @@ A GitHub pull request dashboard, hosted on GitHub Pages. It shows open PRs with 
 
 ### List view
 
-Priority-sorted list with review status, reviewers, CI checks, and stacked PRs nested under their parent:
+Priority-sorted list with review status, reviewers, CI checks, stacked PRs nested under their parent, and - when the local companion is running - open-in-VS-Code / resume-in-Claude links:
 
 ![List view](docs/list-view.png)
 
@@ -26,7 +26,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Board view**: swim lanes for Working / Waiting / Ready on the My PRs tab, with drafts styled distinctly in Working (click a card's Draft pill to mark it ready for review)
 - **Auto-merge**: Waiting and Ready cards show auto-merge status with a one-click toggle
 - **Stacked PRs**: PRs based on another open PR's branch are nested under their parent in both views
-- **Priority sort**: one of the list sort options — ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
+- **Priority sort**: one of the list sort options - ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
 - **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo. The default load fetches only your PRs and ones awaiting your review; "All open" fetches the full set on demand the first time you open it
 - **Local worktree links** (optional): when run via the local companion, PRs whose branch you have checked out locally get "Open in VS Code" and "Resume in Claude" links
 
@@ -44,11 +44,27 @@ python3 companion.py ~/dev        # scan git repos under ~/dev
 
 Then open the printed `http://localhost:4321`. Pass multiple roots or `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
 
-"Open in VS Code" is a `vscode://file` link that opens the worktree's `.code-workspace` file as a workspace when one exists (otherwise the folder); the companion just supplies which path to use. This covers PRs whose branch is in a worktree or checked out in the main clone.
+"Open in VS Code" opens the worktree's `.code-workspace` file as a workspace when one exists (otherwise the folder); the companion supplies which path to use. This covers PRs whose branch is in a worktree or checked out in the main clone. By default it opens via a `vscode://file` link - see [Opening VS Code](#opening-vs-code) to run the `code` CLI instead.
 
 For a PR whose branch has no local worktree, the row instead shows a "create worktree" button. Clicking it asks the companion to `git worktree add` the branch (fetching from `origin` first if it's remote-only) under `<repo>/.claude/worktrees/`, then opens it - so the branch joins the same worktree flow as everything else. This action only appears when the companion is running.
 
+The footer shows a green "Companion connected" indicator when the page is talking to the companion, and "Companion not running" otherwise (e.g. on the hosted Pages copy).
+
 Note: the companion serves the dashboard on a different origin (`localhost`) than Pages, so localStorage (token, views) is separate there - you enter the token once for the local origin.
+
+### Opening VS Code
+
+By default the companion emits `vscode://file` links. You can instead have it run the `code` CLI - handy for passing extra flags. Create a `companion.config.json` next to `companion.py` (it's gitignored):
+
+```json
+{
+  "vscodeOpen": "cli",
+  "codeCliArgs": ["--disable-extension", "github.copilot-chat"]
+}
+```
+
+- `vscodeOpen`: `"scheme"` (default, `vscode://` links) or `"cli"` (companion runs `code`). `"cli"` falls back to `"scheme"` when the `code` CLI isn't on PATH.
+- `codeCliArgs`: extra arguments passed to `code`. The example disables an extension that crash-loops VS Code's extension host when a multi-root `.code-workspace` is opened from a linked worktree - so with it you get the full multi-root workspace in worktrees without the crash.
 
 ## Development
 
