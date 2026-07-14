@@ -973,6 +973,22 @@
     };
   }
 
+  function sizeSortSelect() {
+    const sel = $("#sort-select");
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    const cs = getComputedStyle(sel);
+    const probe = document.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap";
+    probe.style.fontSize = cs.fontSize;
+    probe.style.fontFamily = cs.fontFamily;
+    probe.style.fontWeight = cs.fontWeight;
+    probe.textContent = opt.textContent;
+    document.body.appendChild(probe);
+    sel.style.width = probe.offsetWidth + 32 + "px";  // text + left/right padding + caret room
+    probe.remove();
+  }
+
   function render() {
     $("#companion-status").innerHTML = !state.companionChecked ? ""
       : state.companion
@@ -996,6 +1012,7 @@
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
     $("#sort-select").value = state.sort;
+    sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
     let html = "", count = 0;
     if (effectiveView === "board") {
