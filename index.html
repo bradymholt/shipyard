@@ -459,38 +459,64 @@
     }
     commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }`;
 
+  // Smaller pages keep each query under GitHub's timeout (large repos otherwise 502);
+  // we page up to MAX_PRS to preserve the "most recent 100" behavior.
+  const PAGE_SIZE = 25;
+  const MAX_PRS = 100;
+
   const REPO_QUERY = `
-    query($owner: String!, $name: String!) {
+    query($owner: String!, $name: String!, $after: String) {
       viewer { login }
       repository(owner: $owner, name: $name) {
-        pullRequests(states: OPEN, first: 100, orderBy: { field: UPDATED_AT, direction: DESC }) {
+        pullRequests(states: OPEN, first: ${PAGE_SIZE}, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
           totalCount
+          pageInfo { hasNextPage endCursor }
           nodes { ${PR_FIELDS} }
         }
       }
     }`;
 
   const OWNER_QUERY = `
-    query($q: String!) {
+    query($q: String!, $after: String) {
       viewer { login }
-      search(query: $q, type: ISSUE, first: 100) {
+      search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
         issueCount
+        pageInfo { hasNextPage endCursor }
         nodes { ... on PullRequest { ${PR_FIELDS} } }
       }
     }`;
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // 502/503/504 and network drops are transient — retry with exponential backoff.
   async function gql(query, variables) {
-    const res = await fetch("https://api.github.com/graphql", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query, variables }),
-    });
-    if (res.status === 401) throw new Error("Invalid or expired token (401). Update it in settings.");
-    if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
-    const json = await res.json();
-    const allNull = json.data && Object.values(json.data).every((v) => v === null);
-    if (json.errors?.length && (!json.data || allNull)) throw new Error(json.errors.map((e) => e.message).join("; "));
-    return json.data;
+    const RETRYABLE = new Set([502, 503, 504]);
+    let lastErr;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await sleep(400 * 2 ** (attempt - 1));
+      let res;
+      try {
+        res = await fetch("https://api.github.com/graphql", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ query, variables }),
+        });
+      } catch {
+        lastErr = new Error("Network error reaching GitHub. Check your connection.");
+        continue;
+      }
+      if (res.status === 401) throw new Error("Invalid or expired token (401). Update it in settings.");
+      if (RETRYABLE.has(res.status)) {
+        lastErr = new Error(`GitHub is temporarily unavailable (${res.status}). Try refreshing in a moment.`);
+        continue;
+      }
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+      const json = await res.json();
+      const allNull = json.data && Object.values(json.data).every((v) => v === null);
+      if (json.errors?.length && (!json.data || allNull)) throw new Error(json.errors.map((e) => e.message).join("; "));
+      return json.data;
+    }
+    throw lastErr;
   }
 
   async function setAutoMerge(prId, enable) {
@@ -533,15 +559,31 @@
     if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
     if (target.includes("/")) {
       const [owner, name] = target.split("/");
-      const data = await gql(REPO_QUERY, { owner, name });
-      if (!data.repository) throw new Error(`Repository "${target}" not found or token lacks access.`);
-      return { viewer: data.viewer.login, prs: data.repository.pullRequests.nodes, total: data.repository.pullRequests.totalCount };
+      const prs = [];
+      let after = null, viewer = null, total = 0;
+      do {
+        const data = await gql(REPO_QUERY, { owner, name, after });
+        if (!data.repository) throw new Error(`Repository "${target}" not found or token lacks access.`);
+        const conn = data.repository.pullRequests;
+        viewer = data.viewer.login;
+        total = conn.totalCount;
+        prs.push(...conn.nodes);
+        after = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
+      } while (after && prs.length < MAX_PRS);
+      return { viewer, prs, total };
     }
     const qualifier = await ownerQualifier(target);
     const q = `is:pr is:open archived:false ${qualifier}:${target} sort:updated-desc`;
-    const data = await gql(OWNER_QUERY, { q });
-    const prs = data.search.nodes.filter((n) => n && n.number);
-    return { viewer: data.viewer.login, prs, total: data.search.issueCount };
+    const prs = [];
+    let after = null, viewer = null, total = 0;
+    do {
+      const data = await gql(OWNER_QUERY, { q, after });
+      viewer = data.viewer.login;
+      total = data.search.issueCount;
+      prs.push(...data.search.nodes.filter((n) => n && n.number));
+      after = data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null;
+    } while (after && prs.length < MAX_PRS);
+    return { viewer, prs, total };
   }
 
   // ---------- rendering ----------
