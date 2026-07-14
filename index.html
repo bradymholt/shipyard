@@ -349,6 +349,11 @@
       <button class="tab" data-filter="all">All open <span class="count" id="count-all">–</span></button>
     </div>
     <input type="text" id="search" placeholder="Filter by title, author, or branch…">
+    <select id="sort-select" title="Sort order">
+      <option value="updated">Recently updated</option>
+      <option value="created">Recently created</option>
+      <option value="priority">Priority</option>
+    </select>
     <div class="view-toggle">
       <button id="view-list" title="List view">
         <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.75 2.5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5ZM2 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
@@ -397,6 +402,7 @@
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) || "mine",
     view: localStorage.getItem("ghpr.view") || "list",
+    sort: localStorage.getItem("ghpr.sort") || "updated",
     search: "",
     loading: false,
   };
@@ -634,6 +640,14 @@
     return `<span class="reviewer" title="${esc(title)}">${avatar}<span class="state-dot ${stateClass}">${stateIcon}</span></span>`;
   }
 
+  function authorAvatar(pr) {
+    const login = pr.author?.login || "ghost";
+    const avatar = pr.author?.avatarUrl
+      ? `<img src="${esc(pr.author.avatarUrl)}&s=48" alt="${esc(login)}">`
+      : `<span class="team-avatar">${esc(login.slice(0, 2).toUpperCase())}</span>`;
+    return `<span class="reviewer" title="opened by ${esc(login)}">${avatar}</span>`;
+  }
+
   function buildReviewers(pr) {
     const parts = [];
     const reviewed = new Set();
@@ -716,7 +730,7 @@
         <div class="pr-side">
           ${ciHtml(pr)}
           ${comments}
-          <span class="reviewers">${buildReviewers(pr)}</span>
+          <span class="reviewers">${state.filter === "review" ? authorAvatar(pr) : buildReviewers(pr)}</span>
           ${reviewBadge(pr)}
         </div>
       </div>`;
@@ -746,6 +760,14 @@
     if (pr.reviewDecision === "APPROVED") return ciOk(pr) ? 0 : 1;
     if (pr.reviewDecision === "CHANGES_REQUESTED") return 1;
     return (pr.reviewRequests?.nodes || []).length > 0 ? 3 : 2;
+  }
+
+  function sortComparator() {
+    if (state.sort === "priority")
+      return (a, b) => sortRank(a) - sortRank(b) || new Date(b.updatedAt) - new Date(a.updatedAt);
+    if (state.sort === "created")
+      return (a, b) => new Date(b.createdAt) - new Date(a.createdAt);
+    return (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt);
   }
 
   function buildStacks(prs) {
@@ -850,6 +872,8 @@
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
+    $("#sort-select").classList.toggle("hidden", effectiveView !== "list");
+    $("#sort-select").value = state.sort;
 
     let html = "", count = 0;
     if (effectiveView === "board") {
@@ -897,7 +921,7 @@
       if (!count) html = "";
     } else {
       const { roots, children } = buildStacks(dataset);
-      roots.sort((a, b) => sortRank(a) - sortRank(b) || new Date(b.updatedAt) - new Date(a.updatedAt));
+      roots.sort(sortComparator());
       const seen = new Set();
       for (const root of roots) {
         const r = renderNode(root, 0, children, null, seen);
@@ -1028,6 +1052,12 @@
       alert(`Auto-merge: ${err.message}`);
       render();
     }
+  });
+
+  $("#sort-select").addEventListener("change", (e) => {
+    state.sort = e.target.value;
+    localStorage.setItem("ghpr.sort", state.sort);
+    render();
   });
 
   for (const [id, view] of [["#view-list", "list"], ["#view-board", "board"]]) {
