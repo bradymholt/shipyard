@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
 
@@ -64,6 +65,11 @@ def session_id_for(path):
     return sessions[0].stem if sessions else None
 
 
+def workspace_in(path):
+    files = sorted(Path(path).glob("*.code-workspace"))
+    return str(files[0]) if files else None
+
+
 def worktrees_for_repo(repo_dir):
     repo = parse_origin(git(repo_dir, "config", "--get", "remote.origin.url"))
     out, cur = [], {}
@@ -74,9 +80,22 @@ def worktrees_for_repo(repo_dir):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
+                        "workspace": workspace_in(cur["path"]),
                         "sessionId": session_id_for(cur["path"])})
             cur = {}
     return out
+
+
+def open_in_editor(target):
+    # `code <foo.code-workspace>` opens it AS a workspace (a vscode:// URL can't
+    # reliably do that); fall back to the macOS file association.
+    for cmd in (["code", target], ["open", "-a", "Visual Studio Code", target]):
+        try:
+            if subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def discover(roots):
@@ -98,16 +117,30 @@ def discover(roots):
 class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
 
+    def _json(self, obj, status=200):
+        body = json.dumps(obj).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
-        if self.path.split("?")[0] == "/worktrees.json":
-            body = json.dumps(discover(self.roots)).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
-            return
+        parsed = urlparse(self.path)
+        if parsed.path == "/worktrees.json":
+            return self._json(discover(self.roots))
+        if parsed.path == "/open":
+            q = parse_qs(parsed.query)
+            repo = (q.get("repo") or [""])[0]
+            branch = (q.get("branch") or [""])[0]
+            entry = next((w for w in discover(self.roots)
+                          if w["repo"] == repo and w["branch"] == branch), None)
+            if not entry:
+                return self._json({"ok": False, "error": "No local worktree for that branch."}, 404)
+            target = entry.get("workspace") or entry["path"]
+            ok = open_in_editor(target)
+            return self._json({"ok": ok, "target": target}, 200 if ok else 500)
         super().do_GET()
 
     def log_message(self, *args):

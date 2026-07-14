@@ -229,6 +229,8 @@
   .wt-link { display: inline-flex; align-items: center; color: var(--fg-muted); }
   .wt-link svg { fill: currentColor; }
   .wt-link:hover { color: var(--accent); }
+  button.wt-link { background: none; border: none; padding: 0; cursor: pointer; }
+  button.wt-link:disabled { opacity: .5; cursor: default; }
   .wt-links { display: inline-flex; align-items: center; gap: 8px; }
 
   .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -738,7 +740,10 @@
   function worktreeLinks(pr) {
     const wt = worktreeFor(pr);
     if (!wt) return "";
-    const vscode = `<a class="wt-link" href="vscode://file${esc(wt.path)}" title="Open worktree in VS Code">${ICONS.vscode}</a>`;
+    const repo = esc(pr.repository?.nameWithOwner || "");
+    const branch = esc(pr.headRefName);
+    const label = wt.workspace ? "workspace" : "worktree";
+    const vscode = `<button class="wt-link wt-open" data-repo="${repo}" data-branch="${branch}" title="Open ${label} in VS Code">${ICONS.vscode}</button>`;
     const claude = wt.sessionId
       ? `<a class="wt-link" href="claude://resume?session=${esc(wt.sessionId)}" title="Resume Claude session">${ICONS.claude}</a>`
       : "";
@@ -1084,6 +1089,21 @@
   });
 
   listBody.addEventListener("click", async (e) => {
+    const openBtn = e.target.closest("button.wt-open");
+    if (openBtn) {
+      openBtn.disabled = true;
+      try {
+        const res = await fetch(`open?repo=${encodeURIComponent(openBtn.dataset.repo)}&branch=${encodeURIComponent(openBtn.dataset.branch)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) alert(`Open in VS Code failed: ${data.error || res.status}`);
+      } catch (err) {
+        alert(`Open in VS Code failed: ${err.message}`);
+      } finally {
+        openBtn.disabled = false;
+      }
+      return;
+    }
+
     const draftBtn = e.target.closest("button.draft-toggle");
     if (draftBtn) {
       draftBtn.disabled = true;
