@@ -14,7 +14,7 @@ Priority-sorted list with review status, reviewers, CI checks, stacked PRs neste
 
 ### Board view
 
-Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer), and Ready (approved):
+Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer), and Ready (approved), with your last couple of merged PRs shown dimmed under Ready:
 
 ![Board view](docs/board-view.png)
 
@@ -26,6 +26,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Board view**: swim lanes for Working / Waiting / Ready on the My PRs tab, with drafts styled distinctly in Working (click a card's Draft pill to mark it ready for review)
 - **Auto-merge**: Waiting and Ready cards show auto-merge status with a one-click toggle
 - **Stacked PRs**: PRs based on another open PR's branch are nested under their parent in both views
+- **Recently merged**: on the My PRs tab, your last 2 merged PRs appear dimmed with a purple "Merged" badge - at the bottom of the list and under the Ready lane - for quick reference
 - **Priority sort**: one of the list sort options - ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
 - **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo. The default load fetches only your PRs and ones awaiting your review; "All open" fetches the full set on demand the first time you open it
 - **Local worktree links** (optional): when run via the local companion, PRs whose branch you have checked out locally get "Open in VS Code" and "Resume in Claude" links

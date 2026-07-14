@@ -158,6 +158,11 @@
   .pr-row:last-child { border-bottom: none; }
   .pr-row:hover { background: var(--row-hover); }
   .pr-row.context { opacity: .55; }
+  .pr-row.merged, .card.merged { opacity: .62; }
+  .pr-icon.merged svg, .review-badge.merged svg { fill: var(--purple); }
+  .review-badge.merged { color: var(--purple); background: color-mix(in srgb, var(--purple) 14%, transparent); }
+  .merged-divider { font-size: 11px; font-weight: 500; color: var(--fg-muted); padding: 8px 16px 2px; border-top: 1px solid var(--border); }
+  .lane .merged-divider { padding: 6px 4px 2px; border-top: none; }
   .stack-elbow {
     flex: none;
     width: 12px; height: 12px;
@@ -429,6 +434,7 @@
 
   const state = {
     prs: [],              // targeted set: my PRs ∪ PRs awaiting my review (fetched on load)
+    merged: [],           // my last couple of merged PRs, shown as context on the My PRs tab
     targetedLoaded: false,
     allPrs: null,         // full open set, fetched lazily the first time "All open" is viewed
     total: 0,             // total open count, for the All-open truncation note
@@ -447,6 +453,7 @@
 
   function resetData() {
     state.prs = [];
+    state.merged = [];
     state.targetedLoaded = false;
     state.allPrs = null;
   }
@@ -466,6 +473,7 @@
     check: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>',
     x: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>',
     dot: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg>',
+    merged: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0-8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5 4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z"/></svg>',
     clock: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028 1.352a.75.75 0 0 1-.832 1.248l-2.36-1.573A.75.75 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/></svg>',
     comment: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
     changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',
@@ -497,7 +505,7 @@
 
   // ---------- GitHub API ----------
   const PR_FIELDS = `
-    id number title url isDraft createdAt updatedAt headRefName baseRefName
+    id number title url isDraft createdAt updatedAt mergedAt headRefName baseRefName
     autoMergeRequest { enabledAt }
     viewerCanEnableAutoMerge viewerCanDisableAutoMerge
     repository { nameWithOwner }
@@ -630,7 +638,7 @@
     return `${await ownerQualifier(target)}:${target}`;
   }
 
-  async function searchPRs(q) {
+  async function searchPRs(q, max = MAX_PRS) {
     const prs = [];
     let after = null, viewer = null, total = 0;
     do {
@@ -639,16 +647,18 @@
       total = data.search.issueCount;
       prs.push(...data.search.nodes.filter((n) => n && n.number));
       after = data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null;
-    } while (after && prs.length < MAX_PRS);
+    } while (after && prs.length < max);
     return { viewer, prs, total };
   }
 
-  // The cheap default: only my PRs and PRs awaiting my review, not every open PR.
+  // The cheap default: only my PRs and PRs awaiting my review, plus my last
+  // couple of merged PRs (shown as recently-merged context) - not every open PR.
   async function fetchTargeted() {
-    const scope = `is:pr is:open archived:false ${await scopePrefix(requireTarget())}`;
-    const [mine, review] = await Promise.all([
-      searchPRs(`${scope} author:@me`),
-      searchPRs(`${scope} review-requested:@me`),
+    const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
+    const [mine, review, merged] = await Promise.all([
+      searchPRs(`${base} is:open author:@me`),
+      searchPRs(`${base} is:open review-requested:@me`),
+      searchPRs(`${base} is:merged author:@me`, 2),
     ]);
     const seen = new Set();
     const prs = [];
@@ -658,7 +668,7 @@
       seen.add(key);
       prs.push(pr);
     }
-    return { viewer: mine.viewer || review.viewer, prs };
+    return { viewer: mine.viewer || review.viewer || merged.viewer, prs, merged: merged.prs.slice(0, 2) };
   }
 
   // The full open set, fetched only when "All open" is viewed.
@@ -813,6 +823,33 @@
       ? `<a class="wt-link" href="claude://resume?session=${esc(wt.sessionId)}" title="Resume Claude session">${ICONS.claude}</a>`
       : "";
     return `<span class="wt-links">${vscode}${claude}</span>`;
+  }
+
+  function mergedRepoPrefix(pr) {
+    const repoName = pr.repository?.nameWithOwner;
+    return repoName && repoName !== getCurrentRepo()
+      ? `<a href="https://github.com/${esc(repoName)}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> ` : "";
+  }
+
+  function mergedRow(pr) {
+    return `
+      <div class="pr-row merged">
+        <span class="pr-icon merged">${ICONS.merged}</span>
+        <div class="pr-main">
+          <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+          <div class="pr-meta">${mergedRepoPrefix(pr)}#${pr.number} by <strong>${esc(pr.author?.login || "ghost")}</strong> · merged ${timeAgo(pr.mergedAt)}</div>
+        </div>
+        <div class="pr-side"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
+      </div>`;
+  }
+
+  function mergedCard(pr) {
+    return `
+      <div class="card merged">
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+        <div class="card-meta">${mergedRepoPrefix(pr)}#${pr.number} by ${esc(pr.author?.login || "ghost")} · merged ${timeAgo(pr.mergedAt)}</div>
+        <div class="card-icons"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
+      </div>`;
   }
 
   function prRow(pr, depth = 0, isContext = false, parent = null) {
@@ -1056,13 +1093,16 @@
         };
         let laneHtml = roots.map((r) => renderCardTree(r, 0)).join("");
         for (const pr of inLane) if (!seen.has(pr.number)) laneHtml += renderCardTree(pr, 0);
+        if (i === 2 && state.merged.length) {  // recently merged sit under the Ready lane
+          laneHtml += '<div class="merged-divider">Recently merged</div>' + state.merged.map(mergedCard).join("");
+        }
         return `
         <div class="lane">
           <div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>
           ${laneHtml || '<div class="lane-empty">None</div>'}
         </div>`;
       }).join("") + "</div>";
-      if (!count) html = "";
+      if (!count && !state.merged.length) html = "";
     } else {
       const { roots, children } = buildStacks(dataset);
       roots.sort(sortComparator());
@@ -1077,6 +1117,9 @@
         const r = renderNode(pr, 0, children, null, seen);
         html += r.html;
         count += r.count;
+      }
+      if (state.filter === "mine" && state.merged.length) {  // recently merged at the bottom of My PRs
+        html += '<div class="merged-divider">Recently merged</div>' + state.merged.map(mergedRow).join("");
       }
     }
     const target = getCurrentRepo();
@@ -1114,9 +1157,10 @@
     listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     try {
       if (needTargeted) {
-        const { viewer, prs } = await fetchTargeted();
+        const { viewer, prs, merged } = await fetchTargeted();
         state.viewer = viewer;
         state.prs = prs;
+        state.merged = merged;
         state.targetedLoaded = true;
       }
       if (needAll) {
