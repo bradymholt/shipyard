@@ -327,6 +327,10 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   footer { margin-top: 16px; color: var(--fg-muted); font-size: 12px; display: flex; gap: 12px; align-items: center; }
+  #companion-status { display: inline-flex; align-items: center; gap: 5px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: var(--green); }
+  .dot.off { background: var(--fg-muted); }
 
   @media (max-width: 700px) {
     .pr-side { flex-direction: column; align-items: flex-end; gap: 6px; }
@@ -405,6 +409,7 @@
   <footer>
     <span id="last-updated"></span>
     <span id="viewer-info"></span>
+    <span id="companion-status"></span>
   </footer>
 </div>
 
@@ -434,6 +439,7 @@
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, sessionId }, from the local companion
     companion: false,     // true when the local companion answered (enables worktree actions)
+    companionChecked: false,
     search: "",
     loading: false,
   };
@@ -743,15 +749,19 @@
   async function loadWorktrees() {
     try {
       const res = await fetch("worktrees.json", { cache: "no-store" });
-      if (!res.ok) return;
-      const map = {};
-      for (const w of await res.json()) {
-        if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
+      if (res.ok) {
+        const map = {};
+        for (const w of await res.json()) {
+          if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
+        }
+        state.worktrees = map;
+        state.companion = true;
       }
-      state.worktrees = map;
-      state.companion = true;
-      render();
     } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
+    finally {
+      state.companionChecked = true;
+      render();
+    }
   }
 
   function worktreeFor(pr) {
@@ -942,6 +952,11 @@
   }
 
   function render() {
+    $("#companion-status").innerHTML = !state.companionChecked ? ""
+      : state.companion
+        ? '<span class="dot ok"></span>Companion connected'
+        : '<span class="dot off"></span>Companion not running';
+
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
     $("#count-mine").textContent = state.prs.filter((p) => p.author?.login === state.viewer).length;
     $("#count-review").textContent = state.prs.filter((p) =>
