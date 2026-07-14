@@ -455,6 +455,10 @@
   const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
   const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
   const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
+  // "org" | "user" | undefined, from the companion's ownerQualifier cache
+  const ownerType = (login) => {
+    try { return JSON.parse(localStorage.getItem("ghpr.ownerTypes") || "{}")[login]; } catch { return undefined; }
+  };
 
   // ---------- icons ----------
   const ICONS = {
@@ -1076,7 +1080,10 @@
       }
     }
     const target = getCurrentRepo();
-    const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls` : `https://github.com/${esc(target)}`;
+    const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
+      : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
+      : ownerType(target) === "user" ? `https://github.com/${esc(target)}?tab=repositories`
+      : `https://github.com/${esc(target)}`;
     const targetLink = `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
 
     // While the current view's PRs are still being fetched, show the spinner (or
