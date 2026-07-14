@@ -26,7 +26,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Auto-merge**: Waiting and Ready cards show auto-merge status with a one-click toggle
 - **Stacked PRs**: PRs based on another open PR's branch are nested under their parent in both views
 - **Priority sort**: ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
-- **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo
+- **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo. The default load fetches only your PRs and ones awaiting your review; "All open" fetches the full set on demand the first time you open it
 
 ## Setup
 

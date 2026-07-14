@@ -390,14 +390,22 @@
   const listBody = $("#list-body");
 
   const state = {
-    prs: [],
-    total: 0,
+    prs: [],              // targeted set: my PRs ∪ PRs awaiting my review (fetched on load)
+    targetedLoaded: false,
+    allPrs: null,         // full open set, fetched lazily the first time "All open" is viewed
+    total: 0,             // total open count, for the All-open truncation note
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) || "mine",
     view: localStorage.getItem("ghpr.view") || "list",
     search: "",
     loading: false,
   };
+
+  function resetData() {
+    state.prs = [];
+    state.targetedLoaded = false;
+    state.allPrs = null;
+  }
 
   const getToken = () => localStorage.getItem(LS.TOKEN) || "";
   const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
@@ -553,10 +561,53 @@
     return qualifier;
   }
 
-  async function fetchPRs() {
+  function requireTarget() {
     const target = getCurrentRepo();
     if (!getToken()) throw new Error("No access token set. Open settings (⚙) and save a token.");
     if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
+    return target;
+  }
+
+  // Search qualifier scoping a query to the current target (a repo, org, or user).
+  async function scopePrefix(target) {
+    if (target.includes("/")) return `repo:${target}`;
+    return `${await ownerQualifier(target)}:${target}`;
+  }
+
+  async function searchPRs(q) {
+    const prs = [];
+    let after = null, viewer = null, total = 0;
+    do {
+      const data = await gql(OWNER_QUERY, { q: `${q} sort:updated-desc`, after });
+      viewer = data.viewer.login;
+      total = data.search.issueCount;
+      prs.push(...data.search.nodes.filter((n) => n && n.number));
+      after = data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null;
+    } while (after && prs.length < MAX_PRS);
+    return { viewer, prs, total };
+  }
+
+  // The cheap default: only my PRs and PRs awaiting my review, not every open PR.
+  async function fetchTargeted() {
+    const scope = `is:pr is:open archived:false ${await scopePrefix(requireTarget())}`;
+    const [mine, review] = await Promise.all([
+      searchPRs(`${scope} author:@me`),
+      searchPRs(`${scope} review-requested:@me`),
+    ]);
+    const seen = new Set();
+    const prs = [];
+    for (const pr of [...mine.prs, ...review.prs]) {
+      const key = `${pr.repository?.nameWithOwner || ""}#${pr.number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      prs.push(pr);
+    }
+    return { viewer: mine.viewer || review.viewer, prs };
+  }
+
+  // The full open set, fetched only when "All open" is viewed.
+  async function fetchAll() {
+    const target = requireTarget();
     if (target.includes("/")) {
       const [owner, name] = target.split("/");
       const prs = [];
@@ -572,18 +623,7 @@
       } while (after && prs.length < MAX_PRS);
       return { viewer, prs, total };
     }
-    const qualifier = await ownerQualifier(target);
-    const q = `is:pr is:open archived:false ${qualifier}:${target} sort:updated-desc`;
-    const prs = [];
-    let after = null, viewer = null, total = 0;
-    do {
-      const data = await gql(OWNER_QUERY, { q, after });
-      viewer = data.viewer.login;
-      total = data.search.issueCount;
-      prs.push(...data.search.nodes.filter((n) => n && n.number));
-      after = data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null;
-    } while (after && prs.length < MAX_PRS);
-    return { viewer, prs, total };
+    return searchPRs(`is:pr is:open archived:false ${await scopePrefix(target)}`);
   }
 
   // ---------- rendering ----------
@@ -801,7 +841,9 @@
     $("#count-review").textContent = state.prs.filter((p) =>
       (p.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)
     ).length;
-    $("#count-all").textContent = state.prs.length;
+    $("#count-all").textContent = state.allPrs ? state.allPrs.length : "–";
+
+    const dataset = state.filter === "all" ? (state.allPrs || []) : state.prs;
 
     const boardAllowed = state.filter === "mine";
     const effectiveView = boardAllowed && state.view === "board" ? "board" : "list";
@@ -811,8 +853,8 @@
 
     let html = "", count = 0;
     if (effectiveView === "board") {
-      const { parents } = buildStacks(state.prs);
-      const matches = state.prs.filter(matchesFilter);
+      const { parents } = buildStacks(dataset);
+      const matches = dataset.filter(matchesFilter);
       count = matches.length;
       const laneItems = [[], [], []];
       for (const pr of matches) laneItems[laneOf(pr)].push(pr);
@@ -854,7 +896,7 @@
       }).join("") + "</div>";
       if (!count) html = "";
     } else {
-      const { roots, children } = buildStacks(state.prs);
+      const { roots, children } = buildStacks(dataset);
       roots.sort((a, b) => sortRank(a) - sortRank(b) || new Date(b.updatedAt) - new Date(a.updatedAt));
       const seen = new Set();
       for (const root of roots) {
@@ -862,29 +904,41 @@
         html += r.html;
         count += r.count;
       }
-      for (const pr of state.prs) {
+      for (const pr of dataset) {
         if (seen.has(pr.number)) continue;
         const r = renderNode(pr, 0, children, null, seen);
         html += r.html;
         count += r.count;
       }
     }
-    const truncated = state.total > state.prs.length ? ` (most recent ${state.prs.length} of ${state.total})` : "";
+    const truncated = state.filter === "all" && state.total > dataset.length
+      ? ` (most recent ${dataset.length} of ${state.total})` : "";
     $("#list-title").textContent = `${count} open pull request${count === 1 ? "" : "s"} · ${getCurrentRepo()}${truncated}`;
     listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
   }
 
-  async function load() {
+  async function load(force = false) {
     if (state.loading) return;
+    if (force) resetData();
+    const needTargeted = !state.targetedLoaded;
+    const needAll = state.filter === "all" && !state.allPrs;
+    if (!needTargeted && !needAll) { render(); return; }
     state.loading = true;
     listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     try {
-      const { viewer, prs, total } = await fetchPRs();
-      state.viewer = viewer;
-      state.prs = prs;
-      state.total = total;
+      if (needTargeted) {
+        const { viewer, prs } = await fetchTargeted();
+        state.viewer = viewer;
+        state.prs = prs;
+        state.targetedLoaded = true;
+      }
+      if (needAll) {
+        const { prs, total } = await fetchAll();
+        state.allPrs = prs;
+        state.total = total;
+      }
       $("#last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
-      $("#viewer-info").textContent = `Signed in as ${viewer}`;
+      $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
       render();
     } catch (err) {
       listBody.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
@@ -908,7 +962,7 @@
   }
 
   $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
-  $("#refresh-btn").addEventListener("click", load);
+  $("#refresh-btn").addEventListener("click", () => load(true));
 
   $("#save-token-btn").addEventListener("click", () => {
     const v = $("#token-input").value.trim();
@@ -916,7 +970,7 @@
     localStorage.setItem(LS.TOKEN, v);
     $("#token-input").value = "";
     renderTokenStatus();
-    load();
+    load(true);
   });
   $("#clear-token-btn").addEventListener("click", () => {
     localStorage.removeItem(LS.TOKEN);
@@ -931,6 +985,7 @@
     localStorage.setItem(LS.REPO, v);
     $("#add-repo-input").value = "";
     renderRepoSelect();
+    resetData();
     load();
   });
   $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
@@ -942,12 +997,13 @@
     setRepos(getRepos().filter((r) => r !== current));
     localStorage.removeItem(LS.REPO);
     renderRepoSelect();
-    state.prs = [];
+    resetData();
     render();
   });
 
   $("#repo-select").addEventListener("change", (e) => {
     localStorage.setItem(LS.REPO, e.target.value);
+    resetData();
     load();
   });
 
@@ -986,7 +1042,7 @@
     tab.addEventListener("click", () => {
       state.filter = tab.dataset.filter;
       localStorage.setItem(LS.FILTER, state.filter);
-      render();
+      load();
     })
   );
 
