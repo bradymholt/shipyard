@@ -779,9 +779,10 @@
       return `<span class="wt-links"><button class="wt-link wt-create" data-repo="${repo}" data-branch="${branch}" title="Create a worktree for this branch and open it in VS Code">${ICONS.createWt}</button></span>`;
     }
     // vscode://file + absolute path (leading slash → the verified "double slash"
-    // form); a .code-workspace target opens as a workspace, else the folder.
-    const target = wt.workspace || wt.path;
-    const label = wt.workspace ? "workspace" : "worktree";
+    // form). Linked worktrees open as the folder: opening their .code-workspace
+    // crash-loops VS Code's extension host, though the main clone's is fine.
+    const target = wt.linked ? wt.path : (wt.workspace || wt.path);
+    const label = target.endsWith(".code-workspace") ? "workspace" : "folder";
     const vscode = `<a class="wt-link" href="vscode://file/${esc(target)}" title="Open ${label} in VS Code">${ICONS.vscode}</a>`;
     const claude = wt.sessionId
       ? `<a class="wt-link" href="claude://resume?session=${esc(wt.sessionId)}" title="Resume Claude session">${ICONS.claude}</a>`
@@ -1159,7 +1160,7 @@
         const res = await fetch(`create-worktree?repo=${encodeURIComponent(createBtn.dataset.repo)}&branch=${encodeURIComponent(createBtn.dataset.branch)}`, { method: "POST" });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          window.location.href = `vscode://file/${data.workspace || data.path}`;
+          window.location.href = `vscode://file/${data.path}`;  // folder: a linked worktree's .code-workspace crashes VS Code
           loadWorktrees();
         } else {
           alert(`Create worktree failed: ${data.error || res.status}`);
