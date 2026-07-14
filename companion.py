@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
 
@@ -125,20 +125,55 @@ def worktrees_for_repo(repo_dir):
     return out
 
 
-def discover(roots):
-    out, seen = [], set()
+def clone_dirs(roots):
     for root in roots:
         if not os.path.isdir(root):
             continue
         for entry in sorted(os.listdir(root)):
             repo_dir = os.path.join(root, entry)
-            # Only main clones (a linked worktree has a .git *file*, not dir);
-            # `git worktree list` from the clone already enumerates them all.
-            if repo_dir in seen or not os.path.isdir(os.path.join(repo_dir, ".git")):
-                continue
-            seen.add(repo_dir)
-            out.extend(worktrees_for_repo(repo_dir))
+            # Only main clones (a linked worktree has a .git *file*, not dir).
+            if os.path.isdir(os.path.join(repo_dir, ".git")):
+                yield repo_dir
+
+
+def discover(roots):
+    out, seen = [], set()
+    for repo_dir in clone_dirs(roots):
+        if repo_dir in seen:
+            continue
+        seen.add(repo_dir)
+        out.extend(worktrees_for_repo(repo_dir))
     return attach_sessions(out)
+
+
+def find_clone(repo, roots):
+    for repo_dir in clone_dirs(roots):
+        if parse_origin(git(repo_dir, "config", "--get", "remote.origin.url")) == repo:
+            return repo_dir
+    return None
+
+
+def create_worktree(repo, branch, roots):
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    # Idempotent: if the branch is already checked out somewhere (a worktree, or
+    # the main clone itself), open that instead of making a duplicate.
+    existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+    if existing:
+        return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
+    path = os.path.join(clone, ".claude", "worktrees", re.sub(r"[^\w.-]", "-", branch))
+    if os.path.isdir(path):
+        return {"ok": True, "path": path, "workspace": workspace_in(path), "created": False}
+    git(clone, "fetch", "origin", branch)  # best effort so the ref is present
+    add = lambda *a: subprocess.run(["git", "-C", clone, "worktree", "add", *a],
+                                    capture_output=True, text=True, timeout=120)
+    r = add(path, branch)
+    if r.returncode != 0:  # no local branch yet → create one tracking the remote
+        r = add("--track", "-b", branch, path, f"origin/{branch}")
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or "git worktree add failed").strip()}
+    return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -157,6 +192,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if urlparse(self.path).path == "/worktrees.json":
             return self._json(discover(self.roots))
         super().do_GET()
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/create-worktree":
+            q = parse_qs(parsed.query)
+            repo = (q.get("repo") or [""])[0]
+            branch = (q.get("branch") or [""])[0]
+            result = create_worktree(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        self.send_response(404)
+        self.end_headers()
 
     def log_message(self, *args):
         pass
