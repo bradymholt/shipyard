@@ -44,7 +44,7 @@ python3 companion.py ~/dev        # scan git repos under ~/dev
 
 Then open the printed `http://localhost:4321`. Pass multiple roots or `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
 
-"Open in VS Code" is a `vscode://file` link; the companion supplies which path to use. The main clone opens its `.code-workspace` file (multi-root); linked worktrees open as the folder, because opening a linked worktree's `.code-workspace` crash-loops VS Code's extension host (a Copilot/multi-root interaction) while the folder is fine. This covers PRs whose branch is in a worktree or checked out in the main clone.
+"Open in VS Code" is a `vscode://file` link that opens the worktree's `.code-workspace` file as a workspace when one exists (otherwise the folder); the companion just supplies which path to use. This covers PRs whose branch is in a worktree or checked out in the main clone.
 
 For a PR whose branch has no local worktree, the row instead shows a "create worktree" button. Clicking it asks the companion to `git worktree add` the branch (fetching from `origin` first if it's remote-only) under `<repo>/.claude/worktrees/`, then opens it - so the branch joins the same worktree flow as everything else. This action only appears when the companion is running.
 

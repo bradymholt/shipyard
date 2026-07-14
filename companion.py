@@ -112,7 +112,6 @@ def workspace_in(path):
 
 def worktrees_for_repo(repo_dir):
     repo = parse_origin(git(repo_dir, "config", "--get", "remote.origin.url"))
-    main = os.path.realpath(repo_dir)
     out, cur = [], {}
     for line in git(repo_dir, "worktree", "list", "--porcelain").splitlines() + [""]:
         if line.startswith("worktree "):
@@ -121,7 +120,6 @@ def worktrees_for_repo(repo_dir):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
-                        "linked": os.path.realpath(cur["path"]) != main,
                         "workspace": workspace_in(cur["path"])})
             cur = {}
     return out
