@@ -272,6 +272,18 @@
     font-size: 11px; font-weight: 500; color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: 10px; padding: 0 7px;
   }
+  .am-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 500;
+    border-radius: 10px; padding: 0 7px;
+    background: none;
+  }
+  .am-toggle svg { fill: currentColor; }
+  .am-toggle.on { color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); }
+  .am-toggle.off { color: var(--fg-muted); border: 1px dashed var(--border); }
+  button.am-toggle:hover { background: color-mix(in srgb, var(--fg-muted) 10%, transparent); }
+  button.am-toggle:disabled { opacity: .5; cursor: default; }
+
   .card-nest { display: flex; gap: 6px; align-items: flex-start; }
   .card-nest > .stack-elbow { margin-top: 2px; }
   .card-nest > .card { flex: 1; min-width: 0; }
@@ -425,7 +437,9 @@
 
   // ---------- GitHub API ----------
   const PR_FIELDS = `
-    number title url isDraft createdAt updatedAt headRefName baseRefName
+    id number title url isDraft createdAt updatedAt headRefName baseRefName
+    autoMergeRequest { enabledAt }
+    viewerCanEnableAutoMerge viewerCanDisableAutoMerge
     repository { nameWithOwner }
     author { login avatarUrl }
     reviewDecision
@@ -474,8 +488,31 @@
     if (res.status === 401) throw new Error("Invalid or expired token (401). Update it in settings.");
     if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
     const json = await res.json();
-    if (json.errors?.length && !json.data) throw new Error(json.errors.map((e) => e.message).join("; "));
+    const allNull = json.data && Object.values(json.data).every((v) => v === null);
+    if (json.errors?.length && (!json.data || allNull)) throw new Error(json.errors.map((e) => e.message).join("; "));
     return json.data;
+  }
+
+  async function setAutoMerge(prId, enable) {
+    if (!enable) {
+      await gql(`mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }`, { id: prId });
+      return;
+    }
+    let lastErr;
+    for (const method of ["MERGE", "SQUASH", "REBASE"]) {
+      try {
+        await gql(
+          `mutation($id: ID!, $method: PullRequestMergeMethod!) {
+            enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $method }) { clientMutationId }
+          }`,
+          { id: prId, method }
+        );
+        return;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
   }
 
   // Search needs org: vs user: depending on account type; look it up once and cache.
@@ -657,7 +694,17 @@
     return 0;
   }
 
-  function prCard(pr, parent) {
+  function autoMergeChip(pr) {
+    const on = !!pr.autoMergeRequest;
+    if (on && !pr.viewerCanDisableAutoMerge)
+      return `<span class="am-toggle on" title="Auto-merge is on">${ICONS.check} Auto-merge</span>`;
+    if (!on && !pr.viewerCanEnableAutoMerge) return "";
+    return on
+      ? `<button class="am-toggle on" data-pr="${esc(pr.id)}" data-action="disable" title="Auto-merge is on. Click to disable.">${ICONS.check} Auto-merge</button>`
+      : `<button class="am-toggle off" data-pr="${esc(pr.id)}" data-action="enable" title="Auto-merge is off. Click to enable.">Auto-merge</button>`;
+  }
+
+  function prCard(pr, parent, showAutoMerge = false) {
     const repoName = pr.repository?.nameWithOwner;
     const repoPrefix = repoName && repoName !== getCurrentRepo()
       ? `<a href="https://github.com/${esc(repoName)}" target="_blank" rel="noopener">${esc(repoName)}</a> `
@@ -682,6 +729,7 @@
           <span class="reviewers">${buildReviewers(pr)}</span>
           ${badge}
           ${basedOn}
+          ${showAutoMerge ? autoMergeChip(pr) : ""}
         </div>
       </div>`;
   }
@@ -747,9 +795,10 @@
           seen.add(pr.number);
           const parent = parents.get(pr.number);
           const chipParent = parent && !laneNums.has(parent.number) ? parent : null;
+          const showAutoMerge = i >= 1;
           let out = depth === 0
-            ? prCard(pr, chipParent)
-            : `<div class="card-nest" style="margin-left: ${(depth - 1) * 14}px"><span class="stack-elbow" title="Stacked PR"></span>${prCard(pr, chipParent)}</div>`;
+            ? prCard(pr, chipParent, showAutoMerge)
+            : `<div class="card-nest" style="margin-left: ${(depth - 1) * 14}px"><span class="stack-elbow" title="Stacked PR"></span>${prCard(pr, chipParent, showAutoMerge)}</div>`;
           for (const kid of kids.get(pr.number) || []) out += renderCardTree(kid, depth + 1);
           return out;
         };
@@ -858,6 +907,20 @@
   $("#repo-select").addEventListener("change", (e) => {
     localStorage.setItem(LS.REPO, e.target.value);
     load();
+  });
+
+  listBody.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button.am-toggle");
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = "…";
+    try {
+      await setAutoMerge(btn.dataset.pr, btn.dataset.action === "enable");
+      await load();
+    } catch (err) {
+      alert(`Auto-merge: ${err.message}`);
+      render();
+    }
   });
 
   for (const [id, view] of [["#view-list", "list"], ["#view-board", "board"]]) {
