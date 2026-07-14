@@ -28,11 +28,24 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Stacked PRs**: PRs based on another open PR's branch are nested under their parent in both views
 - **Priority sort**: one of the list sort options — ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
 - **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo. The default load fetches only your PRs and ones awaiting your review; "All open" fetches the full set on demand the first time you open it
+- **Local worktree links** (optional): when run via the local companion, PRs whose branch you have checked out locally get "Open in VS Code" and "Resume in Claude" links
 
 ## Setup
 
 Open the page, click the gear icon, and paste a GitHub personal access token - classic with `repo` scope, or fine-grained with Pull requests: read access. The token is stored only in your browser's localStorage and is sent only to `api.github.com`.
 
+## Local companion (optional)
+
+`companion.py` is a small local server that adds "Open in VS Code" / "Resume in Claude" links for branches you have checked out as local git worktrees. It reads `git worktree list` (and Claude Code's session files under `~/.claude`) and serves both the dashboard and a `/worktrees.json` endpoint.
+
+```
+python3 companion.py ~/dev        # scan git repos under ~/dev
+```
+
+Then open the printed `http://localhost:4321`. Pass multiple roots or `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
+
+Note: the companion serves the dashboard on a different origin (`localhost`) than Pages, so localStorage (token, views) is separate there - you enter the token once for the local origin.
+
 ## Development
 
-No build step. Edit `index.html`, serve it locally (`python3 -m http.server`), and refresh.
+No build step. Edit `index.html`, serve it locally (`python3 -m http.server`), and refresh. See `companion.py` for the optional worktree integration.

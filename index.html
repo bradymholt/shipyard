@@ -226,6 +226,11 @@
   .comments { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-muted); font-size: 12px; }
   .comments svg { fill: var(--fg-muted); }
 
+  .wt-link { display: inline-flex; align-items: center; color: var(--fg-muted); }
+  .wt-link svg { fill: currentColor; }
+  .wt-link:hover { color: var(--accent); }
+  .wt-links { display: inline-flex; align-items: center; gap: 8px; }
+
   .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .view-toggle button { border: none; border-radius: 0; padding: 5px 10px; display: inline-flex; align-items: center; background: var(--bg); }
   .view-toggle button + button { border-left: 1px solid var(--border); }
@@ -407,6 +412,7 @@
     filter: localStorage.getItem(LS.FILTER) || "mine",
     view: localStorage.getItem("ghpr.view") || "list",
     sort: localStorage.getItem("ghpr.sort") || "priority",
+    worktrees: {},        // "repo#branch" -> { path, sessionId }, from the local companion
     search: "",
     loading: false,
   };
@@ -430,7 +436,10 @@
     dot: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg>',
     clock: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028 1.352a.75.75 0 0 1-.832 1.248l-2.36-1.573A.75.75 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/></svg>',
     comment: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
-    changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',  };
+    changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',
+    vscode: '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M14.25 1c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 14.25 12h-3.727c.099 1.041.52 1.872 1.292 2.35a.75.75 0 0 1-.395 1.4h-6.84a.75.75 0 0 1-.395-1.4c.771-.478 1.193-1.309 1.292-2.35H1.75A1.75 1.75 0 0 1 0 10.25v-7.5C0 1.784.784 1 1.75 1ZM1.75 2.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
+    claude: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 0l1.35 4.9L14 2.4l-2.5 4.25L16 8l-4.5 1.35L14 13.6l-4.65-2.5L8 16l-1.35-4.9L2 13.6l2.5-4.25L0 8l4.5-1.35L2 2.4l4.65 2.5z"/></svg>',
+  };
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -707,6 +716,35 @@
     return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
   }
 
+  // Populated only when the local companion (companion.py) is serving the page;
+  // on GitHub Pages the fetch fails and worktree links stay off.
+  async function loadWorktrees() {
+    try {
+      const res = await fetch("worktrees.json", { cache: "no-store" });
+      if (!res.ok) return;
+      const map = {};
+      for (const w of await res.json()) {
+        if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
+      }
+      state.worktrees = map;
+      render();
+    } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
+  }
+
+  function worktreeFor(pr) {
+    return state.worktrees[`${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`];
+  }
+
+  function worktreeLinks(pr) {
+    const wt = worktreeFor(pr);
+    if (!wt) return "";
+    const vscode = `<a class="wt-link" href="vscode://file${esc(wt.path)}" title="Open worktree in VS Code">${ICONS.vscode}</a>`;
+    const claude = wt.sessionId
+      ? `<a class="wt-link" href="claude://resume?session=${esc(wt.sessionId)}" title="Resume Claude session">${ICONS.claude}</a>`
+      : "";
+    return `<span class="wt-links">${vscode}${claude}</span>`;
+  }
+
   function prRow(pr, depth = 0, isContext = false, parent = null) {
     const labels = (pr.labels?.nodes || [])
       .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
@@ -739,6 +777,7 @@
           ${ciHtml(pr)}
           ${comments}
           <span class="reviewers">${state.filter === "review" ? authorAvatar(pr) : buildReviewers(pr)}</span>
+          ${worktreeLinks(pr)}
           ${reviewBadge(pr)}
         </div>
       </div>`;
@@ -844,6 +883,7 @@
           ${badge}
           ${basedOn}
           ${showAutoMerge ? autoMergeChip(pr) : ""}
+          ${worktreeLinks(pr)}
         </div>
       </div>`;
   }
@@ -998,7 +1038,7 @@
   }
 
   $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
-  $("#refresh-btn").addEventListener("click", () => load(true));
+  $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
 
   $("#save-token-btn").addEventListener("click", () => {
     const v = $("#token-input").value.trim();
@@ -1120,8 +1160,9 @@
   } else {
     $("#settings").classList.remove("hidden");
   }
+  loadWorktrees();
 
-  window.__dashboard = { load, render, state };
+  window.__dashboard = { load, render, state, loadWorktrees };
 })();
 </script>
 </body>
