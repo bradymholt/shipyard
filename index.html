@@ -427,6 +427,7 @@
     targetedLoaded: false,
     allPrs: null,         // full open set, fetched lazily the first time "All open" is viewed
     total: 0,             // total open count, for the All-open truncation note
+    loadError: null,
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) || "mine",
     view: localStorage.getItem("ghpr.view") || "list",
@@ -1020,11 +1021,23 @@
         count += r.count;
       }
     }
-    const truncated = state.filter === "all" && state.total > dataset.length
-      ? ` (most recent ${dataset.length} of ${state.total})` : "";
     const target = getCurrentRepo();
     const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls` : `https://github.com/${esc(target)}`;
     const targetLink = `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
+
+    // While the current view's PRs are still being fetched, show the spinner (or
+    // an error) rather than the empty "No pull requests match." message.
+    const dataReady = state.filter === "all" ? state.allPrs !== null : state.targetedLoaded;
+    if (!dataReady) {
+      if (!getToken() || !getCurrentRepo()) return;  // not configured: keep the setup prompt
+      $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
+      listBody.innerHTML = state.loadError
+        ? `<div class="error-box">${esc(state.loadError)}</div>`
+        : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+      return;
+    }
+    const truncated = state.filter === "all" && state.total > dataset.length
+      ? ` (most recent ${dataset.length} of ${state.total})` : "";
     $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}${esc(truncated)}`;
     listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
   }
@@ -1036,6 +1049,7 @@
     const needAll = state.filter === "all" && !state.allPrs;
     if (!needTargeted && !needAll) { render(); return; }
     state.loading = true;
+    state.loadError = null;
     listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     try {
       if (needTargeted) {
@@ -1053,7 +1067,8 @@
       $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
       render();
     } catch (err) {
-      listBody.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
+      state.loadError = err.message;
+      render();
     } finally {
       state.loading = false;
     }
