@@ -168,6 +168,9 @@
     border: 1px solid var(--border); border-radius: 10px; padding: 0 8px; margin-left: 6px;
     vertical-align: 1px;
   }
+  button.draft-pill { background: none; cursor: pointer; }
+  button.draft-pill:hover { background: color-mix(in srgb, var(--fg-muted) 12%, transparent); color: var(--fg); border-color: var(--fg-muted); }
+  button.draft-pill:disabled { opacity: .5; cursor: default; }
   .pr-meta { color: var(--fg-muted); font-size: 12px; margin-top: 2px; }
   .pr-meta .branch {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
@@ -346,7 +349,7 @@
     <div class="tabs">
       <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
       <button class="tab" data-filter="review">Waiting on my review <span class="count" id="count-review">–</span></button>
-      <button class="tab" data-filter="all">All open <span class="count" id="count-all">–</span></button>
+      <button class="tab" data-filter="all">All open <span class="count hidden" id="count-all"></span></button>
     </div>
     <input type="text" id="search" placeholder="Filter by title, author, or branch…">
     <select id="sort-select" title="Sort order">
@@ -553,6 +556,10 @@
       }
     }
     throw lastErr;
+  }
+
+  async function markReadyForReview(prId) {
+    await gql(`mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { id } } }`, { id: prId });
   }
 
   // Search needs org: vs user: depending on account type; look it up once and cache.
@@ -822,7 +829,9 @@
     const badge = pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
       ? reviewBadge(pr)
       : "";
-    const draft = pr.isDraft ? ' <span class="draft-pill">Draft</span>' : "";
+    const draft = pr.isDraft
+      ? ` <button class="draft-pill draft-toggle" data-pr="${esc(pr.id)}" title="Click to mark ready for review">Draft</button>`
+      : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
         <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
@@ -863,7 +872,9 @@
     $("#count-review").textContent = state.prs.filter((p) =>
       (p.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)
     ).length;
-    $("#count-all").textContent = state.allPrs ? state.allPrs.length : "–";
+    const allCount = $("#count-all");
+    allCount.textContent = state.allPrs ? state.allPrs.length : "";
+    allCount.classList.toggle("hidden", !state.allPrs);
 
     const dataset = state.filter === "all" ? (state.allPrs || []) : state.prs;
 
@@ -1032,6 +1043,22 @@
   });
 
   listBody.addEventListener("click", async (e) => {
+    const draftBtn = e.target.closest("button.draft-toggle");
+    if (draftBtn) {
+      draftBtn.disabled = true;
+      draftBtn.textContent = "…";
+      try {
+        await markReadyForReview(draftBtn.dataset.pr);
+        const pr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
+        if (pr) pr.isDraft = false;
+        render();
+      } catch (err) {
+        alert(`Mark ready: ${err.message}`);
+        render();
+      }
+      return;
+    }
+
     const btn = e.target.closest("button.am-toggle");
     if (!btn) return;
     btn.disabled = true;
