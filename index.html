@@ -392,7 +392,6 @@
   const state = {
     prs: [],
     total: 0,
-    fetchedAt: 0,
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) || "mine",
     view: localStorage.getItem("ghpr.view") || "list",
@@ -833,46 +832,8 @@
     listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
   }
 
-  const CACHE_TTL = 5 * 60 * 1000;
-  const cacheKey = (target) => `ghpr.cache.${target}`;
-
-  function readCache(target) {
-    try {
-      const cached = JSON.parse(localStorage.getItem(cacheKey(target)) || "null");
-      if (cached && Date.now() - cached.at < CACHE_TTL) return cached;
-    } catch { /* corrupt cache: ignore */ }
-    return null;
-  }
-
-  function writeCache() {
-    const target = getCurrentRepo();
-    if (!target) return;
-    try {
-      localStorage.setItem(cacheKey(target), JSON.stringify({
-        at: state.fetchedAt, viewer: state.viewer, prs: state.prs, total: state.total,
-      }));
-    } catch { /* quota exceeded: skip caching */ }
-  }
-
-  function updateFooter(fromCache) {
-    $("#last-updated").textContent = `Updated ${new Date(state.fetchedAt).toLocaleTimeString()}${fromCache ? " (cached)" : ""}`;
-    $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
-  }
-
-  async function load(force = false) {
+  async function load() {
     if (state.loading) return;
-    if (!force) {
-      const cached = readCache(getCurrentRepo());
-      if (cached) {
-        state.viewer = cached.viewer;
-        state.prs = cached.prs;
-        state.total = cached.total;
-        state.fetchedAt = cached.at;
-        updateFooter(true);
-        render();
-        return;
-      }
-    }
     state.loading = true;
     listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     try {
@@ -880,9 +841,8 @@
       state.viewer = viewer;
       state.prs = prs;
       state.total = total;
-      state.fetchedAt = Date.now();
-      writeCache();
-      updateFooter(false);
+      $("#last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      $("#viewer-info").textContent = `Signed in as ${viewer}`;
       render();
     } catch (err) {
       listBody.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
@@ -906,7 +866,7 @@
   }
 
   $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
-  $("#refresh-btn").addEventListener("click", () => load(true));
+  $("#refresh-btn").addEventListener("click", load);
 
   $("#save-token-btn").addEventListener("click", () => {
     const v = $("#token-input").value.trim();
@@ -914,7 +874,7 @@
     localStorage.setItem(LS.TOKEN, v);
     $("#token-input").value = "";
     renderTokenStatus();
-    load(true);
+    load();
   });
   $("#clear-token-btn").addEventListener("click", () => {
     localStorage.removeItem(LS.TOKEN);
@@ -939,7 +899,6 @@
     if (!current) return;
     setRepos(getRepos().filter((r) => r !== current));
     localStorage.removeItem(LS.REPO);
-    localStorage.removeItem(cacheKey(current));
     renderRepoSelect();
     state.prs = [];
     render();
@@ -963,7 +922,6 @@
         pr.autoMergeRequest = enable ? { enabledAt: new Date().toISOString() } : null;
         pr.viewerCanEnableAutoMerge = !enable;
         pr.viewerCanDisableAutoMerge = enable;
-        writeCache();
         btn.outerHTML = autoMergeChip(pr);
       } else {
         render();
@@ -1002,8 +960,7 @@
   $("#view-list").classList.toggle("active", state.view === "list");
   $("#view-board").classList.toggle("active", state.view === "board");
   if (getToken() && getCurrentRepo()) {
-    const isReload = performance.getEntriesByType?.("navigation")?.[0]?.type === "reload";
-    load(isReload);
+    load();
   } else {
     $("#settings").classList.remove("hidden");
   }
