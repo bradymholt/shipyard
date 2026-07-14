@@ -1005,7 +1005,9 @@
     }
     const truncated = state.filter === "all" && state.total > dataset.length
       ? ` (most recent ${dataset.length} of ${state.total})` : "";
-    $("#list-title").textContent = `${count} open pull request${count === 1 ? "" : "s"} · ${getCurrentRepo()}${truncated}`;
+    const target = getCurrentRepo();
+    const targetLink = `<a href="https://github.com/${esc(target)}" target="_blank" rel="noopener">${esc(target)}</a>`;
+    $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}${esc(truncated)}`;
     listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
   }
 
