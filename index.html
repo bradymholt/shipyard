@@ -158,7 +158,8 @@
   .pr-row:last-child { border-bottom: none; }
   .pr-row:hover { background: var(--row-hover); }
   .pr-row.context { opacity: .55; }
-  .pr-row.merged, .card.merged { opacity: .62; }
+  .pr-row.merged { opacity: .62; }
+  .card.merged { background: color-mix(in srgb, var(--fg-muted) 7%, var(--bg)); }
   .pr-icon.merged svg, .review-badge.merged svg { fill: var(--purple); }
   .review-badge.merged { color: var(--purple); background: color-mix(in srgb, var(--purple) 14%, transparent); }
   .merged-divider { font-size: 11px; font-weight: 500; color: var(--fg-muted); padding: 8px 16px 2px; border-top: 1px solid var(--border); }
