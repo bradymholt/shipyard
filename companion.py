@@ -54,15 +54,55 @@ def parse_origin(url):
     return m.group(1) if m else None
 
 
-def session_id_for(path):
-    # Claude stores per-project sessions under a dir name that is the abs path
-    # with every "/" and "." flattened to "-"; newest .jsonl is the live session.
-    enc = re.sub(r"[/.]", "-", path)
-    proj = Path.home() / ".claude" / "projects" / enc
-    if not proj.is_dir():
-        return None
-    sessions = sorted(proj.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return sessions[0].stem if sessions else None
+def first_cwd(f):
+    # Match sessions by the working dir recorded *inside* the transcript, not by
+    # the project-dir name: cloud/desktop worktree sessions get filed under the
+    # main repo's dir but their cwd still points at the worktree. cwd appears
+    # within the first few entries, so stop as soon as we find it.
+    try:
+        with f.open() as fh:
+            for _ in range(50):
+                line = fh.readline()
+                if not line:
+                    break
+                if '"cwd"' in line:
+                    try:
+                        cwd = json.loads(line).get("cwd")
+                        if cwd:
+                            return cwd
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return None
+
+
+def session_index():
+    root = Path.home() / ".claude" / "projects"
+    idx = []
+    if root.is_dir():
+        for f in root.glob("*/*.jsonl"):
+            cwd = first_cwd(f)
+            if cwd:
+                idx.append((cwd, f.stat().st_mtime, f.stem))
+    return idx
+
+
+def attach_sessions(worktrees):
+    idx = session_index()
+    # Assign each session to the worktree whose path is the longest prefix of the
+    # session's cwd, so a worktree wins over the main checkout it lives inside.
+    paths = sorted({w["path"] for w in worktrees}, key=len, reverse=True)
+    best = {}  # worktree path -> (mtime, sessionId)
+    for cwd, mtime, sid in idx:
+        for p in paths:
+            if cwd == p or cwd.startswith(p + "/"):
+                if p not in best or mtime > best[p][0]:
+                    best[p] = (mtime, sid)
+                break
+    for w in worktrees:
+        w["sessionId"] = best.get(w["path"], (None, None))[1]
+    return worktrees
 
 
 def workspace_in(path):
@@ -80,8 +120,7 @@ def worktrees_for_repo(repo_dir):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
-                        "workspace": workspace_in(cur["path"]),
-                        "sessionId": session_id_for(cur["path"])})
+                        "workspace": workspace_in(cur["path"])})
             cur = {}
     return out
 
@@ -99,7 +138,7 @@ def discover(roots):
                 continue
             seen.add(repo_dir)
             out.extend(worktrees_for_repo(repo_dir))
-    return out
+    return attach_sessions(out)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
