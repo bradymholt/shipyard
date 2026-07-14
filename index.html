@@ -914,9 +914,18 @@
     if (!btn) return;
     btn.disabled = true;
     btn.textContent = "…";
+    const enable = btn.dataset.action === "enable";
     try {
-      await setAutoMerge(btn.dataset.pr, btn.dataset.action === "enable");
-      await load();
+      await setAutoMerge(btn.dataset.pr, enable);
+      const pr = state.prs.find((p) => p.id === btn.dataset.pr);
+      if (pr) {
+        pr.autoMergeRequest = enable ? { enabledAt: new Date().toISOString() } : null;
+        pr.viewerCanEnableAutoMerge = !enable;
+        pr.viewerCanDisableAutoMerge = enable;
+        btn.outerHTML = autoMergeChip(pr);
+      } else {
+        render();
+      }
     } catch (err) {
       alert(`Auto-merge: ${err.message}`);
       render();
