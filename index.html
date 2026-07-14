@@ -440,6 +440,7 @@
     worktrees: {},        // "repo#branch" -> { path, sessionId }, from the local companion
     companion: false,     // true when the local companion answered (enables worktree actions)
     companionChecked: false,
+    openMethod: "scheme", // "scheme" (vscode:// links) or "cli" (companion runs code CLI)
     search: "",
     loading: false,
   };
@@ -756,6 +757,10 @@
         }
         state.worktrees = map;
         state.companion = true;
+        try {
+          const cfg = await fetch("config.json", { cache: "no-store" });
+          if (cfg.ok) state.openMethod = (await cfg.json()).vscodeOpen || "scheme";
+        } catch { /* older companion without config.json: keep vscode:// links */ }
       }
     } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
     finally {
@@ -766,6 +771,20 @@
 
   function worktreeFor(pr) {
     return state.worktrees[`${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`];
+  }
+
+  async function openInVSCode(target) {
+    if (state.openMethod !== "cli") {
+      window.location.href = `vscode://file/${target}`;
+      return;
+    }
+    try {
+      const res = await fetch(`open-vscode?path=${encodeURIComponent(target)}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) alert(`Open in VS Code failed: ${data.error || res.status}`);
+    } catch (err) {
+      alert(`Open in VS Code failed: ${err.message}`);
+    }
   }
 
   function worktreeLinks(pr) {
@@ -780,9 +799,12 @@
     }
     // vscode://file + absolute path (leading slash → the verified "double slash"
     // form); a .code-workspace target opens as a workspace, else the folder.
+    // In "cli" mode the companion runs the code CLI instead (with codeCliArgs).
     const target = wt.workspace || wt.path;
     const label = wt.workspace ? "workspace" : "worktree";
-    const vscode = `<a class="wt-link" href="vscode://file/${esc(target)}" title="Open ${label} in VS Code">${ICONS.vscode}</a>`;
+    const vscode = state.openMethod === "cli"
+      ? `<button class="wt-link wt-open" data-target="${esc(target)}" title="Open ${label} in VS Code">${ICONS.vscode}</button>`
+      : `<a class="wt-link" href="vscode://file/${esc(target)}" title="Open ${label} in VS Code">${ICONS.vscode}</a>`;
     const claude = wt.sessionId
       ? `<a class="wt-link" href="claude://resume?session=${esc(wt.sessionId)}" title="Resume Claude session">${ICONS.claude}</a>`
       : "";
@@ -1150,6 +1172,17 @@
   });
 
   listBody.addEventListener("click", async (e) => {
+    const openBtn = e.target.closest("button.wt-open");
+    if (openBtn) {
+      openBtn.disabled = true;
+      try {
+        await openInVSCode(openBtn.dataset.target);
+      } finally {
+        openBtn.disabled = false;
+      }
+      return;
+    }
+
     const createBtn = e.target.closest("button.wt-create");
     if (createBtn) {
       createBtn.disabled = true;
@@ -1159,7 +1192,7 @@
         const res = await fetch(`create-worktree?repo=${encodeURIComponent(createBtn.dataset.repo)}&branch=${encodeURIComponent(createBtn.dataset.branch)}`, { method: "POST" });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          window.location.href = `vscode://file/${data.workspace || data.path}`;
+          await openInVSCode(data.workspace || data.path);
           loadWorktrees();
         } else {
           alert(`Create worktree failed: ${data.error || res.status}`);

@@ -13,18 +13,48 @@ Run it from the dashboard directory and open the printed URL:
     python3 companion.py ~/dev ~/work --port 4321
 
 Binds to localhost only. Nothing it reads or serves is written to the repo.
+
+Optional companion.config.json (next to this file) controls how the page
+opens VS Code:
+
+    {
+      "vscodeOpen": "cli",     // "cli" runs the code CLI; "scheme" (default)
+                               // uses vscode://file links
+      "codeCliArgs": ["--disable-extension", "github.copilot-chat"]
+    }
+
+"cli" falls back to "scheme" when the code CLI is not on PATH.
 """
 import functools
 import http.server
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
+CONFIG_FILE = "companion.config.json"
+DEFAULT_CONFIG = {"vscodeOpen": "scheme", "codeCliArgs": []}
+
+
+def load_config():
+    cfg = dict(DEFAULT_CONFIG)
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
+    try:
+        with open(path) as fh:
+            cfg.update(json.load(fh))
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"Warning: ignoring unreadable {CONFIG_FILE}: {e}")
+    if cfg["vscodeOpen"] == "cli" and not shutil.which("code"):
+        print("Warning: vscodeOpen is 'cli' but the code CLI is not on PATH; using vscode:// links.")
+        cfg["vscodeOpen"] = "scheme"
+    return cfg
 
 
 def parse_args(argv):
@@ -176,8 +206,25 @@ def create_worktree(repo, branch, roots):
     return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True}
 
 
+def open_vscode(target, roots, config):
+    real = os.path.realpath(target)
+    if not any(real == r or real.startswith(r + os.sep) for r in roots):
+        return {"ok": False, "error": "Path is outside the configured roots."}
+    if not os.path.exists(real):
+        return {"ok": False, "error": f"Path does not exist: {real}"}
+    try:
+        r = subprocess.run(["code", *config.get("codeCliArgs", []), real],
+                           capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or "code CLI failed").strip()}
+    return {"ok": True}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
+    config = DEFAULT_CONFIG
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -189,17 +236,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if urlparse(self.path).path == "/worktrees.json":
+        path = urlparse(self.path).path
+        if path == "/worktrees.json":
             return self._json(discover(self.roots))
+        if path == "/config.json":
+            return self._json({"vscodeOpen": self.config["vscodeOpen"]})
         super().do_GET()
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        q = parse_qs(parsed.query)
         if parsed.path == "/create-worktree":
-            q = parse_qs(parsed.query)
             repo = (q.get("repo") or [""])[0]
             branch = (q.get("branch") or [""])[0]
             result = create_worktree(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/open-vscode":
+            target = (q.get("path") or [""])[0]
+            result = open_vscode(target, self.roots, self.config)
             return self._json(result, 200 if result.get("ok") else 500)
         self.send_response(404)
         self.end_headers()
@@ -212,10 +266,12 @@ def main():
     port, roots = parse_args(sys.argv[1:])
     here = os.path.dirname(os.path.abspath(__file__))
     Handler.roots = roots
+    Handler.config = load_config()
     httpd = http.server.HTTPServer(("127.0.0.1", port),
                                    functools.partial(Handler, directory=here))
     print(f"PR Review Dashboard companion → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}")
+    print(f"VS Code opens via: {'code CLI' if Handler.config['vscodeOpen'] == 'cli' else 'vscode:// links'}")
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()
