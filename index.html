@@ -740,10 +740,11 @@
   function worktreeLinks(pr) {
     const wt = worktreeFor(pr);
     if (!wt) return "";
-    const repo = esc(pr.repository?.nameWithOwner || "");
-    const branch = esc(pr.headRefName);
+    // vscode://file + absolute path (leading slash → the verified "double slash"
+    // form); a .code-workspace target opens as a workspace, else the folder.
+    const target = wt.workspace || wt.path;
     const label = wt.workspace ? "workspace" : "worktree";
-    const vscode = `<button class="wt-link wt-open" data-repo="${repo}" data-branch="${branch}" title="Open ${label} in VS Code">${ICONS.vscode}</button>`;
+    const vscode = `<a class="wt-link" href="vscode://file/${esc(target)}" title="Open ${label} in VS Code">${ICONS.vscode}</a>`;
     const claude = wt.sessionId
       ? `<a class="wt-link" href="claude://resume?session=${esc(wt.sessionId)}" title="Resume Claude session">${ICONS.claude}</a>`
       : "";
@@ -1089,21 +1090,6 @@
   });
 
   listBody.addEventListener("click", async (e) => {
-    const openBtn = e.target.closest("button.wt-open");
-    if (openBtn) {
-      openBtn.disabled = true;
-      try {
-        const res = await fetch(`open?repo=${encodeURIComponent(openBtn.dataset.repo)}&branch=${encodeURIComponent(openBtn.dataset.branch)}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) alert(`Open in VS Code failed: ${data.error || res.status}`);
-      } catch (err) {
-        alert(`Open in VS Code failed: ${err.message}`);
-      } finally {
-        openBtn.disabled = false;
-      }
-      return;
-    }
-
     const draftBtn = e.target.closest("button.draft-toggle");
     if (draftBtn) {
       draftBtn.disabled = true;

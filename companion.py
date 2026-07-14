@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 DEFAULT_PORT = 4321
 
@@ -86,18 +86,6 @@ def worktrees_for_repo(repo_dir):
     return out
 
 
-def open_in_editor(target):
-    # `code <foo.code-workspace>` opens it AS a workspace (a vscode:// URL can't
-    # reliably do that); fall back to the macOS file association.
-    for cmd in (["code", target], ["open", "-a", "Visual Studio Code", target]):
-        try:
-            if subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0:
-                return True
-        except Exception:
-            continue
-    return False
-
-
 def discover(roots):
     out, seen = [], set()
     for root in roots:
@@ -127,20 +115,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        parsed = urlparse(self.path)
-        if parsed.path == "/worktrees.json":
+        if urlparse(self.path).path == "/worktrees.json":
             return self._json(discover(self.roots))
-        if parsed.path == "/open":
-            q = parse_qs(parsed.query)
-            repo = (q.get("repo") or [""])[0]
-            branch = (q.get("branch") or [""])[0]
-            entry = next((w for w in discover(self.roots)
-                          if w["repo"] == repo and w["branch"] == branch), None)
-            if not entry:
-                return self._json({"ok": False, "error": "No local worktree for that branch."}, 404)
-            target = entry.get("workspace") or entry["path"]
-            ok = open_in_editor(target)
-            return self._json({"ok": ok, "target": target}, 200 if ok else 500)
         super().do_GET()
 
     def log_message(self, *args):
