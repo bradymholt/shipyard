@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local companion for the PR Review Dashboard.
+"""Local companion for Shipyard.
 
 Serves the dashboard AND a /worktrees.json endpoint so the page can offer
 "Open in VS Code" / "Resume in Claude" links for branches you have checked
@@ -269,7 +269,7 @@ def main():
     Handler.config = load_config()
     httpd = http.server.HTTPServer(("127.0.0.1", port),
                                    functools.partial(Handler, directory=here))
-    print(f"PR Review Dashboard companion → http://localhost:{port}")
+    print(f"Shipyard companion → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}")
     print(f"VS Code opens via: {'code CLI' if Handler.config['vscodeOpen'] == 'cli' else 'vscode:// links'}")
     print("Press Ctrl+C to stop.")

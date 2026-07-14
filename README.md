@@ -1,4 +1,4 @@
-# PR Review Dashboard
+# Shipyard
 
 A GitHub pull request dashboard, hosted on GitHub Pages. It shows open PRs with reviewer and review-status info that GitHub's default list view doesn't surface.
 
