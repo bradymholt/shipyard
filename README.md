@@ -44,7 +44,7 @@ python3 companion.py ~/dev        # scan git repos under ~/dev
 
 Then open the printed `http://localhost:4321`. Pass multiple roots or `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
 
-The "Open in VS Code" button asks the companion to run `code`, which opens a `.code-workspace` file in the worktree as a workspace when one exists (otherwise the folder). Requires the `code` CLI on your PATH.
+"Open in VS Code" is a `vscode://file` link that opens the worktree's `.code-workspace` file as a workspace when one exists (otherwise the folder); the companion just supplies which path to use.
 
 Note: the companion serves the dashboard on a different origin (`localhost`) than Pages, so localStorage (token, views) is separate there - you enter the token once for the local origin.
 
