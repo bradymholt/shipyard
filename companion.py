@@ -2,10 +2,10 @@
 """Local companion for Shipyard.
 
 Serves the dashboard AND a /worktrees.json endpoint so the page can offer
-"Open in VS Code" / "Resume in Claude" links for branches you have checked
-out locally. It reports, for every git worktree under the given root(s):
+"Open in VS Code" links for branches you have checked out locally. It
+reports, for every git worktree under the given root(s):
 
-    { "repo": "owner/name", "branch": "...", "path": "/abs/path", "sessionId": "uuid|null" }
+    { "repo": "owner/name", "branch": "...", "path": "/abs/path", "workspace": "…|null" }
 
 Run it from the dashboard directory and open the printed URL:
 
@@ -84,57 +84,6 @@ def parse_origin(url):
     return m.group(1) if m else None
 
 
-def first_cwd(f):
-    # Match sessions by the working dir recorded *inside* the transcript, not by
-    # the project-dir name: cloud/desktop worktree sessions get filed under the
-    # main repo's dir but their cwd still points at the worktree. cwd appears
-    # within the first few entries, so stop as soon as we find it.
-    try:
-        with f.open() as fh:
-            for _ in range(50):
-                line = fh.readline()
-                if not line:
-                    break
-                if '"cwd"' in line:
-                    try:
-                        cwd = json.loads(line).get("cwd")
-                        if cwd:
-                            return cwd
-                    except Exception:
-                        pass
-    except Exception:
-        pass
-    return None
-
-
-def session_index():
-    root = Path.home() / ".claude" / "projects"
-    idx = []
-    if root.is_dir():
-        for f in root.glob("*/*.jsonl"):
-            cwd = first_cwd(f)
-            if cwd:
-                idx.append((cwd, f.stat().st_mtime, f.stem))
-    return idx
-
-
-def attach_sessions(worktrees):
-    idx = session_index()
-    # Assign each session to the worktree whose path is the longest prefix of the
-    # session's cwd, so a worktree wins over the main checkout it lives inside.
-    paths = sorted({w["path"] for w in worktrees}, key=len, reverse=True)
-    best = {}  # worktree path -> (mtime, sessionId)
-    for cwd, mtime, sid in idx:
-        for p in paths:
-            if cwd == p or cwd.startswith(p + "/"):
-                if p not in best or mtime > best[p][0]:
-                    best[p] = (mtime, sid)
-                break
-    for w in worktrees:
-        w["sessionId"] = best.get(w["path"], (None, None))[1]
-    return worktrees
-
-
 def workspace_in(path):
     files = sorted(Path(path).glob("*.code-workspace"))
     return str(files[0]) if files else None
@@ -173,7 +122,7 @@ def discover(roots):
             continue
         seen.add(repo_dir)
         out.extend(worktrees_for_repo(repo_dir))
-    return attach_sessions(out)
+    return out
 
 
 def find_clone(repo, roots):

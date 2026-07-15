@@ -8,7 +8,7 @@ A GitHub pull request dashboard, hosted on GitHub Pages. It shows open PRs with 
 
 ### List view
 
-Priority-sorted list with review status, reviewers, CI checks, stacked PRs nested under their parent, and - when the local companion is running - open-in-VS-Code / resume-in-Claude links:
+Priority-sorted list with review status, reviewers, CI checks, stacked PRs nested under their parent, and - when the local companion is running - open-in-VS-Code links:
 
 ![List view](docs/list-view.png)
 
@@ -29,7 +29,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Recently merged**: on the My PRs tab, your last 2 merged PRs appear dimmed with a purple "Merged" badge - at the bottom of the list and under the Ready lane - for quick reference
 - **Priority sort**: one of the list sort options - ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
 - **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo. The default load fetches only your PRs and ones awaiting your review; "All open" fetches the full set on demand the first time you open it
-- **Local worktree links** (optional): when run via the local companion, PRs whose branch you have checked out locally get "Open in VS Code" and "Resume in Claude" links
+- **Local worktree links** (optional): when run via the local companion, PRs whose branch you have checked out locally get an "Open in VS Code" link
 
 ## Setup
 
@@ -37,7 +37,7 @@ Open the page, click the gear icon, and paste a GitHub personal access token - c
 
 ## Local companion (optional)
 
-`companion.py` is a small local server that adds "Open in VS Code" / "Resume in Claude" links for branches you have checked out as local git worktrees. It reads `git worktree list` (and Claude Code's session files under `~/.claude`) and serves both the dashboard and a `/worktrees.json` endpoint.
+`companion.py` is a small local server that adds "Open in VS Code" links for branches you have checked out as local git worktrees. It reads `git worktree list` and serves both the dashboard and a `/worktrees.json` endpoint.
 
 ```
 python3 companion.py ~/dev        # scan git repos under ~/dev
