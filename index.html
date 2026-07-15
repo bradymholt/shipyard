@@ -136,6 +136,21 @@
     overflow: hidden;
     box-shadow: var(--shadow);
   }
+  /* Board view: keep the title bar, but the lanes are their own cards - so drop
+     the wrapping container's box, which otherwise encloses the empty space under
+     short lanes. The header stands alone as a full-width titled bar. */
+  .list.board-view {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    box-shadow: none;
+  }
+  .list.board-view .list-header {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+  .list.board-view .board { padding: 12px 0 0; }
   .list-header {
     background: var(--bg-subtle);
     border-bottom: 1px solid var(--border);
@@ -176,8 +191,8 @@
   .card.merged { background: color-mix(in srgb, var(--fg-muted) 7%, var(--bg)); }
   .pr-icon.merged svg, .review-badge.merged svg { fill: var(--purple); }
   .review-badge.merged { color: var(--purple); background: color-mix(in srgb, var(--purple) 14%, transparent); }
-  .merged-divider { font-size: 11px; font-weight: 500; color: var(--fg-muted); padding: 8px 16px 2px; border-top: 1px solid var(--border); }
-  .lane .merged-divider { padding: 6px 4px 2px; border-top: none; }
+  .merged-divider { height: 12px; }
+  .lane .merged-divider { height: 0; }
   .stack-elbow {
     flex: none;
     width: 12px; height: 12px;
@@ -294,7 +309,7 @@
     min-height: 140px;
     align-self: start;
   }
-  .lane-header { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; padding: 2px 4px; }
+  .lane-header { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-muted); padding: 2px 4px; }
   .lane-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .lane-dot.gray { background: var(--fg-muted); }
   .lane-dot.blue { background: var(--accent); }
@@ -1085,6 +1100,7 @@
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
+    $(".list").classList.toggle("board-view", effectiveView === "board");
     $("#sort-select").value = state.sort;
     sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
