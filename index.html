@@ -971,7 +971,7 @@
       const mod = wt.main ? " current" : " worktree";  // green for main clone, purple for a worktree
       const title = wt.main
         ? "This branch is checked out in your main repo — open it in VS Code"
-        : `Open ${wt.workspace ? "workspace" : "worktree"} in VS Code`;
+        : "This branch is checked out in a worktree — open it in VS Code";
       const btn = state.openMethod === "cli"
         ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${title}">${ICONS.vscode}</button>`
         : `<a class="wt-link${mod}" href="vscode://file/${esc(target)}" title="${title}">${ICONS.vscode}</a>`;
