@@ -7,6 +7,7 @@ A GitHub pull request dashboard, hosted on GitHub Pages. It shows open PRs with 
 ```bash
 git clone https://github.com/bradymholt/shipyard.git
 cd shipyard
+cp companion.config.example.json companion.config.json
 open http://localhost:4321
 python3 index.py
 ```
