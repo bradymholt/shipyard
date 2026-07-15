@@ -170,12 +170,15 @@
   .hint code, .panel code { font-family: var(--mono); font-size: 11px; background: var(--bg-inset); padding: 0 5px; border-radius: 4px; }
   .hidden { display: none !important; }
 
-  dialog#new-task-dialog {
+  dialog#new-task-dialog, dialog#error-dialog {
     background: var(--surface); color: var(--fg);
     border: 1px solid var(--border); border-radius: 10px;
     box-shadow: 0 8px 30px rgba(18,38,58,.18); padding: 20px; width: min(440px, 92vw);
   }
-  dialog#new-task-dialog::backdrop { background: rgba(18,38,58,.45); }
+  dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop { background: rgba(18,38,58,.45); }
+  #error-dialog h2 { margin: 0 0 6px; font: 700 16px var(--sans); }
+  #error-dialog p { margin: 0 0 16px; color: var(--fg-muted); font-size: 14px; white-space: pre-wrap; }
+  .modal-actions { display: flex; justify-content: flex-end; }
   #new-task-form h2 { margin: 0 0 4px; font: 700 17px var(--sans); }
   #new-task-form .hint { display: block; margin-bottom: 14px; }
   .nt-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; color: var(--fg-muted); }
@@ -318,6 +321,8 @@
   .wt-link:hover { color: var(--teal); }
   .wt-link.current { color: var(--green); }        /* branch is the main clone's current checkout */
   .wt-link.current:hover { color: var(--green-text); }
+  .wt-link.worktree { color: var(--purple); }      /* opens an isolated worktree */
+  .wt-link.worktree:hover { color: color-mix(in srgb, var(--purple) 78%, #000); }
   /* switch blocked by uncommitted changes — muted "unavailable" tone, not an alarm */
   .wt-link.blocked, .wt-link.blocked:hover { color: color-mix(in srgb, var(--red) 50%, var(--fg-faint)); }
   button.wt-link.blocked:disabled { opacity: 1; cursor: not-allowed; }
@@ -435,7 +440,7 @@
     <span class="wordmark">SHIPYARD</span>
     <div class="spacer"></div>
     <select id="repo-select" title="Repository"></select>
-    <button id="new-task-btn" class="icon-btn hidden" title="Start a new task — new worktree off the default branch">
+    <button id="new-task-btn" class="icon-btn hidden" title="New branch — off the default branch, in a worktree or your main clone">
       <svg width="16" height="16" viewBox="0 0 16 16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7.25h4.5a.75.75 0 0 1 0 1.5H8.5v4.5a.75.75 0 0 1-1.5 0V8.75H2.5a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"/></svg>
     </button>
     <button id="refresh-btn" class="icon-btn" title="Refresh">
@@ -469,8 +474,8 @@
 <div class="container">
   <dialog id="new-task-dialog">
     <form id="new-task-form" method="dialog">
-      <h2>New task</h2>
-      <p class="hint">Creates a fresh worktree on a new branch off the default branch, then opens it in VS Code.</p>
+      <h2>New branch</h2>
+      <p class="hint">Creates a new branch off the default branch and opens it in VS Code — in an isolated worktree, or checked out in your main clone.</p>
       <label class="nt-field">Repository
         <select id="nt-repo"></select>
       </label>
@@ -480,9 +485,16 @@
       <div class="nt-actions">
         <span id="nt-status" class="hint"></span>
         <button type="button" id="nt-cancel">Cancel</button>
-        <button type="submit" class="primary">Create &amp; open</button>
+        <button type="submit" id="nt-main" data-dest="main">Main clone</button>
+        <button type="submit" id="nt-worktree" class="primary" data-dest="worktree">Worktree</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="error-dialog">
+    <h2 id="error-title">Can't open</h2>
+    <p id="error-message"></p>
+    <div class="modal-actions"><button type="button" id="error-close" class="primary">OK</button></div>
   </dialog>
 
   <div id="settings" class="panel hidden">
@@ -872,6 +884,7 @@
 
   // Populated only when the local companion (companion.py) is serving the page;
   // on GitHub Pages the fetch fails and worktree links stay off.
+  let lastWtSig = "";  // signature of the last worktrees.json, so polling only re-renders on change
   async function loadWorktrees() {
     try {
       const res = await fetch("worktrees.json", { cache: "no-store" });
@@ -881,6 +894,7 @@
           if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
         }
         state.worktrees = map;
+        lastWtSig = JSON.stringify(map);
         state.companion = true;
         try {
           const cfg = await fetch("config.json", { cache: "no-store" });
@@ -898,8 +912,32 @@
     }
   }
 
+  // Poll the companion so "where is this branch, and is the main clone dirty" stays
+  // current while the tab is open. Visible-only, skips overlapping fetches, and
+  // re-renders only when the data actually changed (so it doesn't disturb the DOM).
+  let wtPollInFlight = false;
+  async function pollWorktrees() {
+    if (!state.companion || document.hidden || wtPollInFlight) return;
+    wtPollInFlight = true;
+    try {
+      const res = await fetch("worktrees.json", { cache: "no-store" });
+      if (!res.ok) return;
+      const map = {};
+      for (const w of await res.json()) if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
+      const sig = JSON.stringify(map);
+      if (sig !== lastWtSig) { lastWtSig = sig; state.worktrees = map; render(); }
+    } catch { /* transient (companion busy/away) — keep the last known state */ }
+    finally { wtPollInFlight = false; }
+  }
+
   function worktreeFor(pr) {
     return state.worktrees[`${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`];
+  }
+
+  function showError(message, title = "Can't open") {
+    $("#error-title").textContent = title;
+    $("#error-message").textContent = message;
+    $("#error-dialog").showModal();
   }
 
   async function openInVSCode(target) {
@@ -910,9 +948,9 @@
     try {
       const res = await fetch(`open-vscode?path=${encodeURIComponent(target)}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) alert(`Open in VS Code failed: ${data.error || res.status}`);
+      if (!res.ok || !data.ok) showError(data.error || `Open in VS Code failed (${res.status}).`);
     } catch (err) {
-      alert(`Open in VS Code failed: ${err.message}`);
+      showError(err.message);
     }
   }
 
@@ -930,13 +968,13 @@
     // one that's the main repo's current branch.
     if (wt) {
       const target = wt.workspace || wt.path;
-      const green = wt.main ? " current" : "";
+      const mod = wt.main ? " current" : " worktree";  // green for main clone, purple for a worktree
       const title = wt.main
         ? "This branch is checked out in your main repo — open it in VS Code"
         : `Open ${wt.workspace ? "workspace" : "worktree"} in VS Code`;
       const btn = state.openMethod === "cli"
-        ? `<button class="wt-link wt-open${green}" data-target="${esc(target)}" title="${title}">${ICONS.vscode}</button>`
-        : `<a class="wt-link${green}" href="vscode://file/${esc(target)}" title="${title}">${ICONS.vscode}</a>`;
+        ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${title}">${ICONS.vscode}</button>`
+        : `<a class="wt-link${mod}" href="vscode://file/${esc(target)}" title="${title}">${ICONS.vscode}</a>`;
       return `<span class="wt-links">${btn}</span>`;
     }
 
@@ -1346,14 +1384,29 @@
     const status = $("#nt-status");
     status.textContent = "";
     status.classList.remove("error");
+    updateNtMainBtn();
     $("#new-task-dialog").showModal();
     branch.focus();
     branch.setSelectionRange(branch.value.length, branch.value.length);
   }
   const ntError = (msg) => { const s = $("#nt-status"); s.textContent = msg; s.classList.add("error"); };
+  // "Main clone" can't switch a dirty main, so disable it (with a reason) when the
+  // selected repo's main clone has uncommitted changes.
+  function updateNtMainBtn() {
+    const repo = $("#nt-repo").value;
+    const mainWt = Object.values(state.worktrees).find((w) => w.repo === repo && w.main);
+    const dirty = !!(mainWt && mainWt.dirty);
+    const btn = $("#nt-main");
+    btn.disabled = dirty;
+    btn.title = dirty
+      ? "Your main clone has uncommitted changes — commit or stash first"
+      : "Create the branch in your main clone (for heavy dev / running the server)";
+  }
 
   $("#new-task-btn").addEventListener("click", openNewTaskDialog);
+  $("#nt-repo").addEventListener("change", updateNtMainBtn);
   $("#nt-cancel").addEventListener("click", () => $("#new-task-dialog").close());
+  $("#error-close").addEventListener("click", () => $("#error-dialog").close());
   $("#new-task-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const repo = $("#nt-repo").value;
@@ -1361,11 +1414,13 @@
     $("#nt-status").classList.remove("error");
     if (!repo) return ntError("No repository selected.");
     if (!branch || branch.endsWith("/")) return ntError("Enter a branch name.");
-    const submitBtn = e.submitter || $("#new-task-form button.primary");
+    const toMain = e.submitter?.dataset.dest === "main";
+    const submitBtn = e.submitter || $("#nt-worktree");
     submitBtn.disabled = true;
-    $("#nt-status").textContent = "Creating worktree…";
+    $("#nt-status").textContent = toMain ? "Creating branch in main clone…" : "Creating worktree…";
     try {
-      const res = await fetch(`new-task?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`, { method: "POST" });
+      const endpoint = toMain ? "new-branch-main" : "new-task";
+      const res = await fetch(`${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         await openInVSCode(data.workspace || data.path);
@@ -1449,10 +1504,10 @@
           await openInVSCode(data.workspace || data.path);
           loadWorktrees();
         } else {
-          alert(`Open in main clone failed: ${data.error || res.status}`);
+          showError(data.error || `Couldn't open in your main clone (${res.status}).`, "Can't open in main clone");
         }
       } catch (err) {
-        alert(`Open in main clone failed: ${err.message}`);
+        showError(err.message, "Can't open in main clone");
       } finally {
         mainBtn.disabled = false;
         mainBtn.innerHTML = original;
@@ -1532,8 +1587,10 @@
     $("#settings").classList.remove("hidden");
   }
   loadWorktrees();
+  setInterval(pollWorktrees, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollWorktrees(); });
 
-  window.__dashboard = { load, render, state, loadWorktrees };
+  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees };
 })();
 </script>
 </body>
