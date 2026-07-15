@@ -23,7 +23,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Views**: add any mix of repos (`owner/repo`), orgs, or usernames and switch between them
 - **List view**: GitHub-style list with review status, CI check status, labels, and comment counts. Shows reviewer avatars (with per-reviewer state) on your PRs, and the author's avatar on "Waiting on my review" so you can see whose PR needs you
 - **Sort**: list views sort by priority (default), recently updated, or recently created
-- **Board view**: swim lanes for Working / Waiting / Ready on the My PRs tab, with drafts styled distinctly in Working (click a card's Draft pill to mark it ready for review)
+- **Board view**: swim lanes for Working / Waiting / Ready on the My PRs tab, with drafts shown dashed and grouped under a Drafts divider in the Working lane
 - **Auto-merge**: Waiting and Ready cards show auto-merge status with a one-click toggle
 - **Stacked PRs**: PRs based on another open PR's branch are nested under their parent in both views
 - **Recently merged**: on the My PRs tab, your last 2 merged PRs appear dimmed with a purple "Merged" badge - at the bottom of the list and under the Ready lane - for quick reference
@@ -49,7 +49,7 @@ Set the folders to scan with a `"roots"` array in `companion.config.json` (see [
 
 Each PR row has a single **Open in VS Code** button whose behaviour depends on where the branch is checked out:
 
-- **In a worktree** - opens that worktree (its `.code-workspace` as a workspace when one exists, otherwise the folder).
+- **In a worktree** - opens that worktree (its `.code-workspace` as a workspace when one exists, otherwise the folder); the icon is shown **purple** to mark an isolated worktree.
 - **Your main clone's current branch** - opens the main clone; the icon is shown **green** to mark the branch your main clone is on right now.
 - **Not checked out anywhere** - the companion checks the branch out in your main clone (`git switch`, fetching from `origin` first if it's remote-only) and opens it. When the main clone has uncommitted changes this isn't possible, so the icon shows in a muted "unavailable" tone with the reason in its tooltip.
 
