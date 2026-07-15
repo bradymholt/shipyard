@@ -882,7 +882,7 @@
     return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
   }
 
-  // Populated only when the local companion (companion.py) is serving the page;
+  // Populated only when the local companion (index.py) is serving the page;
   // on GitHub Pages the fetch fails and worktree links stay off.
   let lastWtSig = "";  // signature of the last worktrees.json, so polling only re-renders on change
   async function loadWorktrees() {

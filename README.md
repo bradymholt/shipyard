@@ -2,7 +2,14 @@
 
 A GitHub pull request dashboard, hosted on GitHub Pages. It shows open PRs with reviewer and review-status info that GitHub's default list view doesn't surface.
 
-**Live:** https://bradymholt.github.io/shipyard/
+### Quickstart
+
+```bash
+git clone https://github.com/bradymholt/shipyard.git
+cd shipyard
+open http://localhost:4321
+python3 index.py
+```
 
 ## Screenshots
 
@@ -38,11 +45,11 @@ Open the page, click the gear icon, and paste a GitHub personal access token - c
 
 ## Local companion (optional)
 
-`companion.py` is a small local server that adds "Open in VS Code" links for branches you have checked out as local git worktrees. It reads `git worktree list` and serves both the dashboard and a `/worktrees.json` endpoint.
+`index.py` is a small local server that adds "Open in VS Code" links for branches you have checked out as local git worktrees. It reads `git worktree list` and serves both the dashboard and a `/worktrees.json` endpoint.
 
 ```
-python3 companion.py              # scan the folders set in companion.config.json
-python3 companion.py ~/dev ~/work  # or override the roots on the command line
+python3 index.py              # scan the folders set in companion.config.json
+python3 index.py ~/dev ~/work  # or override the roots on the command line
 ```
 
 Set the folders to scan with a `"roots"` array in `companion.config.json` (see [Opening VS Code](#opening-vs-code) for the file). It's required: the companion exits with an error if no roots are configured and none are passed on the command line. Then open the printed `http://localhost:4321`. Pass `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
@@ -70,7 +77,7 @@ Note: the companion serves the dashboard on a different origin (`localhost`) tha
 
 ### Opening VS Code
 
-The companion reads a `companion.config.json` next to `companion.py` (it's gitignored) for the folders to scan and a few options. By default VS Code opens via `vscode://file` links; set `vscodeOpen` to `"cli"` to run the `code` CLI instead - handy for passing extra flags:
+The companion reads a `companion.config.json` next to `index.py` (it's gitignored) for the folders to scan and a few options. By default VS Code opens via `vscode://file` links; set `vscodeOpen` to `"cli"` to run the `code` CLI instead - handy for passing extra flags:
 
 ```json
 {
@@ -88,4 +95,4 @@ The companion reads a `companion.config.json` next to `companion.py` (it's gitig
 
 ## Development
 
-No build step. Edit `index.html`, serve it locally (`python3 -m http.server`), and refresh. See `companion.py` for the optional worktree integration.
+No build step. Edit `index.html`, serve it locally (`python3 -m http.server`), and refresh. See `index.py` for the optional worktree integration.

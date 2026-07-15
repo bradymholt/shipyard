@@ -9,8 +9,8 @@ reports, for every git worktree under the given root(s):
 
 Run it from the dashboard directory and open the printed URL:
 
-    python3 companion.py                 # scan the folders set in the config file
-    python3 companion.py ~/dev ~/work    # or override the roots on the command line
+    python3 index.py                 # scan the folders set in the config file
+    python3 index.py ~/dev ~/work    # or override the roots on the command line
 
 Binds to localhost only. Nothing it reads or serves is written to the repo.
 
@@ -326,7 +326,7 @@ def main():
     roots = cli_roots or [os.path.abspath(os.path.expanduser(r)) for r in cfg_roots]
     if not roots:
         sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
-                 f'or pass them on the command line: python3 companion.py ~/dev')
+                 f'or pass them on the command line: python3 index.py ~/dev')
     here = os.path.dirname(os.path.abspath(__file__))
     Handler.roots = roots
     Handler.config = config
