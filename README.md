@@ -42,7 +42,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 
 ## Setup
 
-Open the page, click the gear icon, and paste a GitHub personal access token - classic with `repo` scope, or fine-grained with Pull requests: read access. The token is stored only in your browser's localStorage and is sent only to `api.github.com`.
+Open the page, click the gear icon, and paste a GitHub personal access token - classic with `repo` scope, or fine-grained with Pull requests: read and write access (write is needed for the auto-merge toggle and marking a draft ready for review; read-only is enough if you only view PRs). The token is stored only in your browser's localStorage and is sent only to `api.github.com`.
 
 ## Local companion (optional)
 
