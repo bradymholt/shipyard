@@ -100,8 +100,14 @@ def worktrees_for_repo(repo_dir):
         elif line.startswith("branch "):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
+            is_main = os.path.realpath(cur["path"]) == os.path.realpath(repo_dir)
+            # "dirty" = uncommitted work that would block opening this branch in the
+            # main clone: the main clone blocks on tracked changes (a switch keeps
+            # untracked files); a worktree blocks on any local work (discarding it
+            # would lose untracked files too). Ignored files like node_modules never count.
+            dirty = has_tracked_changes(cur["path"]) if is_main else has_local_work(cur["path"])
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
-                        "workspace": workspace_in(cur["path"])})
+                        "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty})
             cur = {}
     return out
 
@@ -132,29 +138,6 @@ def find_clone(repo, roots):
         if parse_origin(git(repo_dir, "config", "--get", "remote.origin.url")) == repo:
             return repo_dir
     return None
-
-
-def create_worktree(repo, branch, roots):
-    clone = find_clone(repo, roots)
-    if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    # Idempotent: if the branch is already checked out somewhere (a worktree, or
-    # the main clone itself), open that instead of making a duplicate.
-    existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
-    if existing:
-        return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
-    path = os.path.join(clone, ".claude", "worktrees", re.sub(r"[^\w.-]", "-", branch))
-    if os.path.isdir(path):
-        return {"ok": True, "path": path, "workspace": workspace_in(path), "created": False}
-    git(clone, "fetch", "origin", branch)  # best effort so the ref is present
-    add = lambda *a: subprocess.run(["git", "-C", clone, "worktree", "add", *a],
-                                    capture_output=True, text=True, timeout=120)
-    r = add(path, branch)
-    if r.returncode != 0:  # no local branch yet → create one tracking the remote
-        r = add("--track", "-b", branch, path, f"origin/{branch}")
-    if r.returncode != 0:
-        return {"ok": False, "error": (r.stderr or "git worktree add failed").strip()}
-    return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True}
 
 
 def default_branch(clone):
@@ -208,6 +191,53 @@ def open_vscode(target, roots, config):
     return {"ok": True}
 
 
+def has_tracked_changes(work_dir):
+    # Uncommitted edits to tracked files — what actually blocks a branch switch.
+    # Untracked files (node_modules, build output, .claude/) are carried across a
+    # switch, so they don't count here.
+    return bool(git(work_dir, "status", "--porcelain", "--untracked-files=no").strip())
+
+
+def has_local_work(work_dir):
+    # Tracked edits OR new (non-ignored) untracked files — work that'd be lost if
+    # this checkout is discarded. Ignored files (node_modules, build) don't count.
+    return bool(git(work_dir, "status", "--porcelain").strip())
+
+
+def open_in_main(repo, branch, roots):
+    """Check the branch out in the main clone (for heavy dev / running the server
+    where build caches and node_modules live) instead of an isolated worktree.
+    Guarded: won't switch a main clone with uncommitted work, and won't discard a
+    worktree that has uncommitted work."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    branch = branch.strip()
+    if not branch:
+        return {"ok": False, "error": "Branch name is required."}
+    here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+    if here and here.get("main"):  # already checked out in the main clone
+        return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": False}
+    if has_tracked_changes(clone):
+        return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
+    if here:  # branch lives in a linked worktree
+        if has_local_work(here["path"]):
+            return {"ok": False, "error": f"The worktree for {branch} has uncommitted changes. Commit or stash them first."}
+        # --force clears ignored build artifacts (node_modules etc.); the branch's commits are kept.
+        r = subprocess.run(["git", "-C", clone, "worktree", "remove", "--force", here["path"]],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return {"ok": False, "error": (r.stderr or "Couldn't remove the worktree.").strip()}
+    git(clone, "fetch", "origin", branch)  # best effort so the ref is present
+    sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
+    r = sw(branch)
+    if r.returncode != 0:  # no local branch yet → create one tracking the remote
+        r = sw("-c", branch, "--track", f"origin/{branch}")
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or "git switch failed").strip()}
+    return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
@@ -233,15 +263,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         q = parse_qs(parsed.query)
-        if parsed.path == "/create-worktree":
-            repo = (q.get("repo") or [""])[0]
-            branch = (q.get("branch") or [""])[0]
-            result = create_worktree(repo, branch, self.roots)
-            return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/new-task":
             repo = (q.get("repo") or [""])[0]
             branch = (q.get("branch") or [""])[0]
             result = new_task_worktree(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/open-in-main":
+            repo = (q.get("repo") or [""])[0]
+            branch = (q.get("branch") or [""])[0]
+            result = open_in_main(repo, branch, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/open-vscode":
             target = (q.get("path") or [""])[0]

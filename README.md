@@ -46,9 +46,13 @@ python3 companion.py ~/dev        # scan git repos under ~/dev
 
 Then open the printed `http://localhost:4321`. Pass multiple roots or `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
 
-"Open in VS Code" opens the worktree's `.code-workspace` file as a workspace when one exists (otherwise the folder); the companion supplies which path to use. This covers PRs whose branch is in a worktree or checked out in the main clone. By default it opens via a `vscode://file` link - see [Opening VS Code](#opening-vs-code) to run the `code` CLI instead.
+Each PR row has a single **Open in VS Code** button whose behaviour depends on where the branch is checked out:
 
-For a PR whose branch has no local worktree, the row instead shows a "create worktree" button. Clicking it asks the companion to `git worktree add` the branch (fetching from `origin` first if it's remote-only) under `<repo>/.claude/worktrees/`, then opens it - so the branch joins the same worktree flow as everything else. This action only appears when the companion is running.
+- **In a worktree** - opens that worktree (its `.code-workspace` as a workspace when one exists, otherwise the folder).
+- **Your main clone's current branch** - opens the main clone; the icon is shown **green** to mark the branch your main clone is on right now.
+- **Not checked out anywhere** - the companion checks the branch out in your main clone (`git switch`, fetching from `origin` first if it's remote-only) and opens it. When the main clone has uncommitted changes this isn't possible, so the icon shows in a muted "unavailable" tone with the reason in its tooltip.
+
+By default it opens via a `vscode://file` link - see [Opening VS Code](#opening-vs-code) to run the `code` CLI instead. These links only appear when the companion is running. To start a *new* branch in its own worktree, use [New task](#starting-a-new-task) below.
 
 ### Starting a new task
 
