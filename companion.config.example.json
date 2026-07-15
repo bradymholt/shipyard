@@ -1,0 +1,5 @@
+{
+  "vscodeOpen": "cli",
+  "codeCliArgs": ["--disable-extension", "github.copilot-chat"],
+  "branchPrefix": "brady/"
+}

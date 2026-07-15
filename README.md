@@ -65,12 +65,14 @@ By default the companion emits `vscode://file` links. You can instead have it ru
 ```json
 {
   "vscodeOpen": "cli",
-  "codeCliArgs": ["--disable-extension", "github.copilot-chat"]
+  "codeCliArgs": ["--disable-extension", "github.copilot-chat"],
+  "branchPrefix": "brady/"
 }
 ```
 
 - `vscodeOpen`: `"scheme"` (default, `vscode://` links) or `"cli"` (companion runs `code`). `"cli"` falls back to `"scheme"` when the `code` CLI isn't on PATH.
 - `codeCliArgs`: extra arguments passed to `code`. The example disables an extension that crash-loops VS Code's extension host when a multi-root `.code-workspace` is opened from a linked worktree - so with it you get the full multi-root workspace in worktrees without the crash.
+- `branchPrefix`: prefills the New task branch-name field. Leave empty (the default) to use your signed-in GitHub username (e.g. `brady/`); set it to override with a fixed prefix.
 
 ## Development
 
