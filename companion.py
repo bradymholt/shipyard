@@ -9,15 +9,17 @@ reports, for every git worktree under the given root(s):
 
 Run it from the dashboard directory and open the printed URL:
 
-    python3 companion.py ~/dev
-    python3 companion.py ~/dev ~/work --port 4321
+    python3 companion.py                 # scan the folders set in the config file
+    python3 companion.py ~/dev ~/work    # or override the roots on the command line
 
 Binds to localhost only. Nothing it reads or serves is written to the repo.
 
-Optional companion.config.json (next to this file) controls how the page
-opens VS Code and prefills New task branch names:
+companion.config.json (next to this file) sets the folders to scan and
+controls how the page opens VS Code / prefills New task branch names:
 
     {
+      "roots": ["~/dev"],      // folders to scan for git clones (required,
+                               // unless roots are passed on the command line)
       "vscodeOpen": "cli",     // "cli" runs the code CLI; "scheme" (default)
                                // uses vscode://file links
       "codeCliArgs": ["--disable-extension", "github.copilot-chat"],
@@ -40,7 +42,7 @@ from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
 CONFIG_FILE = "companion.config.json"
-DEFAULT_CONFIG = {"vscodeOpen": "scheme", "codeCliArgs": [], "branchPrefix": ""}
+DEFAULT_CONFIG = {"roots": [], "vscodeOpen": "scheme", "codeCliArgs": [], "branchPrefix": ""}
 
 
 def load_config():
@@ -69,7 +71,7 @@ def parse_args(argv):
             port = int(a.split("=", 1)[1])
         else:
             roots.append(os.path.abspath(os.path.expanduser(a)))
-    return port, roots or [os.path.expanduser("~/dev")]
+    return port, roots
 
 
 def git(repo, *args):
@@ -101,11 +103,11 @@ def worktrees_for_repo(repo_dir):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
             is_main = os.path.realpath(cur["path"]) == os.path.realpath(repo_dir)
-            # "dirty" = uncommitted work that would block opening this branch in the
-            # main clone: the main clone blocks on tracked changes (a switch keeps
-            # untracked files); a worktree blocks on any local work (discarding it
-            # would lose untracked files too). Ignored files like node_modules never count.
-            dirty = has_tracked_changes(cur["path"]) if is_main else has_local_work(cur["path"])
+            # Only the main clone's dirty state is used (to block "open in main" when
+            # it can't switch), so skip a `git status` per linked worktree — that keeps
+            # polling cheap. "dirty" = uncommitted edits to tracked files; untracked
+            # files (node_modules, build output) carry across a switch, so they don't count.
+            dirty = has_tracked_changes(cur["path"]) if is_main else False
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
                         "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty})
             cur = {}
@@ -238,6 +240,31 @@ def open_in_main(repo, branch, roots):
     return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
 
 
+def new_branch_in_main(repo, branch, roots):
+    """Create a new branch off the default branch, checked out in the main clone
+    (instead of a worktree). Guarded: won't switch a main clone with uncommitted work."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    branch = branch.strip()
+    if not branch:
+        return {"ok": False, "error": "Branch name is required."}
+    existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+    if existing:  # already checked out somewhere → just open it
+        return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
+    if has_tracked_changes(clone):
+        return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
+    base = default_branch(clone)
+    git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
+    sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
+    r = sw("-c", branch, f"origin/{base}")
+    if r.returncode != 0:  # branch may already exist locally → check it out instead
+        r = sw(branch)
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or "git switch failed").strip()}
+    return {"ok": True, "path": clone, "workspace": workspace_in(clone), "created": True}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
@@ -268,6 +295,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             branch = (q.get("branch") or [""])[0]
             result = new_task_worktree(repo, branch, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/new-branch-main":
+            repo = (q.get("repo") or [""])[0]
+            branch = (q.get("branch") or [""])[0]
+            result = new_branch_in_main(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/open-in-main":
             repo = (q.get("repo") or [""])[0]
             branch = (q.get("branch") or [""])[0]
@@ -285,10 +317,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main():
-    port, roots = parse_args(sys.argv[1:])
+    port, cli_roots = parse_args(sys.argv[1:])
+    config = load_config()
+    # Roots come from the command line if given, otherwise the "roots" config key.
+    cfg_roots = config.get("roots") or []
+    if isinstance(cfg_roots, str):
+        cfg_roots = [cfg_roots]
+    roots = cli_roots or [os.path.abspath(os.path.expanduser(r)) for r in cfg_roots]
+    if not roots:
+        sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
+                 f'or pass them on the command line: python3 companion.py ~/dev')
     here = os.path.dirname(os.path.abspath(__file__))
     Handler.roots = roots
-    Handler.config = load_config()
+    Handler.config = config
     httpd = http.server.HTTPServer(("127.0.0.1", port),
                                    functools.partial(Handler, directory=here))
     print(f"Shipyard companion → http://localhost:{port}")
