@@ -96,6 +96,20 @@
     margin-bottom: 16px;
   }
   .panel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  dialog#new-task-dialog {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 20px; width: min(440px, 92vw);
+  }
+  dialog#new-task-dialog::backdrop { background: rgba(31,35,40,.5); }
+  #new-task-form h2 { margin: 0 0 4px; font-size: 16px; }
+  #new-task-form .hint { display: block; margin-bottom: 14px; }
+  .nt-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; color: var(--fg-muted); }
+  .nt-field select, .nt-field input { font-size: 14px; color: var(--fg); }
+  .nt-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+  .nt-actions #nt-status { flex: 1; margin: 0; }
+  .nt-actions #nt-status.error { color: var(--red); }
   .panel-row + .panel-row { margin-top: 10px; }
   .panel label { font-weight: 600; font-size: 13px; min-width: 110px; }
   .hint { color: var(--fg-muted); font-size: 12px; }
@@ -352,6 +366,9 @@
     </h1>
     <div class="spacer"></div>
     <select id="repo-select" title="Repository"></select>
+    <button id="new-task-btn" class="icon-btn hidden" title="Start a new task — new worktree off the default branch">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7.25h4.5a.75.75 0 0 1 0 1.5H8.5v4.5a.75.75 0 0 1-1.5 0V8.75H2.5a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"/></svg>
+    </button>
     <button id="refresh-btn" class="icon-btn" title="Refresh">
       <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/></svg>
     </button>
@@ -379,6 +396,24 @@
       <button id="remove-repo-btn">Remove current</button>
     </div>
   </div>
+
+  <dialog id="new-task-dialog">
+    <form id="new-task-form" method="dialog">
+      <h2>New task</h2>
+      <p class="hint">Creates a fresh worktree on a new branch off the default branch, then opens it in VS Code.</p>
+      <label class="nt-field">Repository
+        <select id="nt-repo"></select>
+      </label>
+      <label class="nt-field">Branch name
+        <input type="text" id="nt-branch" placeholder="you/short-description" autocomplete="off">
+      </label>
+      <div class="nt-actions">
+        <span id="nt-status" class="hint"></span>
+        <button type="button" id="nt-cancel">Cancel</button>
+        <button type="submit" class="primary">Create &amp; open</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="toolbar">
     <div class="tabs">
@@ -1032,6 +1067,7 @@
       : state.companion
         ? '<span class="dot ok"></span>Companion connected'
         : '<span class="dot off"></span>Companion not running';
+    $("#new-task-btn").classList.toggle("hidden", !state.companion);
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
     $("#count-mine").textContent = state.prs.filter((p) => p.author?.login === state.viewer).length;
@@ -1192,6 +1228,53 @@
 
   $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
   $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
+
+  // ---------- new task ----------
+  function openNewTaskDialog() {
+    const repos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))].sort();
+    const current = getCurrentRepo();
+    $("#nt-repo").innerHTML = repos.length
+      ? repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("")
+      : '<option value="">— no local clones found —</option>';
+    const branch = $("#nt-branch");
+    branch.value = state.viewer ? `${state.viewer}/` : "";
+    const status = $("#nt-status");
+    status.textContent = "";
+    status.classList.remove("error");
+    $("#new-task-dialog").showModal();
+    branch.focus();
+    branch.setSelectionRange(branch.value.length, branch.value.length);
+  }
+  const ntError = (msg) => { const s = $("#nt-status"); s.textContent = msg; s.classList.add("error"); };
+
+  $("#new-task-btn").addEventListener("click", openNewTaskDialog);
+  $("#nt-cancel").addEventListener("click", () => $("#new-task-dialog").close());
+  $("#new-task-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const repo = $("#nt-repo").value;
+    const branch = $("#nt-branch").value.trim();
+    $("#nt-status").classList.remove("error");
+    if (!repo) return ntError("No repository selected.");
+    if (!branch || branch.endsWith("/")) return ntError("Enter a branch name.");
+    const submitBtn = e.submitter || $("#new-task-form button.primary");
+    submitBtn.disabled = true;
+    $("#nt-status").textContent = "Creating worktree…";
+    try {
+      const res = await fetch(`new-task?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        await openInVSCode(data.workspace || data.path);
+        $("#new-task-dialog").close();
+        loadWorktrees();
+      } else {
+        ntError(data.error || `Failed (${res.status})`);
+      }
+    } catch (err) {
+      ntError(err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
 
   $("#save-token-btn").addEventListener("click", () => {
     const v = $("#token-input").value.trim();

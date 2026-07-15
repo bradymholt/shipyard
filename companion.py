@@ -155,6 +155,41 @@ def create_worktree(repo, branch, roots):
     return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True}
 
 
+def default_branch(clone):
+    ref = git(clone, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
+    prefix = "refs/remotes/origin/"
+    if ref.startswith(prefix):
+        return ref[len(prefix):]
+    for b in ("main", "master"):
+        if git(clone, "rev-parse", "--verify", f"origin/{b}").strip():
+            return b
+    return "main"
+
+
+def new_task_worktree(repo, branch, roots):
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    branch = branch.strip()
+    if not branch:
+        return {"ok": False, "error": "Branch name is required."}
+    # Idempotent: if the branch is already checked out somewhere, open that.
+    existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+    if existing:
+        return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
+    base = default_branch(clone)
+    git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
+    path = os.path.join(clone, ".claude", "worktrees", re.sub(r"[^\w.-]", "-", branch))
+    add = lambda *a: subprocess.run(["git", "-C", clone, "worktree", "add", *a],
+                                    capture_output=True, text=True, timeout=120)
+    r = add("-b", branch, path, f"origin/{base}")
+    if r.returncode != 0:  # branch may already exist locally → check it out instead
+        r = add(path, branch)
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or "git worktree add failed").strip()}
+    return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True, "branch": branch}
+
+
 def open_vscode(target, roots, config):
     real = os.path.realpath(target)
     if not any(real == r or real.startswith(r + os.sep) for r in roots):
@@ -199,6 +234,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             repo = (q.get("repo") or [""])[0]
             branch = (q.get("branch") or [""])[0]
             result = create_worktree(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/new-task":
+            repo = (q.get("repo") or [""])[0]
+            branch = (q.get("branch") or [""])[0]
+            result = new_task_worktree(repo, branch, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/open-vscode":
             target = (q.get("path") or [""])[0]

@@ -30,6 +30,7 @@ Swim lanes by PR state - Working (drafts shown dashed), Waiting (on a reviewer),
 - **Priority sort**: one of the list sort options - ready-to-merge first, then actionable-by-author, then needs-reviewer, awaiting-review last
 - **Filters**: My PRs / Waiting on my review / All open tabs, plus text filter across title, author, branch, and repo. The default load fetches only your PRs and ones awaiting your review; "All open" fetches the full set on demand the first time you open it
 - **Local worktree links** (optional): when run via the local companion, PRs whose branch you have checked out locally get an "Open in VS Code" link
+- **New task** (optional): with the companion running, a **+** button spins up a fresh worktree on a new branch off the default branch and opens it in VS Code - so new work always starts in a worktree, not the main clone
 
 ## Setup
 
@@ -48,6 +49,10 @@ Then open the printed `http://localhost:4321`. Pass multiple roots or `--port` a
 "Open in VS Code" opens the worktree's `.code-workspace` file as a workspace when one exists (otherwise the folder); the companion supplies which path to use. This covers PRs whose branch is in a worktree or checked out in the main clone. By default it opens via a `vscode://file` link - see [Opening VS Code](#opening-vs-code) to run the `code` CLI instead.
 
 For a PR whose branch has no local worktree, the row instead shows a "create worktree" button. Clicking it asks the companion to `git worktree add` the branch (fetching from `origin` first if it's remote-only) under `<repo>/.claude/worktrees/`, then opens it - so the branch joins the same worktree flow as everything else. This action only appears when the companion is running.
+
+### Starting a new task
+
+Everything above starts from an *existing* PR or branch. To start *new* work, a **+** button next to the repo selector (shown only when the companion is running) opens a "New task" dialog: pick a repo you have cloned locally and type a branch name. The companion creates a fresh worktree on that new branch off the repo's default branch (`git worktree add -b <branch> … origin/HEAD`, fetching the base first) under `<repo>/.claude/worktrees/`, then opens it in VS Code - so you always begin new work in a worktree rather than the main clone. It's idempotent: if the branch already exists or is checked out, it just opens that. Once you push a PR from the branch it appears on the board like anything else, with the usual "Open in VS Code" link for going back to tweak it.
 
 The footer shows a green "Companion connected" indicator when the page is talking to the companion, and "Companion not running" otherwise (e.g. on the hosted Pages copy).
 
