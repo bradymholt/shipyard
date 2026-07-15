@@ -7,7 +7,7 @@ A GitHub pull request dashboard. It shows open PRs with reviewer and review-stat
 ```bash
 git clone https://github.com/bradymholt/shipyard.git
 cd shipyard
-cp companion.config.example.json companion.config.json
+cp shipyard.config.example.json shipyard.config.json
 open http://localhost:4321
 python3 index.py
 ```
@@ -49,11 +49,11 @@ Open the page, click the gear icon, and paste a GitHub personal access token - c
 `index.py` is a small local server that adds "Open in VS Code" links for branches you have checked out as local git worktrees. It reads `git worktree list` and serves both the dashboard and a `/worktrees.json` endpoint.
 
 ```
-python3 index.py              # scan the folders set in companion.config.json
+python3 index.py              # scan the folders set in shipyard.config.json
 python3 index.py ~/dev ~/work  # or override the roots on the command line
 ```
 
-Set the folders to scan with a `"roots"` array in `companion.config.json` (see [Opening VS Code](#opening-vs-code) for the file). It's required: the companion exits with an error if no roots are configured and none are passed on the command line. Then open the printed `http://localhost:4321`. Pass `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
+Set the folders to scan with a `"roots"` array in `shipyard.config.json` (see [Opening VS Code](#opening-vs-code) for the file). It's required: the companion exits with an error if no roots are configured and none are passed on the command line. Then open the printed `http://localhost:4321`. Pass `--port` as needed. It binds to localhost only, matches worktrees to PRs by the repo's `origin` remote + branch, and never writes anything to the repo. The hosted GitHub Pages copy doesn't reach the companion (browsers block HTTPS→localhost), so the worktree links only appear when you're viewing the dashboard through the companion.
 
 Each PR row has a single **Open in VS Code** button whose behaviour depends on where the branch is checked out:
 
@@ -78,7 +78,7 @@ Note: the companion serves the dashboard on a different origin (`localhost`) tha
 
 ### Opening VS Code
 
-The companion reads a `companion.config.json` next to `index.py` (it's gitignored) for the folders to scan and a few options. By default VS Code opens via `vscode://file` links; set `vscodeOpen` to `"cli"` to run the `code` CLI instead - handy for passing extra flags:
+The companion reads a `shipyard.config.json` next to `index.py` (it's gitignored) for the folders to scan and a few options. By default VS Code opens via `vscode://file` links; set `vscodeOpen` to `"cli"` to run the `code` CLI instead - handy for passing extra flags:
 
 ```json
 {

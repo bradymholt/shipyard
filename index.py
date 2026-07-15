@@ -14,7 +14,7 @@ Run it from the dashboard directory and open the printed URL:
 
 Binds to localhost only. Nothing it reads or serves is written to the repo.
 
-companion.config.json (next to this file) sets the folders to scan and
+shipyard.config.json (next to this file) sets the folders to scan and
 controls how the page opens VS Code / prefills New task branch names:
 
     {
@@ -41,7 +41,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
-CONFIG_FILE = "companion.config.json"
+CONFIG_FILE = "shipyard.config.json"
 DEFAULT_CONFIG = {"roots": [], "vscodeOpen": "scheme", "codeCliArgs": [], "branchPrefix": ""}
 
 
