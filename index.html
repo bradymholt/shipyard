@@ -1095,7 +1095,7 @@
         let laneHtml = roots.map((r) => renderCardTree(r, 0)).join("");
         for (const pr of inLane) if (!seen.has(pr.number)) laneHtml += renderCardTree(pr, 0);
         if (i === 2 && state.merged.length) {  // recently merged sit under the Ready lane
-          laneHtml += '<div class="merged-divider">Recently merged</div>' + state.merged.map(mergedCard).join("");
+          laneHtml += '<div class="merged-divider"></div>' + state.merged.map(mergedCard).join("");
         }
         return `
         <div class="lane">
@@ -1120,7 +1120,7 @@
         count += r.count;
       }
       if (state.filter === "mine" && state.merged.length) {  // recently merged at the bottom of My PRs
-        html += '<div class="merged-divider">Recently merged</div>' + state.merged.map(mergedRow).join("");
+        html += '<div class="merged-divider"></div>' + state.merged.map(mergedRow).join("");
       }
     }
     const target = getCurrentRepo();
