@@ -3,165 +3,192 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shipyard</title>
+<title>SHIPYARD</title>
 <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg" media="(prefers-color-scheme: light)">
 <link rel="icon" href="https://github.githubassets.com/favicons/favicon-dark.svg" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #ffffff;
-    --bg-subtle: #f6f8fa;
-    --bg-inset: #eff2f5;
-    --border: #d1d9e0;
-    --fg: #1f2328;
-    --fg-muted: #59636e;
-    --accent: #0969da;
-    --green: #1a7f37;
-    --red: #cf222e;
-    --yellow: #9a6700;
-    --purple: #8250df;
-    --btn-bg: #f6f8fa;
-    --btn-hover: #eff2f5;
-    --row-hover: #f6f8fa;
-    --shadow: 0 1px 3px rgba(31,35,40,.08);
-    --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='16' height='16'%3E%3Cpath fill='%2359636e' d='M4.427 7.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z'/%3E%3C/svg%3E");
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0d1117;
-      --bg-subtle: #151b23;
-      --bg-inset: #010409;
-      --border: #3d444d;
-      --fg: #f0f6fc;
-      --fg-muted: #9198a1;
-      --accent: #4493f8;
-      --green: #3fb950;
-      --red: #f85149;
-      --yellow: #d29922;
-      --purple: #ab7df8;
-      --btn-bg: #212830;
-      --btn-hover: #262c36;
-      --row-hover: #151b23;
-      --shadow: none;
-      --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='16' height='16'%3E%3Cpath fill='%239198a1' d='M4.427 7.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z'/%3E%3C/svg%3E");
-    }
+    --navy: #12263a;
+    --navy-2: #1d3a52;
+    --navy-border: #2c4d68;
+
+    --bg: #f7f9fa;
+    --surface: #ffffff;
+    --bg-subtle: #f7f9fa;
+    --bg-inset: #eef3f5;
+
+    --border: #d5e0e5;
+    --border-soft: #dfe8ec;
+    --border-dashed: #c8d6dc;
+
+    --fg: #12263a;
+    --fg-muted: #5c7078;
+    --fg-faint: #7b909a;
+
+    --accent: #0e5f6e;
+    --teal: #0e5f6e;
+    --gold: #c9a24b;
+    --gold-text: #8a6d2b;
+    --gold-bar: #e3c35e;
+
+    --green: #2f9e63;
+    --green-text: #2e7d4f;
+    --red: #c25749;
+    --red-text: #b3382c;
+    --yellow: #c9971d;
+    --purple: #7a5fc0;
+    --purple-bar: #b9a8e0;
+    --muted-bar: #9fb3bb;
+
+    --btn-bg: #ffffff;
+    --btn-hover: #f2f6f8;
+    --row-hover: #f7fafb;
+    --shadow: 0 1px 2px rgba(18,38,58,.06);
+
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --display: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+
+    --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='16' height='16'%3E%3Cpath fill='%235c7078' d='M4.427 7.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z'/%3E%3C/svg%3E");
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--fg);
-    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    font: 14px/1.5 var(--sans);
   }
   a { color: inherit; text-decoration: none; }
-  a:hover { color: var(--accent); text-decoration: underline; }
-  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  a:hover { color: var(--teal); text-decoration: underline; }
 
-  header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
-  header h1 svg { fill: var(--fg); }
+  /* ---------- masthead ---------- */
+  header { background: var(--navy); padding: 14px 0; }
+  .header-inner {
+    max-width: 1140px; margin: 0 auto; padding: 0 20px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .flags { display: inline-flex; gap: 2px; }
+  .flags span { width: 10px; height: 14px; display: block; }
+  .flags span:nth-child(1) { background: #c9a24b; }
+  .flags span:nth-child(2) { background: #d64545; }
+  .flags span:nth-child(3) { background: #2e9e63; }
+  .wordmark { font: 900 19px var(--display); color: #f4f7f9; letter-spacing: .07em; }
   .spacer { flex: 1; }
 
+  header select#repo-select {
+    background: var(--navy-2); border: 1px solid var(--navy-border);
+    color: #e8eef4; border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  header select#repo-select:focus { box-shadow: none; border-color: var(--navy-border); }
+  header .icon-btn {
+    background: none; border: 1px solid var(--navy-border); border-radius: 8px;
+    padding: 7px; display: inline-flex; align-items: center; cursor: pointer;
+  }
+  header .icon-btn:hover { background: var(--navy-2); }
+  header .icon-btn svg { fill: #8fa6bb; }
+
+  /* ---------- controls ---------- */
   select, input[type="text"], input[type="password"] {
-    background: var(--bg);
+    background: var(--surface);
     color: var(--fg);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 14px;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-family: inherit;
     outline: none;
   }
-  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  input:focus, select:focus { border-color: var(--teal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 20%, transparent); }
   button {
     background: var(--btn-bg);
     color: var(--fg);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 5px 14px;
-    font-size: 14px;
+    border-radius: 8px;
+    padding: 7px 16px;
+    font-size: 13px;
     font-weight: 500;
+    font-family: inherit;
     cursor: pointer;
     white-space: nowrap;
   }
   button:hover { background: var(--btn-hover); }
-  button.primary { background: var(--green); border-color: transparent; color: #fff; }
-  button.primary:hover { filter: brightness(1.1); }
-  button.icon-btn { padding: 5px 8px; display: inline-flex; align-items: center; }
+  button.primary { background: var(--navy); border-color: var(--navy); color: #f4f7f9; font-weight: 600; }
+  button.primary:hover { background: var(--navy-2); }
+  button.icon-btn { padding: 7px; display: inline-flex; align-items: center; }
   button.icon-btn svg { fill: var(--fg-muted); }
 
+  /* ---------- tab / view sub-bar ---------- */
+  .subbar { background: var(--surface); border-bottom: 1px solid var(--border); }
+  .toolbar {
+    max-width: 1140px; margin: 0 auto; padding: 14px 20px 0;
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    border: none; border-radius: 0; background: none; color: var(--fg-muted);
+    padding: 8px 14px 12px; font-weight: 500; font-size: 14px; font-family: inherit;
+    border-bottom: 3px solid transparent; cursor: pointer;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.active { color: var(--fg); font-weight: 600; border-bottom-color: var(--gold); }
+  .tab .count {
+    background: color-mix(in srgb, var(--fg-muted) 14%, transparent);
+    border-radius: 10px; padding: 0 7px; font-size: 12px; margin-left: 4px;
+  }
+  .tab.active .count { background: rgba(201,162,75,.18); color: var(--gold-text); }
+
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+  .view-toggle button { border: none; border-radius: 0; padding: 6px 10px; display: inline-flex; align-items: center; background: var(--surface); }
+  .view-toggle button + button { border-left: 1px solid var(--border); }
+  .view-toggle button:hover { background: var(--btn-hover); }
+  .view-toggle button svg { fill: var(--fg-muted); }
+  .view-toggle button.active { background: var(--navy); }
+  .view-toggle button.active:hover { background: var(--navy); }
+  .view-toggle button.active svg { fill: #f4f7f9; }
+
+  /* ---------- page body ---------- */
+  .container { max-width: 1140px; margin: 0 auto; padding: 16px 20px 56px; }
+
   .panel {
-    background: var(--bg-subtle);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 16px;
+    border-radius: 10px;
+    padding: 16px 18px;
     margin-bottom: 16px;
   }
-  .panel-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .panel-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .panel-row + .panel-row { margin-top: 12px; }
+  .panel label {
+    font: 700 11px var(--display); letter-spacing: .05em; text-transform: uppercase;
+    color: var(--fg); min-width: 110px;
+  }
+  #token-input { font: 400 12px var(--mono); }
+  .hint { color: var(--fg-muted); font-size: 12px; }
+  .hint code, .panel code { font-family: var(--mono); font-size: 11px; background: var(--bg-inset); padding: 0 5px; border-radius: 4px; }
+  .hidden { display: none !important; }
 
   dialog#new-task-dialog {
-    background: var(--bg); color: var(--fg);
-    border: 1px solid var(--border); border-radius: 8px;
-    box-shadow: var(--shadow); padding: 20px; width: min(440px, 92vw);
+    background: var(--surface); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(18,38,58,.18); padding: 20px; width: min(440px, 92vw);
   }
-  dialog#new-task-dialog::backdrop { background: rgba(31,35,40,.5); }
-  #new-task-form h2 { margin: 0 0 4px; font-size: 16px; }
+  dialog#new-task-dialog::backdrop { background: rgba(18,38,58,.45); }
+  #new-task-form h2 { margin: 0 0 4px; font: 700 17px var(--sans); }
   #new-task-form .hint { display: block; margin-bottom: 14px; }
   .nt-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; color: var(--fg-muted); }
   .nt-field select, .nt-field input { font-size: 14px; color: var(--fg); }
   .nt-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
   .nt-actions #nt-status { flex: 1; margin: 0; }
-  .nt-actions #nt-status.error { color: var(--red); }
-  .panel-row + .panel-row { margin-top: 10px; }
-  .panel label { font-weight: 600; font-size: 13px; min-width: 110px; }
-  .hint { color: var(--fg-muted); font-size: 12px; }
-  .hidden { display: none !important; }
+  .nt-actions #nt-status.error { color: var(--red-text); }
 
-  .toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 0; flex-wrap: wrap; }
-  .tabs { display: flex; gap: 4px; }
-  .tab {
-    border: none; background: none; color: var(--fg-muted);
-    padding: 6px 12px; border-radius: 6px; font-weight: 500;
-  }
-  .tab:hover { background: var(--btn-hover); color: var(--fg); }
-  .tab.active { background: var(--bg-inset); color: var(--fg); font-weight: 600; }
-  .tab .count {
-    background: color-mix(in srgb, var(--fg-muted) 25%, transparent);
-    border-radius: 10px; padding: 0 7px; font-size: 12px; margin-left: 4px;
-  }
-  #search { flex: 1; min-width: 160px; }
-
-  .list {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-top: 12px;
-    overflow: hidden;
-    box-shadow: var(--shadow);
-  }
-  /* Board view: keep the title bar, but the lanes are their own cards - so drop
-     the wrapping container's box, which otherwise encloses the empty space under
-     short lanes. The header stands alone as a full-width titled bar. */
-  .list.board-view {
-    border: none;
-    border-radius: 0;
-    overflow: visible;
-    box-shadow: none;
-  }
-  .list.board-view .list-header {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-  }
-  .list.board-view .board { padding: 12px 0 0; }
-  .list-header {
-    background: var(--bg-subtle);
-    border-bottom: 1px solid var(--border);
-    padding: 10px 16px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .list-header svg { fill: var(--fg-muted); }
-  .list-header select {
+  /* ---------- list ---------- */
+  .list-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  #list-title { font: 600 13px var(--sans); color: var(--fg); }
+  #list-title a { font: 500 11px var(--mono); color: var(--teal); }
+  #sort-select {
     margin-left: auto;
     appearance: none; -webkit-appearance: none;
     border: 1px solid transparent;
@@ -170,104 +197,112 @@
     background-repeat: no-repeat;
     background-position: right 6px center;
     color: var(--fg-muted);
-    font-size: 12px; font-weight: 500;
+    font: 500 12px var(--sans);
     padding: 3px 22px 3px 8px;
     border-radius: 6px;
     cursor: pointer;
   }
-  .list-header select:hover { background-color: var(--btn-hover); color: var(--fg); }
-  .list-header select:focus { outline: none; border-color: transparent; box-shadow: none; }
+  #sort-select:hover { background-color: var(--btn-hover); color: var(--fg); }
+  #sort-select:focus { outline: none; border-color: transparent; box-shadow: none; }
+
+  .list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .list:has(.board) { background: none; border: none; }
   .pr-row {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 10px 16px;
+    gap: 12px;
+    padding: 12px 18px;
+    border-left: 4px solid var(--muted-bar);
     border-bottom: 1px solid var(--border);
   }
   .pr-row:last-child { border-bottom: none; }
   .pr-row:hover { background: var(--row-hover); }
+  .pr-row:has(.review-badge.approved) { border-left-color: var(--green); }
+  .pr-row:has(.review-badge.changes) { border-left-color: var(--red); }
+  .pr-row:has(.review-badge.pending) { border-left-color: var(--gold-bar); }
+  .pr-row:has(.review-badge.none) { border-left-color: var(--muted-bar); }
   .pr-row.context { opacity: .55; }
-  .pr-row.merged { opacity: .62; }
-  .card.merged { background: color-mix(in srgb, var(--fg-muted) 7%, var(--bg)); }
-  .pr-icon.merged svg, .review-badge.merged svg { fill: var(--purple); }
-  .review-badge.merged { color: var(--purple); background: color-mix(in srgb, var(--purple) 14%, transparent); }
-  .merged-divider { height: 12px; }
-  .lane .merged-divider { height: 0; }
+  .pr-row.merged { opacity: .65; border-left-color: var(--purple-bar); }
+  .pr-row.merged:not(:last-child) { border-bottom-style: dashed; }
+  .merged .pr-num, .merged .card-meta .pr-num { color: var(--purple); }
+
   .stack-elbow {
     flex: none;
     width: 12px; height: 12px;
     border-left: 2px solid var(--border);
     border-bottom: 2px solid var(--border);
     border-bottom-left-radius: 6px;
+    margin-top: 3px;
   }
   .pr-icon { flex: none; margin-top: 3px; }
   .pr-icon.open svg { fill: var(--green); }
   .pr-icon.draft svg { fill: var(--fg-muted); }
+  .pr-icon.merged svg { fill: var(--purple); }
   .pr-main { flex: 1; min-width: 0; }
-  .pr-title { font-weight: 600; font-size: 15px; }
-  .pr-title a:hover { color: var(--accent); }
+  .pr-title { font-weight: 600; font-size: 15px; color: var(--fg); }
+  .pr-title a:hover { color: var(--teal); }
+  .pr-num { font-family: var(--mono); font-size: 11px; color: var(--teal); }
   .label-pill {
     display: inline-block;
-    font-size: 11px;
-    font-weight: 500;
-    border-radius: 10px;
-    padding: 0 8px;
-    margin-left: 6px;
+    font: 500 11px var(--sans);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 8px;
     border: 1px solid transparent;
     vertical-align: 1px;
   }
   .draft-pill {
-    font-size: 11px; font-weight: 500; color: var(--fg-muted);
-    border: 1px solid var(--border); border-radius: 10px; padding: 0 8px; margin-left: 6px;
+    font: 500 11px var(--sans); color: var(--fg-muted);
+    border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; margin-left: 8px;
     vertical-align: 1px;
   }
   button.draft-pill { background: none; cursor: pointer; }
-  button.draft-pill:hover { background: color-mix(in srgb, var(--fg-muted) 12%, transparent); color: var(--fg); border-color: var(--fg-muted); }
+  button.draft-pill:hover { color: var(--fg); border-color: var(--fg-muted); }
   button.draft-pill:disabled { opacity: .5; cursor: default; }
   .pr-meta { color: var(--fg-muted); font-size: 12px; margin-top: 2px; }
-  .pr-meta .branch {
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-    font-size: 11px;
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
-    color: var(--accent);
-    border-radius: 4px;
-    padding: 0 4px;
-  }
-  .pr-side { flex: none; display: flex; align-items: center; gap: 16px; margin-top: 2px; }
+  .pr-meta .branch { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); }
+  .pr-side { flex: none; display: flex; align-items: center; gap: 14px; margin-top: 2px; }
 
   .review-badge {
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 12px; font-weight: 600;
-    border-radius: 2em; padding: 2px 10px;
+    border-radius: 6px; padding: 3px 10px;
+    border: 1px solid transparent;
   }
   .review-badge svg { fill: currentColor; }
-  .review-badge.approved { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
-  .review-badge.changes { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
-  .review-badge.pending { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 14%, transparent); }
-  .review-badge.none { color: var(--fg-muted); background: color-mix(in srgb, var(--fg-muted) 12%, transparent); }
+  .review-badge.approved { color: var(--green-text); background: rgba(46,125,79,.1); border-color: rgba(46,125,79,.25); }
+  .review-badge.changes { color: var(--red-text); background: rgba(179,56,44,.08); border-color: rgba(179,56,44,.25); }
+  .review-badge.pending { color: var(--gold-text); background: rgba(201,162,75,.14); border-color: rgba(201,162,75,.35); }
+  .review-badge.none { color: var(--fg-muted); background: rgba(92,112,120,.08); border-color: rgba(92,112,120,.25); }
+  .review-badge.merged { color: var(--purple); background: rgba(122,95,192,.1); border-color: rgba(122,95,192,.3); }
 
   .reviewers { display: flex; align-items: center; }
-  .reviewer { position: relative; margin-left: -4px; }
+  .reviewer { position: relative; margin-left: -5px; }
   .reviewer:first-child { margin-left: 0; }
   .reviewer img, .reviewer .team-avatar {
-    width: 24px; height: 24px; border-radius: 50%;
-    border: 2px solid var(--bg);
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 1px solid var(--border);
     display: block;
   }
   .reviewer .team-avatar {
-    background: var(--purple); color: #fff; font-size: 11px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
+    background: var(--purple); color: #fff; font: 600 10px var(--sans);
+    display: flex; align-items: center; justify-content: center; border-color: #fff;
   }
   .reviewer .state-dot {
     position: absolute; bottom: -3px; right: -3px;
     width: 13px; height: 13px; border-radius: 50%;
-    background: var(--bg);
+    background: var(--surface);
     display: flex; align-items: center; justify-content: center;
   }
   .reviewer .state-dot svg { width: 11px; height: 11px; }
   .state-approved svg { fill: var(--green); }
   .state-changes svg { fill: var(--red); }
-  .state-pending svg { fill: var(--yellow); }
+  .state-pending svg { fill: var(--gold); }
   .state-commented svg { fill: var(--fg-muted); }
 
   .ci { display: inline-flex; align-items: center; }
@@ -275,97 +310,113 @@
   .ci.failure svg { fill: var(--red); }
   .ci.pending svg { fill: var(--yellow); }
 
-  .comments { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-muted); font-size: 12px; }
-  .comments svg { fill: var(--fg-muted); }
+  .comments { display: inline-flex; align-items: center; gap: 4px; color: var(--fg-muted); font: 500 11px var(--sans); }
+  .comments svg { fill: var(--fg-faint); }
 
-  .wt-link { display: inline-flex; align-items: center; color: var(--fg-muted); }
+  .wt-link { display: inline-flex; align-items: center; color: var(--fg-faint); }
   .wt-link svg { fill: currentColor; }
-  .wt-link:hover { color: var(--accent); }
+  .wt-link:hover { color: var(--teal); }
   button.wt-link { background: none; border: none; padding: 0; cursor: pointer; }
   button.wt-link:disabled { opacity: .5; cursor: default; }
   .wt-links { display: inline-flex; align-items: center; gap: 8px; }
 
-  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .view-toggle button { border: none; border-radius: 0; padding: 5px 10px; display: inline-flex; align-items: center; background: var(--bg); }
-  .view-toggle button + button { border-left: 1px solid var(--border); }
-  .view-toggle button svg { fill: var(--fg-muted); }
-  .view-toggle button.active { background: var(--bg-inset); }
-  .view-toggle button.active svg { fill: var(--fg); }
-
+  /* ---------- board ---------- */
   .board {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    padding: 12px;
+    gap: 14px;
   }
   .lane {
-    background: var(--bg-subtle);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
+    border-top: 3px solid var(--muted-bar);
+    border-radius: 10px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    min-height: 140px;
     align-self: start;
   }
-  .lane-header { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-muted); padding: 2px 4px; }
-  .lane-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .lane-dot.gray { background: var(--fg-muted); }
-  .lane-dot.blue { background: var(--accent); }
-  .lane-dot.yellow { background: var(--yellow); }
-  .lane-dot.green { background: var(--green); }
-  .lane-count { margin-left: auto; color: var(--fg-muted); font-weight: 500; font-size: 12px; background: color-mix(in srgb, var(--fg-muted) 18%, transparent); border-radius: 10px; padding: 0 7px; }
-  .lane-empty { color: var(--fg-muted); font-size: 12px; text-align: center; padding: 16px 0; }
+  .lane:has(.lane-dot.blue) { border-color: #0f4c81; }
+  .lane:has(.lane-dot.yellow) { border-color: var(--gold); }
+  .lane:has(.lane-dot.green) { border-color: #2e9e63; }
+  .lane-header {
+    display: flex; align-items: center; gap: 6px;
+    font: 700 12px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--fg); padding: 0 2px;
+  }
+  .lane-dot { display: none; }
+  .lane-count { margin-left: auto; color: var(--fg-muted); font: 500 11px var(--sans); }
+  .lane-empty { color: var(--fg-muted); font-size: 12px; text-align: center; padding: 12px 0; }
   .card {
-    background: var(--bg);
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 8px 10px;
-    box-shadow: var(--shadow);
   }
-  .card.draft {
-    background: color-mix(in srgb, var(--fg-muted) 7%, var(--bg));
-    border-style: dashed;
-  }
-  .card-title { font-weight: 600; font-size: 13px; line-height: 1.4; }
+  .card.draft { background: var(--bg); border-style: dashed; border-color: var(--border-dashed); }
+  .card.merged { background: var(--bg); opacity: .75; }
+  .card-title { font-weight: 600; font-size: 13px; line-height: 1.4; color: var(--fg); }
   .card-meta { font-size: 12px; color: var(--fg-muted); margin-top: 3px; overflow-wrap: anywhere; }
+  .card-meta .pr-num { font-family: var(--mono); font-size: 11px; color: var(--teal); }
   .card-icons { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
   .card-stack {
-    font-size: 11px; font-weight: 500; color: var(--fg-muted);
-    border: 1px solid var(--border); border-radius: 10px; padding: 0 7px;
+    font: 500 11px var(--mono); color: var(--teal);
+    border: 1px solid var(--border); border-radius: 4px; padding: 0 6px;
   }
   .am-toggle {
     display: inline-flex; align-items: center; gap: 4px;
-    font-size: 11px; font-weight: 500;
-    border-radius: 10px; padding: 0 7px;
+    font: 500 11px var(--sans);
+    border-radius: 4px; padding: 0 6px;
     background: none;
   }
   .am-toggle svg { fill: currentColor; }
-  .am-toggle.on { color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); }
-  .am-toggle.off { color: var(--fg-muted); border: 1px dashed var(--border); }
+  .am-toggle.on { color: var(--green); border: 1px solid rgba(47,158,99,.4); }
+  .am-toggle.off { color: var(--fg-muted); border: 1px dashed var(--border-dashed); }
   button.am-toggle:hover { background: color-mix(in srgb, var(--fg-muted) 10%, transparent); }
   button.am-toggle:disabled { opacity: .5; cursor: default; }
 
   .card-nest { display: flex; gap: 6px; align-items: flex-start; }
-  .card-nest > .stack-elbow { margin-top: 2px; }
+  .card-nest > .stack-elbow { margin-top: 2px; border-color: var(--border-dashed); }
   .card-nest > .card { flex: 1; min-width: 0; }
+
+  .merged-divider, .drafts-divider {
+    position: relative; text-align: center; line-height: 1;
+  }
+  .merged-divider::after, .drafts-divider::after {
+    content: ""; position: absolute; left: 18px; right: 18px; top: 50%;
+    transform: translateY(-50%);
+    border-top: 1px dashed var(--border); z-index: 0;
+  }
+  .merged-divider::before, .drafts-divider::before {
+    position: relative; z-index: 1;
+    display: inline-block; background: var(--surface); padding: 0 12px;
+    font: 700 10px var(--display); color: var(--fg-faint);
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+  .merged-divider::before { content: "recently merged"; }
+  .drafts-divider::before { content: "drafts"; }
+  .lane .merged-divider, .lane .drafts-divider { margin: 8px 0 6px; }
+  /* List view: recently-merged sits in its own .list card, with the divider between. */
+  #merged-wrap .merged-divider { margin: 14px 0; }
+  #merged-wrap .merged-divider::before { background: var(--bg); }
+
   @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
 
-  .empty, .loading, .error-box { padding: 48px 16px; text-align: center; color: var(--fg-muted); }
-  .error-box { color: var(--red); }
+  .empty, .loading, .error-box { padding: 48px 20px; text-align: center; color: var(--fg-muted); }
+  .error-box { color: var(--red-text); }
   .spinner {
-    width: 24px; height: 24px; margin: 0 auto 12px;
-    border: 3px solid var(--border); border-top-color: var(--accent);
+    width: 26px; height: 26px; margin: 0 auto 14px;
+    border: 3px solid var(--border); border-top-color: var(--gold);
     border-radius: 50%; animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  footer { margin-top: 16px; color: var(--fg-muted); font-size: 12px; display: flex; gap: 12px; align-items: center; }
+  footer { margin-top: 16px; color: var(--fg-muted); font-size: 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
   #companion-status { display: inline-flex; align-items: center; gap: 5px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .dot.ok { background: var(--green); }
-  .dot.off { background: var(--fg-muted); }
+  .dot.off { background: var(--muted-bar); }
 
   @media (max-width: 700px) {
     .pr-side { flex-direction: column; align-items: flex-end; gap: 6px; }
@@ -373,12 +424,10 @@
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <h1>
-      <svg width="20" height="20" viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>
-      Shipyard
-    </h1>
+<header>
+  <div class="header-inner">
+    <span class="flags"><span></span><span></span><span></span></span>
+    <span class="wordmark">SHIPYARD</span>
     <div class="spacer"></div>
     <select id="repo-select" title="Repository"></select>
     <button id="new-task-btn" class="icon-btn hidden" title="Start a new task — new worktree off the default branch">
@@ -390,7 +439,46 @@
     <button id="settings-btn" class="icon-btn" title="Settings">
       <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.018.066.079.158.212.224.231.114.454.243.668.386.123.082.233.09.299.071l1.103-.303c.644-.176 1.392.021 1.82.63.27.385.506.792.704 1.218.315.675.111 1.422-.364 1.891l-.814.806c-.049.048-.098.147-.088.294.016.257.016.515 0 .772-.01.147.038.246.088.294l.814.806c.475.469.679 1.216.364 1.891a7.977 7.977 0 0 1-.704 1.217c-.428.61-1.176.807-1.82.63l-1.102-.302c-.067-.019-.177-.011-.3.071a5.909 5.909 0 0 1-.668.386c-.133.066-.194.158-.211.224l-.29 1.106c-.168.646-.715 1.196-1.458 1.26a8.006 8.006 0 0 1-1.402 0c-.743-.064-1.289-.614-1.458-1.26l-.289-1.106c-.018-.066-.079-.158-.212-.224a5.738 5.738 0 0 1-.668-.386c-.123-.082-.233-.09-.299-.071l-1.103.303c-.644.176-1.392-.021-1.82-.63a8.12 8.12 0 0 1-.704-1.218c-.315-.675-.111-1.422.363-1.891l.815-.806c.05-.048.098-.147.088-.294a6.214 6.214 0 0 1 0-.772c.01-.147-.038-.246-.088-.294l-.815-.806C.635 6.045.431 5.298.746 4.623a7.92 7.92 0 0 1 .704-1.217c.428-.61 1.176-.807 1.82-.63l1.102.302c.067.019.177.011.3-.071.214-.143.437-.272.668-.386.133-.066.194-.158.211-.224l.29-1.106C6.009.645 6.556.095 7.299.03 7.53.01 7.764 0 8 0Zm-.571 1.525c-.036.003-.108.036-.137.146l-.289 1.105c-.147.561-.549.967-.998 1.189-.173.086-.34.183-.5.29-.417.278-.97.423-1.529.27l-1.103-.303c-.109-.03-.175.016-.195.045-.22.312-.412.644-.573.99-.014.031-.021.11.059.19l.815.806c.411.406.562.957.53 1.456a4.709 4.709 0 0 0 0 .582c.032.499-.119 1.05-.53 1.456l-.815.806c-.081.08-.073.159-.059.19.162.346.353.677.573.989.02.03.085.076.195.046l1.102-.303c.56-.153 1.113-.008 1.53.27.161.107.328.204.501.29.447.222.85.629.997 1.189l.289 1.105c.029.109.101.143.137.146a6.6 6.6 0 0 0 1.142 0c.036-.003.108-.036.137-.146l.289-1.105c.147-.561.549-.967.998-1.189.173-.086.34-.183.5-.29.417-.278.97-.423 1.529-.27l1.103.303c.109.029.175-.016.195-.045.22-.313.411-.644.573-.99.014-.031.021-.11-.059-.19l-.815-.806c-.411-.406-.562-.957-.53-1.456a4.709 4.709 0 0 0 0-.582c-.032-.499.119-1.05.53-1.456l.815-.806c.081-.08.073-.159.059-.19a6.464 6.464 0 0 0-.573-.989c-.02-.03-.085-.076-.195-.046l-1.102.303c-.56.153-1.113.008-1.53-.27a4.44 4.44 0 0 0-.501-.29c-.447-.222-.85-.629-.997-1.189l-.289-1.105c-.029-.11-.101-.143-.137-.146a6.6 6.6 0 0 0-1.142 0ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM9.5 8a1.5 1.5 0 1 0-3.001.001A1.5 1.5 0 0 0 9.5 8Z"/></svg>
     </button>
-  </header>
+  </div>
+</header>
+
+<div class="subbar">
+  <div class="toolbar">
+    <div class="tabs">
+      <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
+      <button class="tab" data-filter="review">Waiting on my review <span class="count" id="count-review">–</span></button>
+      <button class="tab" data-filter="all">All open <span class="count hidden" id="count-all"></span></button>
+    </div>
+    <div class="spacer"></div>
+    <div class="view-toggle">
+      <button id="view-list" title="List view">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.75 2.5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5ZM2 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
+      </button>
+      <button id="view-board" title="Board view">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25V1.75C0 .784.784 0 1.75 0ZM1.5 1.75v12.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25ZM11.75 3a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm-8.25.75a.75.75 0 0 1 1.5 0v5.5a.75.75 0 0 1-1.5 0ZM8 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 3Z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <dialog id="new-task-dialog">
+    <form id="new-task-form" method="dialog">
+      <h2>New task</h2>
+      <p class="hint">Creates a fresh worktree on a new branch off the default branch, then opens it in VS Code.</p>
+      <label class="nt-field">Repository
+        <select id="nt-repo"></select>
+      </label>
+      <label class="nt-field">Branch name
+        <input type="text" id="nt-branch" placeholder="you/short-description" autocomplete="off">
+      </label>
+      <div class="nt-actions">
+        <span id="nt-status" class="hint"></span>
+        <button type="button" id="nt-cancel">Cancel</button>
+        <button type="submit" class="primary">Create &amp; open</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="settings" class="panel hidden">
     <div class="panel-row">
@@ -412,54 +500,24 @@
     </div>
   </div>
 
-  <dialog id="new-task-dialog">
-    <form id="new-task-form" method="dialog">
-      <h2>New task</h2>
-      <p class="hint">Creates a fresh worktree on a new branch off the default branch, then opens it in VS Code.</p>
-      <label class="nt-field">Repository
-        <select id="nt-repo"></select>
-      </label>
-      <label class="nt-field">Branch name
-        <input type="text" id="nt-branch" placeholder="you/short-description" autocomplete="off">
-      </label>
-      <div class="nt-actions">
-        <span id="nt-status" class="hint"></span>
-        <button type="button" id="nt-cancel">Cancel</button>
-        <button type="submit" class="primary">Create &amp; open</button>
-      </div>
-    </form>
-  </dialog>
-
-  <div class="toolbar">
-    <div class="tabs">
-      <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
-      <button class="tab" data-filter="review">Waiting on my review <span class="count" id="count-review">–</span></button>
-      <button class="tab" data-filter="all">All open <span class="count hidden" id="count-all"></span></button>
-    </div>
-    <input type="text" id="search" placeholder="Filter by title, author, or branch…">
-    <div class="view-toggle">
-      <button id="view-list" title="List view">
-        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.75 2.5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5ZM2 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-5a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/></svg>
-      </button>
-      <button id="view-board" title="Board view">
-        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25V1.75C0 .784.784 0 1.75 0ZM1.5 1.75v12.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25ZM11.75 3a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-1.5 0v-7.5a.75.75 0 0 1 .75-.75Zm-8.25.75a.75.75 0 0 1 1.5 0v5.5a.75.75 0 0 1-1.5 0ZM8 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 3Z"/></svg>
-      </button>
-    </div>
+  <div class="list-head">
+    <span id="list-title">Open pull requests</span>
+    <select id="sort-select" title="Sort order">
+      <option value="priority">Priority</option>
+      <option value="updated">Recently updated</option>
+      <option value="created">Recently created</option>
+    </select>
   </div>
 
   <div class="list">
-    <div class="list-header">
-      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>
-      <span id="list-title">Open pull requests</span>
-      <select id="sort-select" title="Sort order">
-        <option value="priority">Priority</option>
-        <option value="updated">Recently updated</option>
-        <option value="created">Recently created</option>
-      </select>
-    </div>
     <div id="list-body">
       <div class="empty">Add a token and a repo, org, or user in settings (⚙) to get started.</div>
     </div>
+  </div>
+
+  <div id="merged-wrap" class="hidden">
+    <div class="merged-divider"></div>
+    <div class="list"><div id="merged-body"></div></div>
   </div>
 
   <footer>
@@ -468,6 +526,7 @@
     <span id="companion-status"></span>
   </footer>
 </div>
+
 
 <script>
 (() => {
@@ -498,7 +557,7 @@
     companion: false,     // true when the local companion answered (enables worktree actions)
     companionChecked: false,
     openMethod: "scheme", // "scheme" (vscode:// links) or "cli" (companion runs code CLI)
-    search: "",
+    branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
   };
 
@@ -547,10 +606,8 @@
 
   function labelColors(hex) {
     const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
-    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (dark) return `color: rgb(${Math.min(r + 90, 255)},${Math.min(g + 90, 255)},${Math.min(b + 90, 255)}); background: rgba(${r},${g},${b},.18); border-color: rgba(${r},${g},${b},.35)`;
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-    return `color: ${luma > 160 ? "#1f2328" : "#fff"}; background: #${hex}`;
+    return `color: ${luma > 160 ? "#12263a" : "#fff"}; background: #${hex}`;
   }
 
   // ---------- GitHub API ----------
@@ -823,7 +880,11 @@
         state.companion = true;
         try {
           const cfg = await fetch("config.json", { cache: "no-store" });
-          if (cfg.ok) state.openMethod = (await cfg.json()).vscodeOpen || "scheme";
+          if (cfg.ok) {
+            const c = await cfg.json();
+            state.openMethod = c.vscodeOpen || "scheme";
+            state.branchPrefix = c.branchPrefix || "";
+          }
         } catch { /* older companion without config.json: keep vscode:// links */ }
       }
     } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
@@ -884,7 +945,7 @@
         <span class="pr-icon merged">${ICONS.merged}</span>
         <div class="pr-main">
           <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
-          <div class="pr-meta">${mergedRepoPrefix(pr)}#${pr.number} by <strong>${esc(pr.author?.login || "ghost")}</strong> · merged ${timeAgo(pr.mergedAt)}</div>
+          <div class="pr-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> by <strong>${esc(pr.author?.login || "ghost")}</strong> · merged ${timeAgo(pr.mergedAt)}</div>
         </div>
         <div class="pr-side"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
       </div>`;
@@ -894,7 +955,7 @@
     return `
       <div class="card merged">
         <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
-        <div class="card-meta">${mergedRepoPrefix(pr)}#${pr.number} by ${esc(pr.author?.login || "ghost")} · merged ${timeAgo(pr.mergedAt)}</div>
+        <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · merged ${timeAgo(pr.mergedAt)}</div>
         <div class="card-icons"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
       </div>`;
   }
@@ -922,7 +983,7 @@
         <div class="pr-main">
           <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}${labels}</div>
           <div class="pr-meta">
-            ${repoPrefix}#${pr.number} opened ${timeAgo(pr.createdAt)} by <strong>${esc(pr.author?.login || "ghost")}</strong>
+            ${repoPrefix}<span class="pr-num">#${pr.number}</span> opened ${timeAgo(pr.createdAt)} by <strong>${esc(pr.author?.login || "ghost")}</strong>
             · updated ${timeAgo(pr.updatedAt)}
             · <span class="branch">${esc(pr.headRefName)}</span>${basedOn}
           </div>
@@ -941,13 +1002,6 @@
     if (state.filter === "mine" && pr.author?.login !== state.viewer) return false;
     if (state.filter === "review" &&
         !(pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)) return false;
-    if (state.search) {
-      const q = state.search.toLowerCase();
-      return pr.title.toLowerCase().includes(q) ||
-        (pr.author?.login || "").toLowerCase().includes(q) ||
-        (pr.repository?.nameWithOwner || "").toLowerCase().includes(q) ||
-        pr.headRefName.toLowerCase().includes(q);
-    }
     return true;
   }
 
@@ -1023,13 +1077,10 @@
     const badge = pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
       ? reviewBadge(pr)
       : "";
-    const draft = pr.isDraft
-      ? ` <button class="draft-pill draft-toggle" data-pr="${esc(pr.id)}" title="Click to mark ready for review">Draft</button>`
-      : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
-        <div class="card-meta">${repoPrefix}#${pr.number} by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+        <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
           ${comments}
@@ -1100,7 +1151,6 @@
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
-    $(".list").classList.toggle("board-view", effectiveView === "board");
     $("#sort-select").value = state.sort;
     sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
@@ -1140,8 +1190,15 @@
           for (const kid of kids.get(pr.number) || []) out += renderCardTree(kid, depth + 1);
           return out;
         };
-        let laneHtml = roots.map((r) => renderCardTree(r, 0)).join("");
-        for (const pr of inLane) if (!seen.has(pr.number)) laneHtml += renderCardTree(pr, 0);
+        // Non-drafts first; group drafts at the bottom under a labeled divider (Working lane).
+        const renderGroup = (keep) => {
+          let out = roots.filter(keep).map((r) => renderCardTree(r, 0)).join("");
+          for (const pr of inLane) if (keep(pr) && !seen.has(pr.number)) out += renderCardTree(pr, 0);
+          return out;
+        };
+        let laneHtml = renderGroup((p) => !p.isDraft);
+        const draftHtml = renderGroup((p) => p.isDraft);
+        if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
         if (i === 2 && state.merged.length) {  // recently merged sit under the Ready lane
           laneHtml += '<div class="merged-divider"></div>' + state.merged.map(mergedCard).join("");
         }
@@ -1167,9 +1224,6 @@
         html += r.html;
         count += r.count;
       }
-      if (state.filter === "mine" && state.merged.length) {  // recently merged at the bottom of My PRs
-        html += '<div class="merged-divider"></div>' + state.merged.map(mergedRow).join("");
-      }
     }
     const target = getCurrentRepo();
     const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
@@ -1182,6 +1236,7 @@
     // an error) rather than the empty "No pull requests match." message.
     const dataReady = state.filter === "all" ? state.allPrs !== null : state.targetedLoaded;
     if (!dataReady) {
+      $("#merged-wrap").classList.add("hidden");
       if (!getToken() || !getCurrentRepo()) return;  // not configured: keep the setup prompt
       $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
       listBody.innerHTML = state.loadError
@@ -1193,6 +1248,15 @@
       ? ` (most recent ${dataset.length} of ${state.total})` : "";
     $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}${esc(truncated)}`;
     listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
+
+    // Recently merged live in their own .list card (list view only), with the divider between.
+    const mergedWrap = $("#merged-wrap");
+    if (effectiveView === "list" && state.filter === "mine" && state.merged.length) {
+      $("#merged-body").innerHTML = state.merged.map(mergedRow).join("");
+      mergedWrap.classList.remove("hidden");
+    } else {
+      mergedWrap.classList.add("hidden");
+    }
   }
 
   async function load(force = false) {
@@ -1203,6 +1267,7 @@
     if (!needTargeted && !needAll) { render(); return; }
     state.loading = true;
     state.loadError = null;
+    $("#merged-wrap").classList.add("hidden");  // avoid a stale merged card flashing under the spinner
     listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     try {
       if (needTargeted) {
@@ -1247,13 +1312,21 @@
 
   // ---------- new task ----------
   function openNewTaskDialog() {
-    const repos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))].sort();
+    const local = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))].sort();
     const current = getCurrentRepo();
+    // In an org view, scope to that org's repos, with ones already added to Shipyard
+    // at the top (in the order they were added).
+    let repos = local;
+    if (ownerType(current) === "org") {
+      const orgRepos = local.filter((r) => r.split("/")[0] === current);
+      const added = [...new Set(getRepos().filter((r) => orgRepos.includes(r)))];
+      repos = [...added, ...orgRepos.filter((r) => !added.includes(r))];
+    }
     $("#nt-repo").innerHTML = repos.length
       ? repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("")
       : '<option value="">— no local clones found —</option>';
     const branch = $("#nt-branch");
-    branch.value = state.viewer ? `${state.viewer}/` : "";
+    branch.value = state.branchPrefix || (state.viewer ? `${state.viewer}/` : "");
     const status = $("#nt-status");
     status.textContent = "";
     status.classList.remove("error");
@@ -1430,11 +1503,6 @@
     })
   );
 
-  let searchTimer;
-  $("#search").addEventListener("input", (e) => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { state.search = e.target.value.trim(); render(); }, 150);
-  });
 
   // ---------- init ----------
   renderRepoSelect();

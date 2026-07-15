@@ -15,12 +15,14 @@ Run it from the dashboard directory and open the printed URL:
 Binds to localhost only. Nothing it reads or serves is written to the repo.
 
 Optional companion.config.json (next to this file) controls how the page
-opens VS Code:
+opens VS Code and prefills New task branch names:
 
     {
       "vscodeOpen": "cli",     // "cli" runs the code CLI; "scheme" (default)
                                // uses vscode://file links
-      "codeCliArgs": ["--disable-extension", "github.copilot-chat"]
+      "codeCliArgs": ["--disable-extension", "github.copilot-chat"],
+      "branchPrefix": "brady/" // New task branch-name prefix; empty (default)
+                               // falls back to your signed-in GitHub username
     }
 
 "cli" falls back to "scheme" when the code CLI is not on PATH.
@@ -38,7 +40,7 @@ from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
 CONFIG_FILE = "companion.config.json"
-DEFAULT_CONFIG = {"vscodeOpen": "scheme", "codeCliArgs": []}
+DEFAULT_CONFIG = {"vscodeOpen": "scheme", "codeCliArgs": [], "branchPrefix": ""}
 
 
 def load_config():
@@ -224,7 +226,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/worktrees.json":
             return self._json(discover(self.roots))
         if path == "/config.json":
-            return self._json({"vscodeOpen": self.config["vscodeOpen"]})
+            return self._json({"vscodeOpen": self.config["vscodeOpen"],
+                               "branchPrefix": self.config["branchPrefix"]})
         super().do_GET()
 
     def do_POST(self):
