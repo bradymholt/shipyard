@@ -1,6 +1,6 @@
 {
   "roots": ["~/dev"],
-  "vscodeOpen": "cli",
+  "vscodeOpen": "link",
   "codeCliArgs": ["--disable-extension", "github.copilot-chat"],
   "branchPrefix": "brady/"
 }
