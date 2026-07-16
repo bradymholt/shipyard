@@ -734,6 +734,8 @@
     changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',
   };
   const LAUNCH_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M9 1h6v6h-1.5V3.56L7.53 9.53 6.47 8.47 12.44 2.5H9V1ZM2.75 3.5H7V5H2.75a.25.25 0 0 0-.25.25v8c0 .138.112.25.25.25h8a.25.25 0 0 0 .25-.25V9H14.5v4.25A1.75 1.75 0 0 1 12.75 15h-8A1.75 1.75 0 0 1 3 13.25v-8A1.75 1.75 0 0 1 4.75 3.5Z"/></svg>';
+  // Arrow into a trunk bar — "move this branch into the main clone".
+  const MOVE_MAIN_ICON = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M7.28 3.22 11.06 7H2.5v1.5h8.56l-3.78 3.78 1.06 1.06L14.06 8 8.34 2.16 7.28 3.22Z"/><path d="M12.5 2H14v12h-1.5V2Z"/></svg>';
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1194,18 +1196,35 @@
       const title = wt.main
         ? `This branch is checked out in your main repo — open it in ${appName}`
         : `This branch is checked out in a worktree — open it in ${appName}`;
-      const btn = state.launcher.mode === "command"
+      const openBtn = state.launcher.mode === "command"
         ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${esc(title)}">${LAUNCH_ICON}</button>`
         : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${LAUNCH_ICON}</a>`;
-      return `<span class="wt-links">${btn}</span>`;
+      // A linked worktree can be relocated into the main clone; the main clone can't.
+      // The move removes this worktree and switches the main clone to the branch, so
+      // either side being dirty blocks it — name which one so the reason is clear.
+      let moveBtn = "";
+      if (!wt.main) {
+        const mainWt = Object.values(state.worktrees).find((w) => w.repo === repoName && w.main);
+        const mainOn = mainWt && mainWt.branch ? ` (on ${mainWt.branch})` : "";
+        const blocked = wt.dirty
+          ? "Can't move — this worktree has uncommitted changes. Commit or stash them here first."
+          : mainWt && mainWt.dirty
+            ? `Can't move — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`
+            : "";
+        moveBtn = blocked
+          ? `<button class="wt-link wt-move-main blocked" disabled title="${esc(blocked)}">${MOVE_MAIN_ICON}</button>`
+          : `<button class="wt-link wt-move-main" data-repo="${repo}" data-branch="${branch}" title="Move this branch to your main clone (removes this worktree) and open it in ${esc(appName)}">${MOVE_MAIN_ICON}</button>`;
+      }
+      return `<span class="wt-links">${openBtn}${moveBtn}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo,
     // unless the main repo has uncommitted changes (then it isn't currently possible).
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repoName && w.main);
+    const mainOn = mainWt && mainWt.branch ? ` (on ${mainWt.branch})` : "";
     const btn = mainWt && mainWt.dirty
-      ? `<button class="wt-link wt-main blocked" disabled title="Can't open — your main repo has uncommitted changes, so checking this branch out there isn't possible right now.">${LAUNCH_ICON}</button>`
-      : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main repo and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
+      ? `<button class="wt-link wt-main blocked" disabled title="${esc(`Can't check out here — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`)}">${LAUNCH_ICON}</button>`
+      : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main clone and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
     return `<span class="wt-links">${btn}</span>`;
   }
 
@@ -1697,10 +1716,11 @@
     const repo = $("#nt-repo").value;
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repo && w.main);
     const dirty = !!(mainWt && mainWt.dirty);
+    const mainOn = mainWt && mainWt.branch ? ` (on ${mainWt.branch})` : "";
     const btn = $("#nt-main");
     btn.disabled = dirty;
     btn.title = dirty
-      ? "Your main clone has uncommitted changes — commit or stash first"
+      ? `Your main clone${mainOn} has uncommitted changes — commit or stash them there first`
       : "Create the branch in your main clone (for heavy dev / running the server)";
   }
 
@@ -1828,6 +1848,29 @@
       } finally {
         mainBtn.disabled = false;
         mainBtn.innerHTML = original;
+      }
+      return;
+    }
+
+    const moveMainBtn = e.target.closest("button.wt-move-main");
+    if (moveMainBtn) {
+      moveMainBtn.disabled = true;
+      const original = moveMainBtn.innerHTML;
+      moveMainBtn.textContent = "…";
+      try {
+        const res = await companionPost(`move-to-main?repo=${encodeURIComponent(moveMainBtn.dataset.repo)}&branch=${encodeURIComponent(moveMainBtn.dataset.branch)}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          await openInApp(launchTarget(data));
+          loadWorktrees();
+        } else {
+          showError(data.error || `Couldn't move to your main clone (${res.status}).`, "Can't move to main clone");
+        }
+      } catch (err) {
+        showError(err.message, "Can't move to main clone");
+      } finally {
+        moveMainBtn.disabled = false;
+        moveMainBtn.innerHTML = original;
       }
       return;
     }

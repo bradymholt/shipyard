@@ -258,18 +258,15 @@ def worktrees_for_repo(repo_dir):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
             is_main = os.path.realpath(cur["path"]) == os.path.realpath(repo_dir)
-            # Only the main clone's dirty state is used (to block "open in main" when
-            # it can't switch), so skip a `git status` per linked worktree — that keeps
-            # polling cheap. "dirty" = uncommitted edits to tracked files; untracked
-            # files (node_modules, build output) carry across a switch, so they don't count.
-            if is_main:
-                try:
-                    dirty = has_tracked_changes(cur["path"])
-                except GitError as e:
-                    print(f"Warning: could not verify status for {cur['path']}: {e}")
-                    dirty = True
-            else:
-                dirty = False
+            # Dirty state gates the move/open actions: a dirty main clone can't switch
+            # branches, and a dirty linked worktree can't be removed to relocate its
+            # branch. "dirty" = uncommitted edits to tracked files; untracked files
+            # (node_modules, build output) carry across a switch, so they don't count.
+            try:
+                dirty = has_tracked_changes(cur["path"])
+            except GitError as e:
+                print(f"Warning: could not verify status for {cur['path']}: {e}")
+                dirty = True
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
                         "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty})
             cur = {}
@@ -418,6 +415,37 @@ def open_in_main(repo, branch, roots):
     return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
 
 
+def move_to_main(repo, branch, roots):
+    """Move a branch out of its linked worktree and into the main clone: remove the
+    worktree, then switch the main clone to the branch. Guarded on both ends — won't
+    switch a dirty main clone, and lets `git worktree remove` refuse a dirty worktree
+    (its uncommitted/untracked work would otherwise be lost) rather than forcing it."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    branch, error = validate_branch(branch)
+    if error:
+        return {"ok": False, "error": error}
+    here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+    if not here:
+        return {"ok": False, "error": f"Branch {branch} isn't checked out in a worktree."}
+    if here["main"]:  # already the main clone's checkout — nothing to move
+        return {"ok": True, "path": here["path"], "workspace": here.get("workspace"), "moved": False}
+    try:
+        if has_tracked_changes(clone):
+            return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
+    except GitError as e:
+        return {"ok": False, "error": f"Could not verify the main clone's status: {e}"}
+    error = mutate_git(clone, "worktree", "remove", here["path"], timeout=60)
+    if error:
+        return {"ok": False, "error": "Couldn't remove the worktree — commit or stash its "
+                f"changes first, then retry.\n{error}"}
+    error = mutate_git(clone, "switch", branch, timeout=60)
+    if error and try_git(clone, "branch", "--show-current").strip() != branch:
+        return {"ok": False, "error": error}
+    return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
+
+
 def new_branch_in_main(repo, branch, roots):
     """Create a new branch off the default branch, checked out in the main clone
     (instead of a worktree). Guarded: won't switch a main clone with uncommitted work."""
@@ -511,7 +539,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/open-app"}:
+        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-main", "/open-app"}:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
@@ -530,6 +558,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             repo = (q.get("repo") or [""])[0]
             branch = (q.get("branch") or [""])[0]
             result = open_in_main(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/move-to-main":
+            repo = (q.get("repo") or [""])[0]
+            branch = (q.get("branch") or [""])[0]
+            result = move_to_main(repo, branch, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/open-app":
             target = (q.get("path") or [""])[0]
