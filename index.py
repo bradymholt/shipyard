@@ -303,17 +303,11 @@ def has_tracked_changes(work_dir):
     return bool(git(work_dir, "status", "--porcelain", "--untracked-files=no").strip())
 
 
-def has_local_work(work_dir):
-    # Tracked edits OR new (non-ignored) untracked files — work that'd be lost if
-    # this checkout is discarded. Ignored files (node_modules, build) don't count.
-    return bool(git(work_dir, "status", "--porcelain").strip())
-
-
 def open_in_main(repo, branch, roots):
     """Check the branch out in the main clone (for heavy dev / running the server
     where build caches and node_modules live) instead of an isolated worktree.
-    Guarded: won't switch a main clone with uncommitted work, and won't discard a
-    worktree that has uncommitted work."""
+    Guarded: won't switch a main clone with uncommitted work. If the branch is
+    already checked out in a linked worktree, open that checkout instead."""
     clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
@@ -321,26 +315,14 @@ def open_in_main(repo, branch, roots):
     if error:
         return {"ok": False, "error": error}
     here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
-    if here and here.get("main"):  # already checked out in the main clone
-        return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": False}
+    if here:  # already checked out somewhere — open it instead of moving/removing it
+        return {"ok": True, "path": here["path"], "workspace": here.get("workspace"), "moved": False}
     try:
         main_dirty = has_tracked_changes(clone)
     except GitError as e:
         return {"ok": False, "error": f"Could not verify the main clone's status: {e}"}
     if main_dirty:
         return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
-    if here:  # branch lives in a linked worktree
-        try:
-            worktree_dirty = has_local_work(here["path"])
-        except GitError as e:
-            return {"ok": False, "error": f"Could not verify the worktree's status: {e}"}
-        if worktree_dirty:
-            return {"ok": False, "error": f"The worktree for {branch} has uncommitted changes. Commit or stash them first."}
-        # --force clears ignored build artifacts (node_modules etc.); the branch's commits are kept.
-        r = subprocess.run(["git", "-C", clone, "worktree", "remove", "--force", here["path"]],
-                           capture_output=True, text=True, timeout=60)
-        if r.returncode != 0:
-            return {"ok": False, "error": (r.stderr or "Couldn't remove the worktree.").strip()}
     try_git(clone, "fetch", "origin", branch)  # best effort so the ref is present
     sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
     r = sw(branch)
