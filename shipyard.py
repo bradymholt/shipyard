@@ -455,7 +455,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
     session_token = ""
-    STATIC_PATHS = {"/", "/index.html", "/docs/list-view.png", "/docs/board-view.png"}
+    STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/list-view.png", "/docs/board-view.png"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
