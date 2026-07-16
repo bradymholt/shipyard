@@ -36,6 +36,7 @@ import http.server
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -122,12 +123,28 @@ def normalize_roots(roots):
     return normalized
 
 
+class GitError(RuntimeError):
+    pass
+
+
 def git(repo, *args):
     try:
         r = subprocess.run(["git", "-C", repo, *args],
                            capture_output=True, text=True, timeout=10)
-        return r.stdout if r.returncode == 0 else ""
-    except Exception:
+    except subprocess.TimeoutExpired as e:
+        raise GitError(f"git {' '.join(args)} timed out after {e.timeout} seconds") from e
+    except OSError as e:
+        raise GitError(f"could not run git {' '.join(args)}: {e}") from e
+    if r.returncode != 0:
+        detail = (r.stderr or r.stdout or f"git exited with status {r.returncode}").strip()
+        raise GitError(detail)
+    return r.stdout
+
+
+def try_git(repo, *args):
+    try:
+        return git(repo, *args)
+    except GitError:
         return ""
 
 
@@ -162,9 +179,14 @@ def workspace_in(path):
 
 
 def worktrees_for_repo(repo_dir):
-    repo = parse_origin(git(repo_dir, "config", "--get", "remote.origin.url"))
+    repo = parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url"))
     out, cur = [], {}
-    for line in git(repo_dir, "worktree", "list", "--porcelain").splitlines() + [""]:
+    try:
+        worktree_list = git(repo_dir, "worktree", "list", "--porcelain")
+    except GitError as e:
+        print(f"Warning: could not inspect worktrees for {repo_dir}: {e}")
+        return []
+    for line in worktree_list.splitlines() + [""]:
         if line.startswith("worktree "):
             cur = {"path": line[9:]}
         elif line.startswith("branch "):
@@ -175,7 +197,14 @@ def worktrees_for_repo(repo_dir):
             # it can't switch), so skip a `git status` per linked worktree — that keeps
             # polling cheap. "dirty" = uncommitted edits to tracked files; untracked
             # files (node_modules, build output) carry across a switch, so they don't count.
-            dirty = has_tracked_changes(cur["path"]) if is_main else False
+            if is_main:
+                try:
+                    dirty = has_tracked_changes(cur["path"])
+                except GitError as e:
+                    print(f"Warning: could not verify status for {cur['path']}: {e}")
+                    dirty = True
+            else:
+                dirty = False
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
                         "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty})
             cur = {}
@@ -206,18 +235,18 @@ def discover(roots):
 
 def find_clone(repo, roots):
     for repo_dir in clone_dirs(roots):
-        if parse_origin(git(repo_dir, "config", "--get", "remote.origin.url")) == repo:
+        if parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url")) == repo:
             return repo_dir
     return None
 
 
 def default_branch(clone):
-    ref = git(clone, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
+    ref = try_git(clone, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
     prefix = "refs/remotes/origin/"
     if ref.startswith(prefix):
         return ref[len(prefix):]
     for b in ("main", "master"):
-        if git(clone, "rev-parse", "--verify", f"origin/{b}").strip():
+        if try_git(clone, "rev-parse", "--verify", f"origin/{b}").strip():
             return b
     return "main"
 
@@ -234,7 +263,7 @@ def new_task_worktree(repo, branch, roots):
     if existing:
         return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
     base = default_branch(clone)
-    git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
+    try_git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
     path = worktree_path(clone, branch)
     add = lambda *a: subprocess.run(["git", "-C", clone, "worktree", "add", *a],
                                     capture_output=True, text=True, timeout=120)
@@ -294,17 +323,25 @@ def open_in_main(repo, branch, roots):
     here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
     if here and here.get("main"):  # already checked out in the main clone
         return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": False}
-    if has_tracked_changes(clone):
+    try:
+        main_dirty = has_tracked_changes(clone)
+    except GitError as e:
+        return {"ok": False, "error": f"Could not verify the main clone's status: {e}"}
+    if main_dirty:
         return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
     if here:  # branch lives in a linked worktree
-        if has_local_work(here["path"]):
+        try:
+            worktree_dirty = has_local_work(here["path"])
+        except GitError as e:
+            return {"ok": False, "error": f"Could not verify the worktree's status: {e}"}
+        if worktree_dirty:
             return {"ok": False, "error": f"The worktree for {branch} has uncommitted changes. Commit or stash them first."}
         # --force clears ignored build artifacts (node_modules etc.); the branch's commits are kept.
         r = subprocess.run(["git", "-C", clone, "worktree", "remove", "--force", here["path"]],
                            capture_output=True, text=True, timeout=60)
         if r.returncode != 0:
             return {"ok": False, "error": (r.stderr or "Couldn't remove the worktree.").strip()}
-    git(clone, "fetch", "origin", branch)  # best effort so the ref is present
+    try_git(clone, "fetch", "origin", branch)  # best effort so the ref is present
     sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
     r = sw(branch)
     if r.returncode != 0:  # no local branch yet → create one tracking the remote
@@ -326,10 +363,14 @@ def new_branch_in_main(repo, branch, roots):
     existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
     if existing:  # already checked out somewhere → just open it
         return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
-    if has_tracked_changes(clone):
+    try:
+        main_dirty = has_tracked_changes(clone)
+    except GitError as e:
+        return {"ok": False, "error": f"Could not verify the main clone's status: {e}"}
+    if main_dirty:
         return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
     base = default_branch(clone)
-    git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
+    try_git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
     sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
     r = sw("-c", branch, f"origin/{base}")
     if r.returncode != 0:  # branch may already exist locally → check it out instead
@@ -342,27 +383,67 @@ def new_branch_in_main(repo, branch, roots):
 class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
+    session_token = ""
+    STATIC_PATHS = {"/", "/index.html", "/docs/list-view.png", "/docs/board-view.png"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
+    def _allowed_hosts(self):
+        port = self.server.server_port
+        hosts = {f"localhost:{port}", f"127.0.0.1:{port}"}
+        if port == 80:
+            hosts.update({"localhost", "127.0.0.1"})
+        return hosts
+
+    def _host_is_allowed(self):
+        return self.headers.get("Host", "").lower() in self._allowed_hosts()
+
+    def _mutation_is_authorized(self):
+        host = self.headers.get("Host", "").lower()
+        if not self._host_is_allowed():
+            return False
+        if self.headers.get("Origin", "").lower() != f"http://{host}":
+            return False
+        supplied = self.headers.get("X-Shipyard-Token", "")
+        return bool(supplied and secrets.compare_digest(supplied, self.session_token))
+
+    def _not_found(self):
+        self.send_error(404)
+
     def do_GET(self):
+        if not self._host_is_allowed():
+            return self._json({"ok": False, "error": "Invalid Host header."}, 403)
         path = urlparse(self.path).path
         if path == "/worktrees.json":
             return self._json(discover(self.roots))
         if path == "/config.json":
             return self._json({"vscodeOpen": self.config["vscodeOpen"],
-                               "branchPrefix": self.config["branchPrefix"]})
-        super().do_GET()
+                               "branchPrefix": self.config["branchPrefix"],
+                               "companionToken": self.session_token})
+        if path in self.STATIC_PATHS:
+            return super().do_GET()
+        return self._not_found()
+
+    def do_HEAD(self):
+        if not self._host_is_allowed():
+            return self.send_error(403, "Invalid Host header")
+        if urlparse(self.path).path in self.STATIC_PATHS:
+            return super().do_HEAD()
+        return self._not_found()
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/open-vscode"}:
+            return self._not_found()
+        if not self._mutation_is_authorized():
+            return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
         q = parse_qs(parsed.query)
         if parsed.path == "/new-task":
             repo = (q.get("repo") or [""])[0]
@@ -383,8 +464,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             target = (q.get("path") or [""])[0]
             result = open_vscode(target, self.roots, self.config)
             return self._json(result, 200 if result.get("ok") else 500)
-        self.send_response(404)
-        self.end_headers()
+        return self._not_found()
 
     def log_message(self, *args):
         pass
@@ -402,6 +482,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     Handler.roots = roots
     Handler.config = config
+    Handler.session_token = secrets.token_urlsafe(32)
     httpd = http.server.HTTPServer(("127.0.0.1", port),
                                    functools.partial(Handler, directory=here))
     print(f"Shipyard companion → http://localhost:{port}")

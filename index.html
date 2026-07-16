@@ -573,6 +573,7 @@
     worktrees: {},        // "repo#branch" -> { path, workspace }, from the local companion
     companion: false,     // true when the local companion answered (enables worktree actions)
     companionChecked: false,
+    companionToken: "",  // per-process token required for local companion mutations
     openMethod: "scheme", // "scheme" (vscode:// links) or "cli" (companion runs code CLI)
     branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
@@ -885,6 +886,36 @@
   // Populated only when the local companion (index.py) is serving the page;
   // on GitHub Pages the fetch fails and worktree links stay off.
   let lastWtSig = "";  // signature of the last worktrees.json, so polling only re-renders on change
+  async function loadCompanionConfig() {
+    try {
+      const cfg = await fetch("config.json", { cache: "no-store" });
+      if (!cfg.ok) return false;
+      const c = await cfg.json();
+      if (!c.companionToken) return false;
+      state.openMethod = c.vscodeOpen || "scheme";
+      state.branchPrefix = c.branchPrefix || "";
+      state.companionToken = c.companionToken;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function companionPost(url, retry = true) {
+    if (!state.companionToken && !(await loadCompanionConfig())) {
+      throw new Error("Companion session unavailable. Refresh the page and try again.");
+    }
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "X-Shipyard-Token": state.companionToken },
+    });
+    // The companion may have restarted and generated a new in-memory token.
+    if (res.status === 403 && retry && await loadCompanionConfig()) {
+      return companionPost(url, false);
+    }
+    return res;
+  }
+
   async function loadWorktrees() {
     try {
       const res = await fetch("worktrees.json", { cache: "no-store" });
@@ -895,15 +926,7 @@
         }
         state.worktrees = map;
         lastWtSig = JSON.stringify(map);
-        state.companion = true;
-        try {
-          const cfg = await fetch("config.json", { cache: "no-store" });
-          if (cfg.ok) {
-            const c = await cfg.json();
-            state.openMethod = c.vscodeOpen || "scheme";
-            state.branchPrefix = c.branchPrefix || "";
-          }
-        } catch { /* older companion without config.json: keep vscode:// links */ }
+        state.companion = await loadCompanionConfig();
       }
     } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
     finally {
@@ -946,7 +969,7 @@
       return;
     }
     try {
-      const res = await fetch(`open-vscode?path=${encodeURIComponent(target)}`, { method: "POST" });
+      const res = await companionPost(`open-vscode?path=${encodeURIComponent(target)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) showError(data.error || `Open in VS Code failed (${res.status}).`);
     } catch (err) {
@@ -1420,7 +1443,7 @@
     $("#nt-status").textContent = toMain ? "Creating branch in main clone…" : "Creating worktree…";
     try {
       const endpoint = toMain ? "new-branch-main" : "new-task";
-      const res = await fetch(`${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`, { method: "POST" });
+      const res = await companionPost(`${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         await openInVSCode(data.workspace || data.path);
@@ -1498,7 +1521,7 @@
       const original = mainBtn.innerHTML;
       mainBtn.textContent = "…";
       try {
-        const res = await fetch(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`, { method: "POST" });
+        const res = await companionPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
           await openInVSCode(data.workspace || data.path);
