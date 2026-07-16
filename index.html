@@ -153,39 +153,28 @@
   /* ---------- page body ---------- */
   .container { max-width: 71.25rem; margin: 0 auto; padding: 1rem 1.25rem 3.5rem; }
 
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 0.625rem;
-    padding: 1rem 1.125rem;
-    margin-bottom: 1rem;
-  }
-  .panel-row { display: flex; gap: 0.625rem; align-items: center; flex-wrap: wrap; }
-  .panel-row + .panel-row { margin-top: 0.75rem; }
-  .panel label {
-    font: 700 0.6875rem var(--display); letter-spacing: .05em; text-transform: uppercase;
-    color: var(--fg); min-width: 6.875rem;
-  }
   #token-input { font: 400 0.75rem var(--mono); }
   .hint { color: var(--fg-muted); font-size: 0.75rem; }
-  .hint code, .panel code { font-family: var(--mono); font-size: 0.6875rem; background: var(--bg-inset); padding: 0 0.3125rem; border-radius: 0.25rem; }
+  .hint code { font-family: var(--mono); font-size: 0.6875rem; background: var(--bg-inset); padding: 0 0.3125rem; border-radius: 0.25rem; }
   .hidden { display: none !important; }
 
-  dialog#new-task-dialog, dialog#error-dialog {
+  dialog#new-task-dialog, dialog#error-dialog, dialog#settings-dialog {
     background: var(--surface); color: var(--fg);
     border: 1px solid var(--border); border-radius: 0.625rem;
     box-shadow: 0 8px 30px rgba(18,38,58,.18); padding: 1.25rem; width: min(27.5rem, 92vw);
   }
-  dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop { background: rgba(18,38,58,.45); }
+  dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop, dialog#settings-dialog::backdrop { background: rgba(18,38,58,.45); }
   #error-dialog h2 { margin: 0 0 0.375rem; font: 700 1rem var(--sans); }
   #error-dialog p { margin: 0 0 1rem; color: var(--fg-muted); font-size: 0.875rem; white-space: pre-wrap; }
-  .modal-actions { display: flex; justify-content: flex-end; }
-  #new-task-form h2 { margin: 0 0 0.25rem; font: 700 1.0625rem var(--sans); }
+  .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+  #new-task-form h2, #settings-form h2 { margin: 0 0 0.25rem; font: 700 1.0625rem var(--sans); }
   #new-task-form .hint { display: block; margin-bottom: 0.875rem; }
+  #settings-form .scope-hint { display: block; margin: 0.375rem 0 0; }
+  .settings-divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
   .nt-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--fg-muted); }
   .nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
   .nt-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
-  .nt-actions #nt-status { flex: 1; margin: 0; }
+  .nt-actions #nt-status, .nt-actions #token-status, .nt-actions .spacer { flex: 1; margin: 0; }
   .nt-actions #nt-status.error { color: var(--red-text); }
 
   /* ---------- list ---------- */
@@ -515,25 +504,30 @@
     <div class="modal-actions"><button type="button" id="error-close" class="primary">OK</button></div>
   </dialog>
 
-  <div id="settings" class="panel hidden">
-    <div class="panel-row">
-      <label for="token-input">Access token</label>
-      <input type="password" id="token-input" placeholder="ghp_… or github_pat_…" size="40" autocomplete="off">
-      <button id="save-token-btn" class="primary">Save</button>
-      <button id="clear-token-btn">Clear</button>
-      <span id="token-status" class="hint"></span>
-    </div>
-    <div class="panel-row">
-      <span></span>
-      <span class="hint">Needs <code>repo</code> scope (classic) or Pull requests: read and write (fine-grained; write is used for the auto-merge toggle and marking drafts ready). Your token and recent dashboard data stay in this browser.</span>
-    </div>
-    <div class="panel-row">
-      <label for="add-repo-input">Add view</label>
-      <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username" size="30">
-      <button id="add-repo-btn">Add</button>
-      <button id="remove-repo-btn">Remove current</button>
-    </div>
-  </div>
+  <dialog id="settings-dialog">
+    <form id="settings-form" method="dialog">
+      <h2>Settings</h2>
+      <label class="nt-field">Access token
+        <input type="password" id="token-input" placeholder="ghp_… or github_pat_…" autocomplete="off">
+      </label>
+      <p class="hint scope-hint">Needs <code>repo</code> scope (classic) or Pull requests: read and write (fine-grained; write is used for the auto-merge toggle and marking drafts ready). Your token and recent dashboard data stay in this browser.</p>
+      <div class="nt-actions">
+        <span id="token-status" class="hint"></span>
+        <button type="button" id="clear-token-btn">Clear</button>
+        <button type="button" id="save-token-btn" class="primary">Save</button>
+      </div>
+      <hr class="settings-divider">
+      <label class="nt-field">Add view
+        <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username">
+      </label>
+      <div class="nt-actions">
+        <span class="spacer"></span>
+        <button type="button" id="remove-repo-btn">Remove current</button>
+        <button type="button" id="add-repo-btn" class="primary">Add</button>
+      </div>
+      <div class="modal-actions"><button type="button" id="settings-close">Done</button></div>
+    </form>
+  </dialog>
 
   <div class="list-head">
     <span id="list-title">Open pull requests</span>
@@ -1700,7 +1694,8 @@
     $("#token-status").textContent = getToken() ? "Token saved ✓" : "No token saved";
   }
 
-  $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
+  $("#settings-btn").addEventListener("click", () => $("#settings-dialog").showModal());
+  $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
   $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
 
@@ -1973,7 +1968,7 @@
     if (restored) render();
     load(restored);
   } else {
-    $("#settings").classList.remove("hidden");
+    $("#settings-dialog").showModal();
   }
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
