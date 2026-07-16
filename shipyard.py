@@ -155,6 +155,14 @@ def normalize_roots(roots):
     return normalized
 
 
+def warn_unavailable_roots(roots):
+    for root in roots:
+        if not os.path.exists(root):
+            print(f"Warning: scan root does not exist and will be skipped: {root}")
+        elif not os.path.isdir(root):
+            print(f"Warning: scan root is not a directory and will be skipped: {root}")
+
+
 class GitError(RuntimeError):
     pass
 
@@ -542,6 +550,7 @@ def main():
     if not roots:
         sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
                  f'or pass them on the command line: python3 shipyard.py ~/dev')
+    warn_unavailable_roots(roots)
     here = os.path.dirname(os.path.abspath(__file__))
     Handler.roots = roots
     Handler.config = config
