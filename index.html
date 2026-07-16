@@ -483,7 +483,7 @@
   <dialog id="new-task-dialog">
     <form id="new-task-form" method="dialog">
       <h2>New branch</h2>
-      <p class="hint">Creates a new branch off the default branch and opens it in your configured app — in an isolated worktree, or checked out in your main clone.</p>
+      <p class="hint">Creates a new branch off the default branch and opens it in your configured app — checked out in your main clone, or in an isolated worktree.</p>
       <label class="nt-field">Repository
         <select id="nt-repo"></select>
       </label>
@@ -493,8 +493,8 @@
       <div class="nt-actions">
         <span id="nt-status" class="hint"></span>
         <button type="button" id="nt-cancel">Cancel</button>
-        <button type="submit" id="nt-main" data-dest="main">Main clone</button>
-        <button type="submit" id="nt-worktree" class="primary" data-dest="worktree">Worktree</button>
+        <button type="submit" id="nt-worktree" data-dest="worktree">Worktree</button>
+        <button type="submit" id="nt-main" class="primary" data-dest="main">Main clone</button>
       </div>
     </form>
   </dialog>
@@ -1708,6 +1708,12 @@
 
   $("#new-task-btn").addEventListener("click", openNewTaskDialog);
   $("#nt-repo").addEventListener("change", updateNtMainBtn);
+  $("#nt-branch").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    e.preventDefault();
+    const mainBtn = $("#nt-main");
+    (mainBtn.disabled ? $("#nt-worktree") : mainBtn).click();
+  });
   $("#nt-cancel").addEventListener("click", () => $("#new-task-dialog").close());
   $("#error-close").addEventListener("click", () => $("#error-dialog").close());
   $("#new-task-form").addEventListener("submit", async (e) => {
@@ -1717,8 +1723,8 @@
     $("#nt-status").classList.remove("error");
     if (!repo) return ntError("No repository selected.");
     if (!branch || branch.endsWith("/")) return ntError("Enter a branch name.");
-    const toMain = e.submitter?.dataset.dest === "main";
-    const submitBtn = e.submitter || $("#nt-worktree");
+    const submitBtn = e.submitter || ($("#nt-main").disabled ? $("#nt-worktree") : $("#nt-main"));
+    const toMain = submitBtn.dataset.dest === "main";
     submitBtn.disabled = true;
     $("#nt-status").textContent = toMain ? "Creating branch in main clone…" : "Creating worktree…";
     try {
