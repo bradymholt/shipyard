@@ -44,7 +44,7 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 
 ## Features
 
-- **Action-focused views:** My PRs, Waiting on my review, and All open, with priority, updated, and created sorting.
+- **Action-focused views:** My PRs, Reviews, and All open, with priority, updated, and created sorting.
 - **List and board layouts:** reviewer state, drafts, approvals, and ready-to-merge work at a glance.
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your two most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.

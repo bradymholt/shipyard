@@ -465,7 +465,7 @@
   <div class="toolbar">
     <div class="tabs">
       <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
-      <button class="tab" data-filter="review">Waiting on my review <span class="count" id="count-review">–</span></button>
+      <button class="tab" data-filter="review">Reviews <span class="count hidden" id="count-review"></span></button>
       <button class="tab" data-filter="all">All open <span class="count hidden" id="count-all"></span></button>
     </div>
     <div class="spacer"></div>
@@ -570,7 +570,7 @@
     FILTER: "ghpr.filter",
     CACHE_PREFIX: "ghpr.cache.",
   };
-  const CACHE_VERSION = 3;
+  const CACHE_VERSION = 4;
   const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
@@ -588,7 +588,7 @@
     merged: [],           // my last couple of merged PRs, shown as context on the My PRs tab
     reviewedPrs: [],      // open PRs I reviewed, loaded lazily for the review board
     reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
-    reviewBoardLoaded: false,
+    reviewHistoryLoaded: false,
     targetedLoaded: false,
     allPrs: null,         // full open set, fetched lazily the first time "All open" is viewed
     total: 0,             // total open count, for the All-open truncation note
@@ -606,7 +606,7 @@
     branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
     targetedFresh: false,
-    reviewBoardFresh: false,
+    reviewHistoryFresh: false,
     allFresh: false,
     githubUpdatedAt: null,
     githubRefreshFailed: false,
@@ -617,11 +617,11 @@
     state.merged = [];
     state.reviewedPrs = [];
     state.reviewedMerged = [];
-    state.reviewBoardLoaded = false;
+    state.reviewHistoryLoaded = false;
     state.targetedLoaded = false;
     state.allPrs = null;
     state.targetedFresh = false;
-    state.reviewBoardFresh = false;
+    state.reviewHistoryFresh = false;
     state.allFresh = false;
     state.githubUpdatedAt = null;
     state.githubRefreshFailed = false;
@@ -652,7 +652,7 @@
       state.merged = cached.merged;
       state.reviewedPrs = cached.reviewedPrs;
       state.reviewedMerged = cached.reviewedMerged;
-      state.reviewBoardLoaded = cached.reviewBoardLoaded === true;
+      state.reviewHistoryLoaded = cached.reviewHistoryLoaded === true;
       state.targetedLoaded = true;
       state.allPrs = Array.isArray(cached.allPrs) ? cached.allPrs : null;
       state.total = Number.isFinite(cached.total) ? cached.total : 0;
@@ -678,7 +678,7 @@
         merged: state.merged,
         reviewedPrs: state.reviewedPrs,
         reviewedMerged: state.reviewedMerged,
-        reviewBoardLoaded: state.reviewBoardLoaded,
+        reviewHistoryLoaded: state.reviewHistoryLoaded,
         allPrs: state.allPrs,
         total: state.total,
       }));
@@ -944,7 +944,7 @@
     return { viewer: mine.viewer || review.viewer || merged.viewer, prs, merged: merged.prs.slice(0, 2) };
   }
 
-  async function fetchReviewBoard() {
+  async function fetchReviewHistory() {
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [reviewed, reviewedMerged] = await Promise.all([
       searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
@@ -1035,9 +1035,13 @@
     return (pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer);
   }
 
-  function reviewBoardItem(pr) {
+  function reviewItem(pr) {
     if (pr.author?.login === state.viewer) return false;
-    return reviewRequestedForViewer(pr) || !!pr.viewerLatestReview;
+    const key = `${pr.repository?.nameWithOwner || ""}#${pr.number}`;
+    const reviewedByViewer = state.reviewedPrs.some((reviewed) =>
+      `${reviewed.repository?.nameWithOwner || ""}#${reviewed.number}` === key
+    );
+    return reviewRequestedForViewer(pr) || reviewedByViewer;
   }
 
   function viewerReviewBadge(pr) {
@@ -1247,6 +1251,9 @@
     const repoPrefix = repoName && repoName !== getCurrentRepo()
       ? `<a href="https://github.com/${esc(repoName)}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> `
       : "";
+    const badge = state.filter === "review"
+      ? (isContext ? "" : viewerReviewBadge(pr))
+      : reviewBadge(pr);
     return `
       <div class="pr-row ${isContext ? "context" : ""}" style="padding-left: ${depth > 0 ? 23 + (depth - 1) * 29 : 16}px">
         ${elbow}
@@ -1264,15 +1271,14 @@
           ${comments}
           <span class="reviewers">${state.filter === "review" ? authorAvatar(pr) : buildReviewers(pr)}</span>
           ${worktreeLinks(pr)}
-          ${reviewBadge(pr)}
+          ${badge}
         </div>
       </div>`;
   }
 
   function matchesFilter(pr) {
     if (state.filter === "mine" && pr.author?.login !== state.viewer) return false;
-    if (state.filter === "review" &&
-        !(pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)) return false;
+    if (state.filter === "review" && !reviewItem(pr)) return false;
     return true;
   }
 
@@ -1415,9 +1421,15 @@
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
     $("#count-mine").textContent = state.prs.filter((p) => p.author?.login === state.viewer).length;
-    $("#count-review").textContent = state.prs.filter((p) =>
+    const reviewCount = state.prs.filter((p) =>
       (p.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)
     ).length;
+    const reviewCountEl = $("#count-review");
+    reviewCountEl.textContent = reviewCount || "";
+    reviewCountEl.classList.toggle("hidden", reviewCount === 0);
+    reviewCountEl.title = reviewCount
+      ? `${reviewCount} pull request${reviewCount === 1 ? "" : "s"} ${reviewCount === 1 ? "needs" : "need"} your review`
+      : "";
     const allCount = $("#count-all");
     allCount.textContent = state.allPrs ? state.allPrs.length : "";
     allCount.classList.toggle("hidden", !state.allPrs);
@@ -1426,12 +1438,12 @@
     const selectedView = state.filter === "review" ? state.reviewView : state.view;
     const effectiveView = boardAllowed && selectedView === "board" ? "board" : "list";
     const reviewBoard = state.filter === "review" && effectiveView === "board";
-    const reviewBoardSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
+    const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
       [`${pr.repository?.nameWithOwner || ""}#${pr.number}`, pr]
     )).values()];
     const dataset = state.filter === "all"
       ? (state.allPrs || [])
-      : reviewBoard ? reviewBoardSet : state.prs;
+      : state.filter === "review" ? reviewSet : state.prs;
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
@@ -1441,7 +1453,7 @@
     let html = "", count = 0;
     if (effectiveView === "board") {
       const { parents } = buildStacks(dataset);
-      const matches = dataset.filter(reviewBoard ? reviewBoardItem : matchesFilter);
+      const matches = dataset.filter(reviewBoard ? reviewItem : matchesFilter);
       count = matches.length;
       const laneItems = reviewBoard ? [[], []] : [[], [], []];
       for (const pr of matches) laneItems[reviewBoard ? reviewLaneOf(pr) : laneOf(pr)].push(pr);
@@ -1495,7 +1507,7 @@
         return `
         <div class="lane">
           <div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>
-          ${laneHtml || (reviewBoard && i === 1 && !state.reviewBoardLoaded
+          ${laneHtml || (reviewBoard && i === 1 && !state.reviewHistoryLoaded
             ? '<div class="lane-empty">Loading…</div>'
             : '<div class="lane-empty">None</div>')}
         </div>`;
@@ -1539,29 +1551,39 @@
     const truncated = state.filter === "all" && state.total > dataset.length
       ? ` (most recent ${dataset.length} of ${state.total})` : "";
     $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}${esc(truncated)}`;
-    listBody.innerHTML = html || '<div class="empty">No pull requests match.</div>';
+    const reviewHistoryLoading = state.filter === "review" && !state.reviewHistoryLoaded;
+    listBody.innerHTML = html || (reviewHistoryLoading
+      ? state.loadError
+        ? `<div class="error-box">${esc(state.loadError)}</div>`
+        : '<div class="loading"><div class="spinner"></div>Loading review history…</div>'
+      : '<div class="empty">No pull requests match.</div>');
 
     // Recently merged live in their own .list card (list view only), with the divider between.
     const mergedWrap = $("#merged-wrap");
-    if (effectiveView === "list" && state.filter === "mine" && state.merged.length) {
-      $("#merged-body").innerHTML = state.merged.map(mergedRow).join("");
+    const listMerged = state.filter === "mine"
+      ? state.merged
+      : state.filter === "review"
+        ? state.reviewedMerged.filter((pr) => pr.author?.login !== state.viewer)
+        : [];
+    if (effectiveView === "list" && listMerged.length) {
+      $("#merged-body").innerHTML = listMerged.map(mergedRow).join("");
       mergedWrap.classList.remove("hidden");
     } else {
       mergedWrap.classList.add("hidden");
     }
   }
 
-  function reviewBoardActive() {
-    return state.filter === "review" && state.reviewView === "board";
+  function reviewHistoryActive() {
+    return state.filter === "review";
   }
 
   async function load(force = false) {
     if (state.loading) return;
     const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
-    const needReviewBoard = reviewBoardActive() &&
-      (force || !state.reviewBoardLoaded || !state.reviewBoardFresh);
+    const needReviewHistory = reviewHistoryActive() &&
+      (force || !state.reviewHistoryLoaded || !state.reviewHistoryFresh);
     const needAll = state.filter === "all" && (force || !state.allPrs || !state.allFresh);
-    if (!needTargeted && !needReviewBoard && !needAll) { render(); return; }
+    if (!needTargeted && !needReviewHistory && !needAll) { render(); return; }
     state.loading = true;
     state.loadError = null;
     state.githubRefreshFailed = false;
@@ -1582,12 +1604,12 @@
           state.targetedFresh = true;
         }));
       }
-      if (needReviewBoard) {
-        requests.push(fetchReviewBoard().then(({ prs, merged }) => {
+      if (needReviewHistory) {
+        requests.push(fetchReviewHistory().then(({ prs, merged }) => {
           state.reviewedPrs = prs;
           state.reviewedMerged = merged;
-          state.reviewBoardLoaded = true;
-          state.reviewBoardFresh = true;
+          state.reviewHistoryLoaded = true;
+          state.reviewHistoryFresh = true;
         }));
       }
       if (needAll) {
@@ -1612,7 +1634,7 @@
       render();
     } finally {
       state.loading = false;
-      if (reviewBoardActive() && !state.reviewBoardLoaded && !state.loadError) load();
+      if (reviewHistoryActive() && !state.reviewHistoryLoaded && !state.loadError) load();
     }
   }
 
@@ -1856,6 +1878,7 @@
     tab.addEventListener("click", () => {
       state.filter = tab.dataset.filter;
       localStorage.setItem(LS.FILTER, state.filter);
+      render();
       load();
     })
   );
