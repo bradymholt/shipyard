@@ -491,7 +491,7 @@
   <dialog id="new-task-dialog">
     <form id="new-task-form" method="dialog">
       <h2>Start work</h2>
-      <p class="hint">Opens your configured app on a fresh branch off the default branch — in your main clone or an isolated worktree. Leave the name blank to just open the default branch for a blank slate.</p>
+      <p class="hint">Opens your configured app on a fresh branch off the default branch, checked out in your main clone. Leave the name blank to just open the default branch for a blank slate.</p>
       <label class="nt-field">Repository
         <select id="nt-repo"></select>
       </label>
@@ -501,8 +501,7 @@
       <div class="nt-actions">
         <span id="nt-status" class="hint"></span>
         <button type="button" id="nt-cancel">Cancel</button>
-        <button type="submit" id="nt-worktree" data-dest="worktree">Worktree</button>
-        <button type="submit" id="nt-main" class="primary" data-dest="main">Main clone</button>
+        <button type="submit" id="nt-main" class="primary">Create branch</button>
       </div>
     </form>
   </dialog>
@@ -616,7 +615,6 @@
     companionChecked: false,
     companionToken: "",  // per-process token required for local companion mutations
     launcher: DEFAULT_LAUNCHER,
-    branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
     targetedFresh: false,
     reviewHistoryFresh: false,
@@ -1102,7 +1100,6 @@
       const c = await cfg.json();
       if (!c.companionToken) return false;
       state.launcher = c.launcher || DEFAULT_LAUNCHER;
-      state.branchPrefix = c.branchPrefix || "";
       state.companionToken = c.companionToken;
       return true;
     } catch {
@@ -1745,22 +1742,33 @@
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
 
   // ---------- new task ----------
-  function openNewTaskDialog() {
-    const local = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))].sort();
+  // The repo picker offers local clones that fall under a configured view, grouped by
+  // that view: a repo view contributes just itself; an org/username view contributes
+  // every local clone under it. A clone is claimed by the first view (in config order)
+  // that matches, so it isn't listed twice.
+  function ntRepoOptionsHtml() {
+    const localRepos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))];
+    const localSet = new Set(localRepos);
     const current = getCurrentRepo();
-    // In an org view, scope to that org's repos, with ones already added to Shipyard
-    // at the top (in the order they were added).
-    let repos = local;
-    if (ownerType(current) === "org") {
-      const orgRepos = local.filter((r) => r.split("/")[0] === current);
-      const added = [...new Set(getRepos().filter((r) => orgRepos.includes(r)))];
-      repos = [...added, ...orgRepos.filter((r) => !added.includes(r))];
+    const opt = (r) => `<option value="${esc(r)}"${r === current ? " selected" : ""}>${esc(r)}</option>`;
+    const seen = new Set();
+    const frags = [];
+    for (const view of getRepos()) {
+      if (view.includes("/")) {
+        if (localSet.has(view) && !seen.has(view)) { seen.add(view); frags.push(opt(view)); }
+      } else {
+        const repos = localRepos.filter((r) => r.split("/")[0] === view && !seen.has(r)).sort();
+        repos.forEach((r) => seen.add(r));
+        if (repos.length) frags.push(`<optgroup label="${esc(view)}">${repos.map(opt).join("")}</optgroup>`);
+      }
     }
-    $("#nt-repo").innerHTML = repos.length
-      ? repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("")
-      : '<option value="">— no local clones found —</option>';
+    return frags.join("");
+  }
+  function openNewTaskDialog() {
+    const html = ntRepoOptionsHtml();
+    $("#nt-repo").innerHTML = html || '<option value="">— no local clones for your views —</option>';
     const branch = $("#nt-branch");
-    branch.value = state.branchPrefix || (state.viewer ? `${state.viewer}/` : "");
+    branch.value = state.viewer ? `${state.viewer}/` : "";
     const status = $("#nt-status");
     status.textContent = "";
     status.classList.remove("error");
@@ -1770,27 +1778,22 @@
     branch.setSelectionRange(branch.value.length, branch.value.length);
   }
   const ntError = (msg) => { const s = $("#nt-status"); s.textContent = msg; s.classList.add("error"); };
-  // Reflect the current input in the action buttons: a worktree needs a branch name;
-  // "Main clone" creates the named branch, or — with a blank name — opens the default
-  // branch (a blank slate). Either way it can't switch a main clone with uncommitted work.
+  // With a branch name, the action creates that branch in the main clone; blank, it
+  // opens the default branch (a blank slate). Either way it can't switch a main clone
+  // with uncommitted work.
   function updateNtButtons() {
     const repo = $("#nt-repo").value;
     const hasName = !!$("#nt-branch").value.trim().replace(/\/+$/, "");
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repo && w.main);
     const dirty = !!(mainWt && mainWt.dirty);
     const mainOn = mainWt && mainWt.branch ? ` (on ${mainWt.branch})` : "";
-    const worktreeBtn = $("#nt-worktree");
-    worktreeBtn.disabled = !hasName;
-    worktreeBtn.title = hasName
-      ? "Create the branch in an isolated worktree"
-      : "Enter a branch name to create a worktree";
     const mainBtn = $("#nt-main");
     mainBtn.disabled = dirty;
-    mainBtn.textContent = hasName ? "Main clone" : "Open default";
+    mainBtn.textContent = hasName ? "Create branch" : "Open default";
     mainBtn.title = dirty
       ? `Your main clone${mainOn} has uncommitted changes — commit or stash them there first`
       : hasName
-        ? "Create the branch in your main clone (for heavy dev / running the server)"
+        ? "Create the branch in your main clone and open it"
         : "Switch your main clone to the default branch and open it — a blank slate";
   }
 
@@ -1801,7 +1804,7 @@
     if (e.key !== "Enter" || e.isComposing) return;
     e.preventDefault();
     const mainBtn = $("#nt-main");
-    (mainBtn.disabled ? $("#nt-worktree") : mainBtn).click();
+    if (!mainBtn.disabled) mainBtn.click();
   });
   $("#nt-cancel").addEventListener("click", () => $("#new-task-dialog").close());
   $("#error-close").addEventListener("click", () => $("#error-dialog").close());
@@ -1811,16 +1814,13 @@
     const branch = $("#nt-branch").value.trim();
     $("#nt-status").classList.remove("error");
     if (!repo) return ntError("No repository selected.");
-    const submitBtn = e.submitter || ($("#nt-main").disabled ? $("#nt-worktree") : $("#nt-main"));
-    const toMain = submitBtn.dataset.dest === "main";
     const blankSlate = !branch;
-    if (blankSlate && !toMain) return ntError("Enter a branch name to create a worktree.");
     if (!blankSlate && branch.endsWith("/")) return ntError("Enter a branch name.");
-    submitBtn.disabled = true;
-    $("#nt-status").textContent = blankSlate ? "Opening the default branch…"
-      : toMain ? "Creating branch in main clone…" : "Creating worktree…";
+    const mainBtn = $("#nt-main");
+    mainBtn.disabled = true;
+    $("#nt-status").textContent = blankSlate ? "Opening the default branch…" : "Creating branch in main clone…";
     try {
-      const endpoint = blankSlate ? "open-default-main" : toMain ? "new-branch-main" : "new-task";
+      const endpoint = blankSlate ? "open-default-main" : "new-branch-main";
       const query = blankSlate
         ? `${endpoint}?repo=${encodeURIComponent(repo)}`
         : `${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`;
@@ -1836,7 +1836,7 @@
     } catch (err) {
       ntError(err.message);
     } finally {
-      submitBtn.disabled = false;
+      updateNtButtons();
     }
   });
 

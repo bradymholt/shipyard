@@ -27,9 +27,7 @@ launcher, and the prefix used for new branch names:
         "target": "workspace",
         "url": "vscode://file/{path}",
         "command": ["code", "{path}"]
-      },
-      "branchPrefix": "your-name/" // New task branch-name prefix; empty (default)
-                               // falls back to your signed-in GitHub username
+      }
     }
 """
 import argparse
@@ -55,7 +53,7 @@ DEFAULT_LAUNCHER = {
     "url": "vscode://file/{path}",
     "command": ["code", "{path}"],
 }
-DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "branchPrefix": ""}
+DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER}
 
 
 def validate_config(raw):
@@ -69,10 +67,6 @@ def validate_config(raw):
     if (not isinstance(roots, list) or
             any(not isinstance(root, str) or not root.strip() for root in roots)):
         raise ValueError('"roots" must be an array of non-empty strings')
-    branch_prefix = raw.get("branchPrefix", DEFAULT_CONFIG["branchPrefix"])
-    if not isinstance(branch_prefix, str):
-        raise ValueError('"branchPrefix" must be a string')
-
     launcher_raw = raw.get("launcher", {})
     if not isinstance(launcher_raw, dict):
         raise ValueError('"launcher" must be an object')
@@ -102,7 +96,7 @@ def validate_config(raw):
     if not has_path:
         raise ValueError(f'launcher {launcher["mode"]!r} must include a "{{path}}" placeholder')
 
-    return {"roots": roots, "launcher": launcher, "branchPrefix": branch_prefix}
+    return {"roots": roots, "launcher": launcher}
 
 
 def load_config():
@@ -534,7 +528,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(discover(self.roots))
         if path == "/config.json":
             return self._json({"launcher": self.config["launcher"],
-                               "branchPrefix": self.config["branchPrefix"],
                                "companionToken": self.session_token})
         if path in self.STATIC_PATHS:
             return super().do_GET()

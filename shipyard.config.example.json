@@ -6,6 +6,5 @@
     "target": "workspace",
     "url": "vscode://file/{path}",
     "command": ["code", "{path}"]
-  },
-  "branchPrefix": ""
+  }
 }
