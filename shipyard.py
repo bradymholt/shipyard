@@ -415,6 +415,16 @@ def open_in_main(repo, branch, roots):
     return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
 
 
+def open_default_in_main(repo, roots):
+    """Open the main clone on its default branch (develop/main) for a blank slate —
+    no named branch yet. Resolves the default branch, then reuses open_in_main to
+    switch and open it (a no-op switch when the clone is already on it)."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    return open_in_main(repo, default_branch(clone), roots)
+
+
 def move_to_main(repo, branch, roots):
     """Move a branch out of its linked worktree and into the main clone: remove the
     worktree, then switch the main clone to the branch. Guarded on both ends — won't
@@ -539,7 +549,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-main", "/open-app"}:
+        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-main",
+                               "/open-default-main", "/open-app"}:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
@@ -563,6 +574,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             repo = (q.get("repo") or [""])[0]
             branch = (q.get("branch") or [""])[0]
             result = move_to_main(repo, branch, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/open-default-main":
+            repo = (q.get("repo") or [""])[0]
+            result = open_default_in_main(repo, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/open-app":
             target = (q.get("path") or [""])[0]

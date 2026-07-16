@@ -185,6 +185,7 @@
   .add-view-row input { flex: 1; }
   .nt-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--fg-muted); }
   .nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
+  .nt-optional { font-weight: 400; font-size: 0.6875rem; color: var(--fg-faint); text-transform: none; }
   .nt-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
   .nt-actions #nt-status, .nt-actions #token-status, .nt-actions .spacer { flex: 1; margin: 0; }
   .nt-actions #nt-status.error { color: var(--red-text); }
@@ -456,7 +457,7 @@
     <span class="wordmark">SHIPYARD</span>
     <div class="spacer"></div>
     <select id="repo-select" title="Repository"></select>
-    <button id="new-task-btn" class="icon-btn hidden" title="New branch — off the default branch, in a worktree or your main clone">
+    <button id="new-task-btn" class="icon-btn hidden" title="Start work — a new branch, or open the default branch for a blank slate">
       <svg width="16" height="16" viewBox="0 0 16 16"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>
     </button>
     <button id="refresh-btn" class="icon-btn" title="Refresh">
@@ -489,12 +490,12 @@
 <div class="container">
   <dialog id="new-task-dialog">
     <form id="new-task-form" method="dialog">
-      <h2>New branch</h2>
-      <p class="hint">Creates a new branch off the default branch and opens it in your configured app — checked out in your main clone, or in an isolated worktree.</p>
+      <h2>Start work</h2>
+      <p class="hint">Opens your configured app on a fresh branch off the default branch — in your main clone or an isolated worktree. Leave the name blank to just open the default branch for a blank slate.</p>
       <label class="nt-field">Repository
         <select id="nt-repo"></select>
       </label>
-      <label class="nt-field">Branch name
+      <label class="nt-field">Branch name <span class="nt-optional">optional</span>
         <input type="text" id="nt-branch" placeholder="you/short-description" autocomplete="off">
       </label>
       <div class="nt-actions">
@@ -1763,28 +1764,39 @@
     const status = $("#nt-status");
     status.textContent = "";
     status.classList.remove("error");
-    updateNtMainBtn();
+    updateNtButtons();
     $("#new-task-dialog").showModal();
     branch.focus();
     branch.setSelectionRange(branch.value.length, branch.value.length);
   }
   const ntError = (msg) => { const s = $("#nt-status"); s.textContent = msg; s.classList.add("error"); };
-  // "Main clone" can't switch a dirty main, so disable it (with a reason) when the
-  // selected repo's main clone has uncommitted changes.
-  function updateNtMainBtn() {
+  // Reflect the current input in the action buttons: a worktree needs a branch name;
+  // "Main clone" creates the named branch, or — with a blank name — opens the default
+  // branch (a blank slate). Either way it can't switch a main clone with uncommitted work.
+  function updateNtButtons() {
     const repo = $("#nt-repo").value;
+    const hasName = !!$("#nt-branch").value.trim().replace(/\/+$/, "");
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repo && w.main);
     const dirty = !!(mainWt && mainWt.dirty);
     const mainOn = mainWt && mainWt.branch ? ` (on ${mainWt.branch})` : "";
-    const btn = $("#nt-main");
-    btn.disabled = dirty;
-    btn.title = dirty
+    const worktreeBtn = $("#nt-worktree");
+    worktreeBtn.disabled = !hasName;
+    worktreeBtn.title = hasName
+      ? "Create the branch in an isolated worktree"
+      : "Enter a branch name to create a worktree";
+    const mainBtn = $("#nt-main");
+    mainBtn.disabled = dirty;
+    mainBtn.textContent = hasName ? "Main clone" : "Open default";
+    mainBtn.title = dirty
       ? `Your main clone${mainOn} has uncommitted changes — commit or stash them there first`
-      : "Create the branch in your main clone (for heavy dev / running the server)";
+      : hasName
+        ? "Create the branch in your main clone (for heavy dev / running the server)"
+        : "Switch your main clone to the default branch and open it — a blank slate";
   }
 
   $("#new-task-btn").addEventListener("click", openNewTaskDialog);
-  $("#nt-repo").addEventListener("change", updateNtMainBtn);
+  $("#nt-repo").addEventListener("change", updateNtButtons);
+  $("#nt-branch").addEventListener("input", updateNtButtons);
   $("#nt-branch").addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || e.isComposing) return;
     e.preventDefault();
@@ -1799,14 +1811,20 @@
     const branch = $("#nt-branch").value.trim();
     $("#nt-status").classList.remove("error");
     if (!repo) return ntError("No repository selected.");
-    if (!branch || branch.endsWith("/")) return ntError("Enter a branch name.");
     const submitBtn = e.submitter || ($("#nt-main").disabled ? $("#nt-worktree") : $("#nt-main"));
     const toMain = submitBtn.dataset.dest === "main";
+    const blankSlate = !branch;
+    if (blankSlate && !toMain) return ntError("Enter a branch name to create a worktree.");
+    if (!blankSlate && branch.endsWith("/")) return ntError("Enter a branch name.");
     submitBtn.disabled = true;
-    $("#nt-status").textContent = toMain ? "Creating branch in main clone…" : "Creating worktree…";
+    $("#nt-status").textContent = blankSlate ? "Opening the default branch…"
+      : toMain ? "Creating branch in main clone…" : "Creating worktree…";
     try {
-      const endpoint = toMain ? "new-branch-main" : "new-task";
-      const res = await companionPost(`${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`);
+      const endpoint = blankSlate ? "open-default-main" : toMain ? "new-branch-main" : "new-task";
+      const query = blankSlate
+        ? `${endpoint}?repo=${encodeURIComponent(repo)}`
+        : `${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`;
+      const res = await companionPost(query);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         await openInApp(launchTarget(data));
