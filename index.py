@@ -22,14 +22,16 @@ controls how the page opens VS Code / prefills New task branch names:
                                // unless roots are passed on the command line)
       "vscodeOpen": "cli",     // "cli" runs the code CLI; "scheme" (default)
                                // uses vscode://file links
-      "codeCliArgs": ["--disable-extension", "github.copilot-chat"],
-      "branchPrefix": "brady/" // New task branch-name prefix; empty (default)
+      "codeCliArgs": [],
+      "branchPrefix": "your-name/" // New task branch-name prefix; empty (default)
                                // falls back to your signed-in GitHub username
     }
 
 "cli" falls back to "scheme" when the code CLI is not on PATH.
 """
+import argparse
 import functools
+import hashlib
 import http.server
 import json
 import os
@@ -45,16 +47,44 @@ CONFIG_FILE = "shipyard.config.json"
 DEFAULT_CONFIG = {"roots": [], "vscodeOpen": "scheme", "codeCliArgs": [], "branchPrefix": ""}
 
 
+def validate_config(raw):
+    if not isinstance(raw, dict):
+        raise ValueError("the top-level value must be a JSON object")
+    unknown = sorted(set(raw) - set(DEFAULT_CONFIG))
+    if unknown:
+        raise ValueError(f"unknown setting(s): {', '.join(unknown)}")
+
+    roots = raw.get("roots", DEFAULT_CONFIG["roots"])
+    if (not isinstance(roots, list) or
+            any(not isinstance(root, str) or not root.strip() for root in roots)):
+        raise ValueError('"roots" must be an array of non-empty strings')
+    vscode_open = raw.get("vscodeOpen", DEFAULT_CONFIG["vscodeOpen"])
+    if vscode_open not in ("scheme", "cli"):
+        raise ValueError('"vscodeOpen" must be either "scheme" or "cli"')
+    code_cli_args = raw.get("codeCliArgs", DEFAULT_CONFIG["codeCliArgs"])
+    if (not isinstance(code_cli_args, list) or
+            any(not isinstance(arg, str) for arg in code_cli_args)):
+        raise ValueError('"codeCliArgs" must be an array of strings')
+    branch_prefix = raw.get("branchPrefix", DEFAULT_CONFIG["branchPrefix"])
+    if not isinstance(branch_prefix, str):
+        raise ValueError('"branchPrefix" must be a string')
+
+    return {**DEFAULT_CONFIG, **raw}
+
+
 def load_config():
-    cfg = dict(DEFAULT_CONFIG)
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILE)
     try:
         with open(path) as fh:
-            cfg.update(json.load(fh))
+            raw = json.load(fh)
     except FileNotFoundError:
-        pass
-    except Exception as e:
-        print(f"Warning: ignoring unreadable {CONFIG_FILE}: {e}")
+        raw = {}
+    except (OSError, json.JSONDecodeError) as e:
+        sys.exit(f"Could not read {CONFIG_FILE}: {e}")
+    try:
+        cfg = validate_config(raw)
+    except ValueError as e:
+        sys.exit(f"Invalid {CONFIG_FILE}: {e}")
     if cfg["vscodeOpen"] == "cli" and not shutil.which("code"):
         print("Warning: vscodeOpen is 'cli' but the code CLI is not on PATH; using vscode:// links.")
         cfg["vscodeOpen"] = "scheme"
@@ -62,16 +92,34 @@ def load_config():
 
 
 def parse_args(argv):
-    port, roots = DEFAULT_PORT, []
-    it = iter(argv)
-    for a in it:
-        if a in ("--port", "-p"):
-            port = int(next(it))
-        elif a.startswith("--port="):
-            port = int(a.split("=", 1)[1])
-        else:
-            roots.append(os.path.abspath(os.path.expanduser(a)))
-    return port, roots
+    def port_number(value):
+        try:
+            port = int(value)
+        except ValueError as e:
+            raise argparse.ArgumentTypeError("must be an integer") from e
+        if not 1 <= port <= 65535:
+            raise argparse.ArgumentTypeError("must be between 1 and 65535")
+        return port
+
+    parser = argparse.ArgumentParser(
+        description="Serve Shipyard and discover Git worktrees under one or more folders.")
+    parser.add_argument("roots", nargs="*", metavar="ROOT",
+                        help=f"folder containing Git clones (overrides {CONFIG_FILE})")
+    parser.add_argument("-p", "--port", type=port_number, default=DEFAULT_PORT,
+                        help=f"localhost port (default: {DEFAULT_PORT})")
+    args = parser.parse_args(argv)
+    return args.port, args.roots
+
+
+def normalize_roots(roots):
+    normalized = []
+    seen = set()
+    for root in roots:
+        canonical = os.path.realpath(os.path.abspath(os.path.expanduser(root)))
+        if canonical not in seen:
+            seen.add(canonical)
+            normalized.append(canonical)
+    return normalized
 
 
 def git(repo, *args):
@@ -86,6 +134,26 @@ def git(repo, *args):
 def parse_origin(url):
     m = re.search(r"[:/]([^/:]+/[^/:]+?)(?:\.git)?/?$", url.strip())
     return m.group(1) if m else None
+
+
+def validate_branch(branch):
+    branch = branch.strip()
+    if not branch:
+        return None, "Branch name is required."
+    try:
+        result = subprocess.run(["git", "check-ref-format", "--branch", branch],
+                                capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"Could not validate branch name: {e}"
+    if result.returncode != 0:
+        return None, (result.stderr or f"Invalid branch name: {branch}").strip()
+    return branch, None
+
+
+def worktree_path(clone, branch):
+    slug = re.sub(r"[^A-Za-z0-9._-]", "-", branch).strip(".-") or "branch"
+    digest = hashlib.sha256(branch.encode()).hexdigest()[:10]
+    return os.path.join(clone, ".claude", "worktrees", f"{slug[:80]}-{digest}")
 
 
 def workspace_in(path):
@@ -128,6 +196,7 @@ def clone_dirs(roots):
 def discover(roots):
     out, seen = [], set()
     for repo_dir in clone_dirs(roots):
+        repo_dir = os.path.realpath(repo_dir)
         if repo_dir in seen:
             continue
         seen.add(repo_dir)
@@ -157,16 +226,16 @@ def new_task_worktree(repo, branch, roots):
     clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    branch = branch.strip()
-    if not branch:
-        return {"ok": False, "error": "Branch name is required."}
+    branch, error = validate_branch(branch)
+    if error:
+        return {"ok": False, "error": error}
     # Idempotent: if the branch is already checked out somewhere, open that.
     existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
     if existing:
         return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
     base = default_branch(clone)
     git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
-    path = os.path.join(clone, ".claude", "worktrees", re.sub(r"[^\w.-]", "-", branch))
+    path = worktree_path(clone, branch)
     add = lambda *a: subprocess.run(["git", "-C", clone, "worktree", "add", *a],
                                     capture_output=True, text=True, timeout=120)
     r = add("-b", branch, path, f"origin/{base}")
@@ -179,7 +248,12 @@ def new_task_worktree(repo, branch, roots):
 
 def open_vscode(target, roots, config):
     real = os.path.realpath(target)
-    if not any(real == r or real.startswith(r + os.sep) for r in roots):
+    def is_within(root):
+        try:
+            return os.path.commonpath((real, root)) == root
+        except ValueError:
+            return False
+    if not any(is_within(root) for root in roots):
         return {"ok": False, "error": "Path is outside the configured roots."}
     if not os.path.exists(real):
         return {"ok": False, "error": f"Path does not exist: {real}"}
@@ -214,9 +288,9 @@ def open_in_main(repo, branch, roots):
     clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    branch = branch.strip()
-    if not branch:
-        return {"ok": False, "error": "Branch name is required."}
+    branch, error = validate_branch(branch)
+    if error:
+        return {"ok": False, "error": error}
     here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
     if here and here.get("main"):  # already checked out in the main clone
         return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": False}
@@ -246,9 +320,9 @@ def new_branch_in_main(repo, branch, roots):
     clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    branch = branch.strip()
-    if not branch:
-        return {"ok": False, "error": "Branch name is required."}
+    branch, error = validate_branch(branch)
+    if error:
+        return {"ok": False, "error": error}
     existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
     if existing:  # already checked out somewhere → just open it
         return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": False}
@@ -321,9 +395,7 @@ def main():
     config = load_config()
     # Roots come from the command line if given, otherwise the "roots" config key.
     cfg_roots = config.get("roots") or []
-    if isinstance(cfg_roots, str):
-        cfg_roots = [cfg_roots]
-    roots = cli_roots or [os.path.abspath(os.path.expanduser(r)) for r in cfg_roots]
+    roots = normalize_roots(cli_roots or cfg_roots)
     if not roots:
         sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
                  f'or pass them on the command line: python3 index.py ~/dev')
