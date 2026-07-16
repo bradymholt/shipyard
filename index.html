@@ -423,6 +423,15 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   footer { margin-top: 16px; color: var(--fg-muted); font-size: 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .github-status { display: inline-flex; align-items: center; gap: 4px; }
+  .footer-refresh {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 2px; margin: -2px; border: 0; border-radius: 4px;
+    color: inherit; background: transparent; cursor: pointer; opacity: .6;
+  }
+  .footer-refresh:hover, .footer-refresh:focus-visible { color: var(--fg); opacity: 1; }
+  .footer-refresh:disabled { cursor: default; opacity: .3; }
+  .footer-refresh svg { fill: currentColor; }
   #companion-status { display: inline-flex; align-items: center; gap: 5px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .dot.ok { background: var(--green); }
@@ -538,8 +547,13 @@
   </div>
 
   <footer>
-    <span id="last-updated"></span>
     <span id="viewer-info"></span>
+    <span id="github-status" class="github-status hidden">
+      <span id="last-updated"></span>
+      <button id="footer-refresh-btn" class="footer-refresh" type="button" title="Refresh GitHub data" aria-label="Refresh GitHub data">
+        <svg width="13" height="13" viewBox="0 0 16 16"><path d="M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z"/></svg>
+      </button>
+    </span>
     <span id="companion-status"></span>
   </footer>
 </div>
@@ -589,7 +603,8 @@
     loading: false,
     targetedFresh: false,
     allFresh: false,
-    cachedAt: null,
+    githubUpdatedAt: null,
+    githubRefreshFailed: false,
   };
 
   function resetData() {
@@ -599,7 +614,11 @@
     state.allPrs = null;
     state.targetedFresh = false;
     state.allFresh = false;
-    state.cachedAt = null;
+    state.githubUpdatedAt = null;
+    state.githubRefreshFailed = false;
+    stopGitHubAgeTimer();
+    $("#viewer-info").textContent = "";
+    updateGitHubStatus();
   }
 
   const getToken = () => localStorage.getItem(LS.TOKEN) || "";
@@ -624,7 +643,8 @@
       state.targetedLoaded = true;
       state.allPrs = Array.isArray(cached.allPrs) ? cached.allPrs : null;
       state.total = Number.isFinite(cached.total) ? cached.total : 0;
-      state.cachedAt = cached.savedAt;
+      state.githubUpdatedAt = cached.savedAt;
+      restartGitHubAgeTimer();
       $("#viewer-info").textContent = state.viewer ? `Signed in as ${state.viewer}` : "";
       return true;
     } catch {
@@ -639,7 +659,7 @@
     try {
       localStorage.setItem(cacheKey(target), JSON.stringify({
         version: CACHE_VERSION,
-        savedAt: Date.now(),
+        savedAt: state.githubUpdatedAt || Date.now(),
         viewer: state.viewer,
         prs: state.prs,
         merged: state.merged,
@@ -653,6 +673,44 @@
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
       if (key?.startsWith(LS.CACHE_PREFIX)) localStorage.removeItem(key);
+    }
+  }
+
+  function githubAge(updatedAt) {
+    const seconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
+    if (seconds < 10) return "just now";
+    if (seconds < 60) return `${Math.floor(seconds / 10) * 10}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }
+
+  function updateGitHubStatus(refreshing = false) {
+    const el = $("#last-updated");
+    $("#github-status").classList.toggle("hidden", !refreshing && !state.githubUpdatedAt);
+    $("#footer-refresh-btn").disabled = refreshing;
+    if (refreshing) {
+      el.textContent = "GitHub refreshing…";
+    } else {
+      el.textContent = state.githubUpdatedAt ? `GitHub updated ${githubAge(state.githubUpdatedAt)}` : "";
+    }
+    el.title = state.githubRefreshFailed
+      ? "The last refresh failed. Showing previously loaded GitHub data."
+      : "";
+  }
+
+  let githubAgeTimer = null;
+  function stopGitHubAgeTimer() {
+    clearInterval(githubAgeTimer);
+    githubAgeTimer = null;
+  }
+
+  function restartGitHubAgeTimer() {
+    stopGitHubAgeTimer();
+    if (state.githubUpdatedAt) {
+      githubAgeTimer = setInterval(() => updateGitHubStatus(state.loading), 10 * 1000);
     }
   }
   // "org" | "user" | undefined, from the ownerQualifier cache
@@ -1418,11 +1476,10 @@
     if (!needTargeted && !needAll) { render(); return; }
     state.loading = true;
     state.loadError = null;
+    state.githubRefreshFailed = false;
+    updateGitHubStatus(true);
     const hasVisibleData = state.filter === "all" ? state.allPrs !== null : state.targetedLoaded;
-    if (hasVisibleData) {
-      const cachedTime = state.cachedAt ? new Date(state.cachedAt).toLocaleTimeString() : null;
-      $("#last-updated").textContent = cachedTime ? `Cached ${cachedTime} · Refreshing…` : "Refreshing…";
-    } else {
+    if (!hasVisibleData) {
       $("#merged-wrap").classList.add("hidden");
       listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     }
@@ -1434,23 +1491,24 @@
         state.merged = merged;
         state.targetedLoaded = true;
         state.targetedFresh = true;
-        state.cachedAt = null;
-        saveDashboardCache();
       }
       if (needAll) {
         const { prs, total } = await fetchAll();
         state.allPrs = prs;
         state.total = total;
         state.allFresh = true;
-        state.cachedAt = null;
-        saveDashboardCache();
       }
-      $("#last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      state.githubUpdatedAt = Date.now();
+      state.githubRefreshFailed = false;
+      restartGitHubAgeTimer();
+      saveDashboardCache();
+      updateGitHubStatus();
       $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
       render();
     } catch (err) {
       state.loadError = err.message;
-      if (hasVisibleData) $("#last-updated").textContent = "Refresh failed · Showing previous data";
+      state.githubRefreshFailed = true;
+      updateGitHubStatus();
       render();
     } finally {
       state.loading = false;
@@ -1473,6 +1531,7 @@
 
   $("#settings-btn").addEventListener("click", () => $("#settings").classList.toggle("hidden"));
   $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
+  $("#footer-refresh-btn").addEventListener("click", () => load(true));
 
   // ---------- new task ----------
   function openNewTaskDialog() {
@@ -1712,7 +1771,14 @@
   }
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollWorktrees(); });
+  setInterval(() => {
+    if (!document.hidden && getToken() && getCurrentRepo()) load(true);
+  }, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    pollWorktrees();
+    if (getToken() && getCurrentRepo()) load(true);
+  });
 
   window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees };
 })();
