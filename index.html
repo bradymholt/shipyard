@@ -600,8 +600,8 @@
     loadError: null,
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
-    view: localStorage.getItem("ghpr.view") || "list",
-    reviewView: localStorage.getItem("ghpr.reviewView") || "list",
+    view: localStorage.getItem("ghpr.view") || "board",
+    reviewView: localStorage.getItem("ghpr.reviewView") || "board",
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, workspace }, from the local companion
     companion: false,     // true when the local companion answered (enables worktree actions)
