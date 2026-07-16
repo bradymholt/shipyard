@@ -464,7 +464,7 @@
 <div class="subbar">
   <div class="toolbar">
     <div class="tabs">
-      <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
+      <button class="tab active" data-filter="mine">My PRs <span class="count hidden" id="count-mine"></span></button>
       <button class="tab" data-filter="review">Reviews <span class="count hidden" id="count-review"></span></button>
     </div>
     <div class="spacer"></div>
@@ -1438,7 +1438,15 @@
     $("#new-task-btn").classList.toggle("hidden", !state.companion);
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
-    $("#count-mine").textContent = state.prs.filter((p) => p.author?.login === state.viewer).length;
+    const workingCount = state.prs.filter((pr) =>
+      pr.author?.login === state.viewer && laneOf(pr) === 0
+    ).length;
+    const workingCountEl = $("#count-mine");
+    workingCountEl.textContent = workingCount || "";
+    workingCountEl.classList.toggle("hidden", workingCount === 0);
+    workingCountEl.title = workingCount
+      ? `${workingCount} pull request${workingCount === 1 ? "" : "s"} in Working`
+      : "";
     const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
       [`${pr.repository?.nameWithOwner || ""}#${pr.number}`, pr]
     )).values()];
