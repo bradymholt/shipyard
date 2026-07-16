@@ -37,8 +37,6 @@ import re
 import shutil
 import subprocess
 import sys
-import threading
-import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -318,29 +316,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-def start_dev_reloader(paths):
-    """With SHIPYARD_DEV_RELOAD set, exit when a watched file changes so a
-    process supervisor (e.g. a KeepAlive LaunchAgent) restarts with new code.
-    No-op otherwise, so plain `python3 index.py` is unaffected."""
-    if not os.environ.get("SHIPYARD_DEV_RELOAD"):
-        return
-    mtimes = {p: os.path.getmtime(p) for p in paths if os.path.exists(p)}
-
-    def watch():
-        while True:
-            time.sleep(1)
-            for p in paths:
-                try:
-                    m = os.path.getmtime(p)
-                except OSError:
-                    continue
-                if mtimes.get(p) != m:
-                    print(f"{os.path.basename(p)} changed — exiting for reload.", flush=True)
-                    os._exit(0)
-
-    threading.Thread(target=watch, daemon=True).start()
-
-
 def main():
     port, cli_roots = parse_args(sys.argv[1:])
     config = load_config()
@@ -353,7 +328,6 @@ def main():
         sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
                  f'or pass them on the command line: python3 index.py ~/dev')
     here = os.path.dirname(os.path.abspath(__file__))
-    start_dev_reloader([os.path.abspath(__file__), os.path.join(here, CONFIG_FILE)])
     Handler.roots = roots
     Handler.config = config
     httpd = http.server.HTTPServer(("127.0.0.1", port),
