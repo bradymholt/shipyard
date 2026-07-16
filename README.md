@@ -1,6 +1,6 @@
 # Shipyard
 
-Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Use it directly from GitHub Pages, or run it locally to add Git worktree, branch, and VS Code integration.
+Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Use it directly from GitHub Pages, or run it locally to connect PRs to local branches and open them in your preferred app or IDE.
 
 [Try Shipyard in your browser](https://bradymholt.github.io/shipyard/)
 
@@ -26,7 +26,7 @@ Open the [hosted dashboard](https://bradymholt.github.io/shipyard/), click the g
 
 ### Local mode
 
-Local mode runs an optional companion process that adds VS Code links and branch/worktree actions. It requires Git and Python 3; VS Code is only needed for the editor links.
+Local mode runs an optional companion process that opens checkouts in your preferred app or IDE and adds branch/worktree actions. It requires Git and Python 3, plus whichever app you configure.
 
 ```bash
 git clone https://github.com/bradymholt/shipyard.git
@@ -49,7 +49,7 @@ Your token stays in your browser's local storage and is sent only to `api.github
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your two most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
-- **Optional local workflow:** open existing checkouts in VS Code or start a branch in the main clone or an isolated worktree.
+- **Optional local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
 
 ## Local companion
 
@@ -67,13 +67,33 @@ python3 shipyard.py
 ```json
 {
   "roots": ["~/dev"],
-  "vscodeOpen": "scheme",
-  "codeCliArgs": [],
+  "launcher": {
+    "name": "VS Code",
+    "mode": "url",
+    "target": "workspace",
+    "url": "vscode://file/{path}",
+    "command": ["code", "{path}"]
+  },
   "branchPrefix": ""
 }
 ```
 
-The default `scheme` setting uses `vscode://` links. Set it to `cli` if you prefer the companion to run the `code` command; `codeCliArgs` can supply extra CLI arguments. `branchPrefix` optionally prefills new branch names.
+VS Code is the default, but the launcher is app-agnostic. URL mode opens a custom URL scheme in the browser; command mode asks the companion to run a command. Use `{path}` where the checkout path belongs. `target` can be `folder`, or `workspace` to prefer a `.code-workspace` file when one exists.
+
+For example, this opens the checkout folder in Xcode on macOS:
+
+```json
+{
+  "launcher": {
+    "name": "Xcode",
+    "mode": "command",
+    "target": "folder",
+    "command": ["open", "-a", "Xcode", "{path}"]
+  }
+}
+```
+
+`branchPrefix` optionally prefills new branch names.
 
 ## Development
 

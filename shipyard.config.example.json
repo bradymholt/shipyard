@@ -1,6 +1,11 @@
 {
   "roots": ["~/dev"],
-  "vscodeOpen": "scheme",
-  "codeCliArgs": [],
+  "launcher": {
+    "name": "VS Code",
+    "mode": "url",
+    "target": "workspace",
+    "url": "vscode://file/{path}",
+    "command": ["code", "{path}"]
+  },
   "branchPrefix": ""
 }

@@ -475,7 +475,7 @@
   <dialog id="new-task-dialog">
     <form id="new-task-form" method="dialog">
       <h2>New branch</h2>
-      <p class="hint">Creates a new branch off the default branch and opens it in VS Code — in an isolated worktree, or checked out in your main clone.</p>
+      <p class="hint">Creates a new branch off the default branch and opens it in your configured app — in an isolated worktree, or checked out in your main clone.</p>
       <label class="nt-field">Repository
         <select id="nt-repo"></select>
       </label>
@@ -558,6 +558,13 @@
 
   const $ = (sel) => document.querySelector(sel);
   const listBody = $("#list-body");
+  const DEFAULT_LAUNCHER = {
+    name: "VS Code",
+    mode: "url",
+    target: "workspace",
+    url: "vscode://file/{path}",
+    command: ["code", "{path}"],
+  };
 
   const state = {
     prs: [],              // targeted set: my PRs ∪ PRs awaiting my review (fetched on load)
@@ -574,7 +581,7 @@
     companion: false,     // true when the local companion answered (enables worktree actions)
     companionChecked: false,
     companionToken: "",  // per-process token required for local companion mutations
-    openMethod: "scheme", // "scheme" (vscode:// links) or "cli" (companion runs code CLI)
+    launcher: DEFAULT_LAUNCHER,
     branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
   };
@@ -605,8 +612,8 @@
     clock: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028 1.352a.75.75 0 0 1-.832 1.248l-2.36-1.573A.75.75 0 0 1 7 8.25v-3.5a.75.75 0 0 1 1.5 0Z"/></svg>',
     comment: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
     changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',
-    vscode: '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M14.25 1c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 14.25 12h-3.727c.099 1.041.52 1.872 1.292 2.35a.75.75 0 0 1-.395 1.4h-6.84a.75.75 0 0 1-.395-1.4c.771-.478 1.193-1.309 1.292-2.35H1.75A1.75 1.75 0 0 1 0 10.25v-7.5C0 1.784.784 1 1.75 1ZM1.75 2.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
   };
+  const LAUNCH_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M9 1h6v6h-1.5V3.56L7.53 9.53 6.47 8.47 12.44 2.5H9V1ZM2.75 3.5H7V5H2.75a.25.25 0 0 0-.25.25v8c0 .138.112.25.25.25h8a.25.25 0 0 0 .25-.25V9H14.5v4.25A1.75 1.75 0 0 1 12.75 15h-8A1.75 1.75 0 0 1 3 13.25v-8A1.75 1.75 0 0 1 4.75 3.5Z"/></svg>';
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -892,7 +899,7 @@
       if (!cfg.ok) return false;
       const c = await cfg.json();
       if (!c.companionToken) return false;
-      state.openMethod = c.vscodeOpen || "scheme";
+      state.launcher = c.launcher || DEFAULT_LAUNCHER;
       state.branchPrefix = c.branchPrefix || "";
       state.companionToken = c.companionToken;
       return true;
@@ -963,22 +970,31 @@
     $("#error-dialog").showModal();
   }
 
-  async function openInVSCode(target) {
-    if (state.openMethod !== "cli") {
-      window.location.href = `vscode://file/${target}`;
+  const launchTarget = (checkout) => state.launcher.target === "workspace"
+    ? (checkout.workspace || checkout.path)
+    : checkout.path;
+
+  const launcherUrl = (target) => {
+    const encodedPath = String(target).split("/").map(encodeURIComponent).join("/");
+    return state.launcher.url.replaceAll("{path}", encodedPath);
+  };
+
+  async function openInApp(target) {
+    if (state.launcher.mode === "url") {
+      window.location.href = launcherUrl(target);
       return;
     }
     try {
-      const res = await companionPost(`open-vscode?path=${encodeURIComponent(target)}`);
+      const res = await companionPost(`open-app?path=${encodeURIComponent(target)}`);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) showError(data.error || `Open in VS Code failed (${res.status}).`);
+      if (!res.ok || !data.ok) showError(data.error || `Open in ${state.launcher.name} failed (${res.status}).`);
     } catch (err) {
       showError(err.message);
     }
   }
 
   function worktreeLinks(pr) {
-    // A single "Open" control, always the VS Code icon; where it opens (and how it
+    // A single "Open" control; where it opens (and how it
     // looks) depends on where the branch is checked out. It runs through the
     // companion, so nothing shows without it.
     if (!state.companion) return "";
@@ -990,14 +1006,15 @@
     // Already checked out somewhere → open that checkout directly. Green marks the
     // one that's the main repo's current branch.
     if (wt) {
-      const target = wt.workspace || wt.path;
+      const target = launchTarget(wt);
       const mod = wt.main ? " current" : " worktree";  // green for main clone, purple for a worktree
+      const appName = state.launcher.name || "configured app";
       const title = wt.main
-        ? "This branch is checked out in your main repo — open it in VS Code"
-        : "This branch is checked out in a worktree — open it in VS Code";
-      const btn = state.openMethod === "cli"
-        ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${title}">${ICONS.vscode}</button>`
-        : `<a class="wt-link${mod}" href="vscode://file/${esc(target)}" title="${title}">${ICONS.vscode}</a>`;
+        ? `This branch is checked out in your main repo — open it in ${appName}`
+        : `This branch is checked out in a worktree — open it in ${appName}`;
+      const btn = state.launcher.mode === "command"
+        ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${esc(title)}">${LAUNCH_ICON}</button>`
+        : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${LAUNCH_ICON}</a>`;
       return `<span class="wt-links">${btn}</span>`;
     }
 
@@ -1005,8 +1022,8 @@
     // unless the main repo has uncommitted changes (then it isn't currently possible).
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repoName && w.main);
     const btn = mainWt && mainWt.dirty
-      ? `<button class="wt-link wt-main blocked" disabled title="Can't open — your main repo has uncommitted changes, so checking this branch out there isn't possible right now.">${ICONS.vscode}</button>`
-      : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Open in your main repo — checks the branch out there">${ICONS.vscode}</button>`;
+      ? `<button class="wt-link wt-main blocked" disabled title="Can't open — your main repo has uncommitted changes, so checking this branch out there isn't possible right now.">${LAUNCH_ICON}</button>`
+      : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main repo and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
     return `<span class="wt-links">${btn}</span>`;
   }
 
@@ -1446,7 +1463,7 @@
       const res = await companionPost(`${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
-        await openInVSCode(data.workspace || data.path);
+        await openInApp(launchTarget(data));
         $("#new-task-dialog").close();
         loadWorktrees();
       } else {
@@ -1507,7 +1524,7 @@
     if (openBtn) {
       openBtn.disabled = true;
       try {
-        await openInVSCode(openBtn.dataset.target);
+        await openInApp(openBtn.dataset.target);
       } finally {
         openBtn.disabled = false;
       }
@@ -1524,7 +1541,7 @@
         const res = await companionPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          await openInVSCode(data.workspace || data.path);
+          await openInApp(launchTarget(data));
           loadWorktrees();
         } else {
           showError(data.error || `Couldn't open in your main clone (${res.status}).`, "Can't open in main clone");

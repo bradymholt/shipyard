@@ -2,7 +2,7 @@
 """Local companion for Shipyard.
 
 Serves the dashboard AND a /worktrees.json endpoint so the page can offer
-"Open in VS Code" links for branches you have checked out locally. It
+links that open branches in your configured app or IDE. It
 reports, for every git worktree under the given root(s):
 
     { "repo": "owner/name", "branch": "...", "path": "/abs/path", "workspace": "…|null" }
@@ -15,20 +15,22 @@ Run it from the dashboard directory and open the printed URL:
 Binds to localhost only. Discovery is read-only; branch actions you choose can
 change local Git state.
 
-shipyard.config.json (next to this file) sets the folders to scan and
-controls how the page opens VS Code / prefills New task branch names:
+shipyard.config.json (next to this file) sets the folders to scan, the app
+launcher, and the prefix used for new branch names:
 
     {
       "roots": ["~/dev"],      // folders to scan for git clones (required,
                                // unless roots are passed on the command line)
-      "vscodeOpen": "cli",     // "cli" runs the code CLI; "scheme" (default)
-                               // uses vscode://file links
-      "codeCliArgs": [],
+      "launcher": {
+        "name": "VS Code",
+        "mode": "url",
+        "target": "workspace",
+        "url": "vscode://file/{path}",
+        "command": ["code", "{path}"]
+      },
       "branchPrefix": "your-name/" // New task branch-name prefix; empty (default)
                                // falls back to your signed-in GitHub username
     }
-
-"cli" falls back to "scheme" when the code CLI is not on PATH.
 """
 import argparse
 import functools
@@ -46,7 +48,14 @@ from urllib.parse import parse_qs, urlparse
 
 DEFAULT_PORT = 4321
 CONFIG_FILE = "shipyard.config.json"
-DEFAULT_CONFIG = {"roots": [], "vscodeOpen": "scheme", "codeCliArgs": [], "branchPrefix": ""}
+DEFAULT_LAUNCHER = {
+    "name": "VS Code",
+    "mode": "url",
+    "target": "workspace",
+    "url": "vscode://file/{path}",
+    "command": ["code", "{path}"],
+}
+DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "branchPrefix": ""}
 
 
 def validate_config(raw):
@@ -60,18 +69,40 @@ def validate_config(raw):
     if (not isinstance(roots, list) or
             any(not isinstance(root, str) or not root.strip() for root in roots)):
         raise ValueError('"roots" must be an array of non-empty strings')
-    vscode_open = raw.get("vscodeOpen", DEFAULT_CONFIG["vscodeOpen"])
-    if vscode_open not in ("scheme", "cli"):
-        raise ValueError('"vscodeOpen" must be either "scheme" or "cli"')
-    code_cli_args = raw.get("codeCliArgs", DEFAULT_CONFIG["codeCliArgs"])
-    if (not isinstance(code_cli_args, list) or
-            any(not isinstance(arg, str) for arg in code_cli_args)):
-        raise ValueError('"codeCliArgs" must be an array of strings')
     branch_prefix = raw.get("branchPrefix", DEFAULT_CONFIG["branchPrefix"])
     if not isinstance(branch_prefix, str):
         raise ValueError('"branchPrefix" must be a string')
 
-    return {**DEFAULT_CONFIG, **raw}
+    launcher_raw = raw.get("launcher", {})
+    if not isinstance(launcher_raw, dict):
+        raise ValueError('"launcher" must be an object')
+    launcher_unknown = sorted(set(launcher_raw) - set(DEFAULT_LAUNCHER))
+    if launcher_unknown:
+        raise ValueError(f"unknown launcher setting(s): {', '.join(launcher_unknown)}")
+    launcher = {**DEFAULT_LAUNCHER, **launcher_raw}
+
+    if not isinstance(launcher["name"], str) or not launcher["name"].strip():
+        raise ValueError('launcher "name" must be a non-empty string')
+    if launcher["mode"] not in ("url", "command"):
+        raise ValueError('launcher "mode" must be either "url" or "command"')
+    if launcher["target"] not in ("folder", "workspace"):
+        raise ValueError('launcher "target" must be either "folder" or "workspace"')
+    if not isinstance(launcher["url"], str):
+        raise ValueError('launcher "url" must be a string')
+    if (not isinstance(launcher["command"], list) or not launcher["command"] or
+            any(not isinstance(arg, str) for arg in launcher["command"])):
+        raise ValueError('launcher "command" must be a non-empty array of strings')
+    if launcher["mode"] == "url":
+        has_path = "{path}" in launcher["url"]
+        scheme = urlparse(launcher["url"].replace("{path}", "path")).scheme.lower()
+        if not scheme or scheme in ("data", "javascript"):
+            raise ValueError('launcher "url" must use a safe URL scheme')
+    else:
+        has_path = any("{path}" in arg for arg in launcher["command"])
+    if not has_path:
+        raise ValueError(f'launcher {launcher["mode"]!r} must include a "{{path}}" placeholder')
+
+    return {"roots": roots, "launcher": launcher, "branchPrefix": branch_prefix}
 
 
 def load_config():
@@ -87,9 +118,9 @@ def load_config():
         cfg = validate_config(raw)
     except ValueError as e:
         sys.exit(f"Invalid {CONFIG_FILE}: {e}")
-    if cfg["vscodeOpen"] == "cli" and not shutil.which("code"):
-        print("Warning: vscodeOpen is 'cli' but the code CLI is not on PATH; using vscode:// links.")
-        cfg["vscodeOpen"] = "scheme"
+    launcher = cfg["launcher"]
+    if launcher["mode"] == "command" and not shutil.which(launcher["command"][0]):
+        print(f"Warning: launcher command {launcher['command'][0]!r} is not on PATH.")
     return cfg
 
 
@@ -310,7 +341,7 @@ def new_task_worktree(repo, branch, roots):
     return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True, "branch": branch}
 
 
-def open_vscode(target, roots, config):
+def launch_app(target, roots, config):
     real = os.path.realpath(target)
     def is_within(root):
         try:
@@ -321,13 +352,16 @@ def open_vscode(target, roots, config):
         return {"ok": False, "error": "Path is outside the configured roots."}
     if not os.path.exists(real):
         return {"ok": False, "error": f"Path does not exist: {real}"}
+    launcher = config["launcher"]
+    if launcher["mode"] != "command":
+        return {"ok": False, "error": "This launcher opens through a browser URL."}
+    command = [arg.replace("{path}", real) for arg in launcher["command"]]
     try:
-        r = subprocess.run(["code", *config.get("codeCliArgs", []), real],
-                           capture_output=True, text=True, timeout=30)
+        r = subprocess.run(command, capture_output=True, text=True, timeout=30)
     except Exception as e:
         return {"ok": False, "error": str(e)}
     if r.returncode != 0:
-        return {"ok": False, "error": (r.stderr or "code CLI failed").strip()}
+        return {"ok": False, "error": (r.stderr or f"{launcher['name']} failed to open").strip()}
     return {"ok": True}
 
 
@@ -453,7 +487,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/worktrees.json":
             return self._json(discover(self.roots))
         if path == "/config.json":
-            return self._json({"vscodeOpen": self.config["vscodeOpen"],
+            return self._json({"launcher": self.config["launcher"],
                                "branchPrefix": self.config["branchPrefix"],
                                "companionToken": self.session_token})
         if path in self.STATIC_PATHS:
@@ -469,7 +503,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/open-vscode"}:
+        if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/open-app"}:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
@@ -489,9 +523,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             branch = (q.get("branch") or [""])[0]
             result = open_in_main(repo, branch, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
-        if parsed.path == "/open-vscode":
+        if parsed.path == "/open-app":
             target = (q.get("path") or [""])[0]
-            result = open_vscode(target, self.roots, self.config)
+            result = launch_app(target, self.roots, self.config)
             return self._json(result, 200 if result.get("ok") else 500)
         return self._not_found()
 
@@ -516,7 +550,8 @@ def main():
                                    functools.partial(Handler, directory=here))
     print(f"Shipyard companion → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}")
-    print(f"VS Code opens via: {'code CLI' if Handler.config['vscodeOpen'] == 'cli' else 'vscode:// links'}")
+    launcher = Handler.config["launcher"]
+    print(f"Opens in: {launcher['name']} via {launcher['mode']}")
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()
