@@ -466,7 +466,6 @@
     <div class="tabs">
       <button class="tab active" data-filter="mine">My PRs <span class="count" id="count-mine">–</span></button>
       <button class="tab" data-filter="review">Reviews <span class="count hidden" id="count-review"></span></button>
-      <button class="tab" data-filter="all">All open <span class="count hidden" id="count-all"></span></button>
     </div>
     <div class="spacer"></div>
     <div class="view-toggle">
@@ -585,16 +584,14 @@
 
   const state = {
     prs: [],              // targeted set: my PRs plus open PRs awaiting my review
-    merged: [],           // my last couple of merged PRs, shown as context on the My PRs tab
+    merged: [],           // my recently merged PRs, shown as context on the My PRs tab
     reviewedPrs: [],      // open PRs I reviewed, loaded lazily for the review board
     reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
     reviewHistoryLoaded: false,
     targetedLoaded: false,
-    allPrs: null,         // full open set, fetched lazily the first time "All open" is viewed
-    total: 0,             // total open count, for the All-open truncation note
     loadError: null,
     viewer: null,
-    filter: localStorage.getItem(LS.FILTER) || "mine",
+    filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
     view: localStorage.getItem("ghpr.view") || "list",
     reviewView: localStorage.getItem("ghpr.reviewView") || "list",
     sort: localStorage.getItem("ghpr.sort") || "priority",
@@ -607,7 +604,6 @@
     loading: false,
     targetedFresh: false,
     reviewHistoryFresh: false,
-    allFresh: false,
     githubUpdatedAt: null,
     githubRefreshFailed: false,
   };
@@ -619,10 +615,8 @@
     state.reviewedMerged = [];
     state.reviewHistoryLoaded = false;
     state.targetedLoaded = false;
-    state.allPrs = null;
     state.targetedFresh = false;
     state.reviewHistoryFresh = false;
-    state.allFresh = false;
     state.githubUpdatedAt = null;
     state.githubRefreshFailed = false;
     stopGitHubAgeTimer();
@@ -654,8 +648,6 @@
       state.reviewedMerged = cached.reviewedMerged;
       state.reviewHistoryLoaded = cached.reviewHistoryLoaded === true;
       state.targetedLoaded = true;
-      state.allPrs = Array.isArray(cached.allPrs) ? cached.allPrs : null;
-      state.total = Number.isFinite(cached.total) ? cached.total : 0;
       state.githubUpdatedAt = cached.savedAt;
       restartGitHubAgeTimer();
       $("#viewer-info").textContent = state.viewer ? `Signed in as ${state.viewer}` : "";
@@ -679,8 +671,6 @@
         reviewedPrs: state.reviewedPrs,
         reviewedMerged: state.reviewedMerged,
         reviewHistoryLoaded: state.reviewHistoryLoaded,
-        allPrs: state.allPrs,
-        total: state.total,
       }));
     } catch { /* storage unavailable or full: live data still works */ }
   }
@@ -794,18 +784,7 @@
   // we page up to MAX_PRS to preserve the "most recent 100" behavior.
   const PAGE_SIZE = 25;
   const MAX_PRS = 100;
-
-  const REPO_QUERY = `
-    query($owner: String!, $name: String!, $after: String) {
-      viewer { login }
-      repository(owner: $owner, name: $name) {
-        pullRequests(states: OPEN, first: ${PAGE_SIZE}, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
-          totalCount
-          pageInfo { hasNextPage endCursor }
-          nodes { ${PR_FIELDS} }
-        }
-      }
-    }`;
+  const RECENT_MERGED_LIMIT = 3;
 
   const OWNER_QUERY = `
     query($q: String!, $after: String) {
@@ -823,7 +802,13 @@
       search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
         issueCount
         pageInfo { hasNextPage endCursor }
-        nodes { ... on PullRequest { ${PR_FIELDS} viewerLatestReview { state } } }
+        nodes {
+          ... on PullRequest {
+            ${PR_FIELDS}
+            viewerLatestReview { state commit { oid } }
+            commits(last: 1) { nodes { commit { oid } } }
+          }
+        }
       }
     }`;
 
@@ -931,7 +916,7 @@
     const [mine, review, merged] = await Promise.all([
       searchPRs(`${base} is:open author:@me`),
       searchPRs(`${base} is:open review-requested:@me`),
-      searchPRs(`${base} is:merged author:@me`, 2),
+      searchPRs(`${base} is:merged author:@me`, RECENT_MERGED_LIMIT),
     ]);
     const seen = new Set();
     const prs = [];
@@ -941,41 +926,24 @@
       seen.add(key);
       prs.push(pr);
     }
-    return { viewer: mine.viewer || review.viewer || merged.viewer, prs, merged: merged.prs.slice(0, 2) };
+    return {
+      viewer: mine.viewer || review.viewer || merged.viewer,
+      prs,
+      merged: merged.prs.slice(0, RECENT_MERGED_LIMIT),
+    };
   }
 
   async function fetchReviewHistory() {
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [reviewed, reviewedMerged] = await Promise.all([
       searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
-      searchPRs(`${base} is:merged reviewed-by:@me -author:@me`, 2, REVIEW_OWNER_QUERY),
+      searchPRs(`${base} is:merged reviewed-by:@me -author:@me`, RECENT_MERGED_LIMIT, REVIEW_OWNER_QUERY),
     ]);
     const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
     return {
       prs: reviewed.prs.filter(notAuthoredByViewer),
-      merged: reviewedMerged.prs.filter(notAuthoredByViewer).slice(0, 2),
+      merged: reviewedMerged.prs.filter(notAuthoredByViewer).slice(0, RECENT_MERGED_LIMIT),
     };
-  }
-
-  // The full open set, fetched only when "All open" is viewed.
-  async function fetchAll() {
-    const target = requireTarget();
-    if (target.includes("/")) {
-      const [owner, name] = target.split("/");
-      const prs = [];
-      let after = null, viewer = null, total = 0;
-      do {
-        const data = await gql(REPO_QUERY, { owner, name, after });
-        if (!data.repository) throw new Error(`Repository "${target}" not found or token lacks access.`);
-        const conn = data.repository.pullRequests;
-        viewer = data.viewer.login;
-        total = conn.totalCount;
-        prs.push(...conn.nodes);
-        after = conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : null;
-      } while (after && prs.length < MAX_PRS);
-      return { viewer, prs, total };
-    }
-    return searchPRs(`is:pr is:open archived:false ${await scopePrefix(target)}`);
   }
 
   // ---------- rendering ----------
@@ -1055,6 +1023,18 @@
     if (reviewState === "COMMENTED")
       return `<span class="review-badge none">${ICONS.comment} You reviewed</span>`;
     return `<span class="review-badge none">Review submitted</span>`;
+  }
+
+  function hasNewCommitsSinceReview(pr) {
+    const reviewedCommit = pr.viewerLatestReview?.commit?.oid;
+    const currentCommit = pr.commits?.nodes?.[0]?.commit?.oid;
+    return !!(reviewedCommit && currentCommit && reviewedCommit !== currentCommit);
+  }
+
+  function reviewUpdateBadge(pr) {
+    return hasNewCommitsSinceReview(pr)
+      ? `<span class="review-badge pending">${ICONS.clock} Updated since your review</span>`
+      : "";
   }
 
   function ciHtml(pr) {
@@ -1254,6 +1234,7 @@
     const badge = state.filter === "review"
       ? (isContext ? "" : viewerReviewBadge(pr))
       : reviewBadge(pr);
+    const reviewUpdate = state.filter === "review" && !isContext ? reviewUpdateBadge(pr) : "";
     return `
       <div class="pr-row ${isContext ? "context" : ""}" style="padding-left: ${depth > 0 ? 23 + (depth - 1) * 29 : 16}px">
         ${elbow}
@@ -1272,6 +1253,7 @@
           <span class="reviewers">${state.filter === "review" ? authorAvatar(pr) : buildReviewers(pr)}</span>
           ${worktreeLinks(pr)}
           ${badge}
+          ${reviewUpdate}
         </div>
       </div>`;
   }
@@ -1294,9 +1276,18 @@
     return (pr.reviewRequests?.nodes || []).length > 0 ? 3 : 2;
   }
 
+  function reviewSortRank(pr) {
+    if (hasNewCommitsSinceReview(pr)) return 0;
+    if (reviewRequestedForViewer(pr)) return 1;
+    return 2;
+  }
+
   function sortComparator() {
     if (state.sort === "priority")
-      return (a, b) => sortRank(a) - sortRank(b) || new Date(b.updatedAt) - new Date(a.updatedAt);
+      return (a, b) => {
+        const rank = state.filter === "review" ? reviewSortRank : sortRank;
+        return rank(a) - rank(b) || new Date(b.updatedAt) - new Date(a.updatedAt);
+      };
     if (state.sort === "created")
       return (a, b) => new Date(b.createdAt) - new Date(a.createdAt);
     return (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt);
@@ -1331,7 +1322,7 @@
   }
 
   function reviewLaneOf(pr) {
-    return reviewRequestedForViewer(pr) ? 0 : 1;
+    return reviewRequestedForViewer(pr) || hasNewCommitsSinceReview(pr) ? 0 : 1;
   }
 
   function autoMergeChip(pr) {
@@ -1361,6 +1352,7 @@
       : pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
         ? reviewBadge(pr)
         : "";
+    const reviewUpdate = reviewMode ? reviewUpdateBadge(pr) : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
         <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
@@ -1370,6 +1362,7 @@
           ${comments}
           <span class="reviewers">${reviewMode ? authorAvatar(pr) : buildReviewers(pr)}</span>
           ${badge}
+          ${reviewUpdate}
           ${basedOn}
           ${showAutoMerge ? autoMergeChip(pr) : ""}
           ${worktreeLinks(pr)}
@@ -1421,29 +1414,21 @@
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
     $("#count-mine").textContent = state.prs.filter((p) => p.author?.login === state.viewer).length;
-    const reviewCount = state.prs.filter((p) =>
-      (p.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer)
-    ).length;
+    const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
+      [`${pr.repository?.nameWithOwner || ""}#${pr.number}`, pr]
+    )).values()];
+    const reviewCount = reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
     const reviewCountEl = $("#count-review");
     reviewCountEl.textContent = reviewCount || "";
     reviewCountEl.classList.toggle("hidden", reviewCount === 0);
     reviewCountEl.title = reviewCount
       ? `${reviewCount} pull request${reviewCount === 1 ? "" : "s"} ${reviewCount === 1 ? "needs" : "need"} your review`
       : "";
-    const allCount = $("#count-all");
-    allCount.textContent = state.allPrs ? state.allPrs.length : "";
-    allCount.classList.toggle("hidden", !state.allPrs);
-
     const boardAllowed = state.filter === "mine" || state.filter === "review";
     const selectedView = state.filter === "review" ? state.reviewView : state.view;
     const effectiveView = boardAllowed && selectedView === "board" ? "board" : "list";
     const reviewBoard = state.filter === "review" && effectiveView === "board";
-    const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
-      [`${pr.repository?.nameWithOwner || ""}#${pr.number}`, pr]
-    )).values()];
-    const dataset = state.filter === "all"
-      ? (state.allPrs || [])
-      : state.filter === "review" ? reviewSet : state.prs;
+    const dataset = state.filter === "review" ? reviewSet : state.prs;
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
@@ -1458,7 +1443,7 @@
       const laneItems = reviewBoard ? [[], []] : [[], [], []];
       for (const pr of matches) laneItems[reviewBoard ? reviewLaneOf(pr) : laneOf(pr)].push(pr);
       const defs = reviewBoard
-        ? [["Needs you", "yellow"], ["Review submitted", "green"]]
+        ? [["Waiting", "yellow"], ["Review submitted", "green"]]
         : [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
       const recentMerged = reviewBoard
         ? state.reviewedMerged.filter((pr) => pr.author?.login !== state.viewer)
@@ -1538,7 +1523,7 @@
 
     // While the current view's PRs are still being fetched, show the spinner (or
     // an error) rather than the empty "No pull requests match." message.
-    const dataReady = state.filter === "all" ? state.allPrs !== null : state.targetedLoaded;
+    const dataReady = state.targetedLoaded;
     if (!dataReady) {
       $("#merged-wrap").classList.add("hidden");
       if (!getToken() || !getCurrentRepo()) return;  // not configured: keep the setup prompt
@@ -1548,9 +1533,7 @@
         : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
       return;
     }
-    const truncated = state.filter === "all" && state.total > dataset.length
-      ? ` (most recent ${dataset.length} of ${state.total})` : "";
-    $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}${esc(truncated)}`;
+    $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}`;
     const reviewHistoryLoading = state.filter === "review" && !state.reviewHistoryLoaded;
     listBody.innerHTML = html || (reviewHistoryLoading
       ? state.loadError
@@ -1582,13 +1565,12 @@
     const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
     const needReviewHistory = reviewHistoryActive() &&
       (force || !state.reviewHistoryLoaded || !state.reviewHistoryFresh);
-    const needAll = state.filter === "all" && (force || !state.allPrs || !state.allFresh);
-    if (!needTargeted && !needReviewHistory && !needAll) { render(); return; }
+    if (!needTargeted && !needReviewHistory) { render(); return; }
     state.loading = true;
     state.loadError = null;
     state.githubRefreshFailed = false;
     updateGitHubStatus(true);
-    const hasVisibleData = state.filter === "all" ? state.allPrs !== null : state.targetedLoaded;
+    const hasVisibleData = state.targetedLoaded;
     if (!hasVisibleData) {
       $("#merged-wrap").classList.add("hidden");
       listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
@@ -1610,13 +1592,6 @@
           state.reviewedMerged = merged;
           state.reviewHistoryLoaded = true;
           state.reviewHistoryFresh = true;
-        }));
-      }
-      if (needAll) {
-        requests.push(fetchAll().then(({ prs, total }) => {
-          state.allPrs = prs;
-          state.total = total;
-          state.allFresh = true;
         }));
       }
       await Promise.all(requests);
