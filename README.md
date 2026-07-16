@@ -40,7 +40,7 @@ Replace `~/dev` with a folder that directly contains your Git clones, then open 
 
 A fine-grained personal access token limited to the repositories you use is recommended. Pull requests read access is enough for viewing; write access is needed to toggle auto-merge or mark a draft ready for review. A classic token needs the `repo` scope for private repositories.
 
-Your token stays in your browser's local storage and is sent only to `api.github.com`. The hosted and local versions use separate browser storage, so each needs to be configured once.
+Your token and recent dashboard data stay in your browser's local storage. The token is sent only to `api.github.com`. The hosted and local versions use separate browser storage, so each needs to be configured once.
 
 ## Features
 

@@ -507,7 +507,7 @@
     </div>
     <div class="panel-row">
       <span></span>
-      <span class="hint">Needs <code>repo</code> scope (classic) or Pull requests: read and write (fine-grained; write is used for the auto-merge toggle and marking drafts ready). Stored only in this browser's localStorage.</span>
+      <span class="hint">Needs <code>repo</code> scope (classic) or Pull requests: read and write (fine-grained; write is used for the auto-merge toggle and marking drafts ready). Your token and recent dashboard data stay in this browser.</span>
     </div>
     <div class="panel-row">
       <label for="add-repo-input">Add view</label>
@@ -554,7 +554,10 @@
     REPOS: "ghpr.repos",
     REPO: "ghpr.currentRepo",
     FILTER: "ghpr.filter",
+    CACHE_PREFIX: "ghpr.cache.",
   };
+  const CACHE_VERSION = 1;
+  const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
   const listBody = $("#list-body");
@@ -584,6 +587,9 @@
     launcher: DEFAULT_LAUNCHER,
     branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
+    targetedFresh: false,
+    allFresh: false,
+    cachedAt: null,
   };
 
   function resetData() {
@@ -591,12 +597,64 @@
     state.merged = [];
     state.targetedLoaded = false;
     state.allPrs = null;
+    state.targetedFresh = false;
+    state.allFresh = false;
+    state.cachedAt = null;
   }
 
   const getToken = () => localStorage.getItem(LS.TOKEN) || "";
   const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
   const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
   const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
+  const cacheKey = (target = getCurrentRepo()) => `${LS.CACHE_PREFIX}${target}`;
+
+  function restoreDashboardCache() {
+    const target = getCurrentRepo();
+    if (!getToken() || !target) return false;
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey(target)) || "null");
+      if (!cached || cached.version !== CACHE_VERSION || Date.now() - cached.savedAt > CACHE_MAX_AGE) {
+        localStorage.removeItem(cacheKey(target));
+        return false;
+      }
+      if (!Array.isArray(cached.prs) || !Array.isArray(cached.merged)) return false;
+      state.viewer = cached.viewer || null;
+      state.prs = cached.prs;
+      state.merged = cached.merged;
+      state.targetedLoaded = true;
+      state.allPrs = Array.isArray(cached.allPrs) ? cached.allPrs : null;
+      state.total = Number.isFinite(cached.total) ? cached.total : 0;
+      state.cachedAt = cached.savedAt;
+      $("#viewer-info").textContent = state.viewer ? `Signed in as ${state.viewer}` : "";
+      return true;
+    } catch {
+      localStorage.removeItem(cacheKey(target));
+      return false;
+    }
+  }
+
+  function saveDashboardCache() {
+    const target = getCurrentRepo();
+    if (!target || !state.targetedLoaded) return;
+    try {
+      localStorage.setItem(cacheKey(target), JSON.stringify({
+        version: CACHE_VERSION,
+        savedAt: Date.now(),
+        viewer: state.viewer,
+        prs: state.prs,
+        merged: state.merged,
+        allPrs: state.allPrs,
+        total: state.total,
+      }));
+    } catch { /* storage unavailable or full: live data still works */ }
+  }
+
+  function clearDashboardCaches() {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(LS.CACHE_PREFIX)) localStorage.removeItem(key);
+    }
+  }
   // "org" | "user" | undefined, from the ownerQualifier cache
   const ownerType = (login) => {
     try { return JSON.parse(localStorage.getItem("ghpr.ownerTypes") || "{}")[login]; } catch { return undefined; }
@@ -1355,14 +1413,19 @@
 
   async function load(force = false) {
     if (state.loading) return;
-    if (force) resetData();
-    const needTargeted = !state.targetedLoaded;
-    const needAll = state.filter === "all" && !state.allPrs;
+    const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
+    const needAll = state.filter === "all" && (force || !state.allPrs || !state.allFresh);
     if (!needTargeted && !needAll) { render(); return; }
     state.loading = true;
     state.loadError = null;
-    $("#merged-wrap").classList.add("hidden");  // avoid a stale merged card flashing under the spinner
-    listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+    const hasVisibleData = state.filter === "all" ? state.allPrs !== null : state.targetedLoaded;
+    if (hasVisibleData) {
+      const cachedTime = state.cachedAt ? new Date(state.cachedAt).toLocaleTimeString() : null;
+      $("#last-updated").textContent = cachedTime ? `Cached ${cachedTime} · Refreshing…` : "Refreshing…";
+    } else {
+      $("#merged-wrap").classList.add("hidden");
+      listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+    }
     try {
       if (needTargeted) {
         const { viewer, prs, merged } = await fetchTargeted();
@@ -1370,17 +1433,24 @@
         state.prs = prs;
         state.merged = merged;
         state.targetedLoaded = true;
+        state.targetedFresh = true;
+        state.cachedAt = null;
+        saveDashboardCache();
       }
       if (needAll) {
         const { prs, total } = await fetchAll();
         state.allPrs = prs;
         state.total = total;
+        state.allFresh = true;
+        state.cachedAt = null;
+        saveDashboardCache();
       }
       $("#last-updated").textContent = `Updated ${new Date().toLocaleTimeString()}`;
       $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
       render();
     } catch (err) {
       state.loadError = err.message;
+      if (hasVisibleData) $("#last-updated").textContent = "Refresh failed · Showing previous data";
       render();
     } finally {
       state.loading = false;
@@ -1479,6 +1549,8 @@
   $("#save-token-btn").addEventListener("click", () => {
     const v = $("#token-input").value.trim();
     if (!v) return;
+    clearDashboardCaches();
+    resetData();
     localStorage.setItem(LS.TOKEN, v);
     $("#token-input").value = "";
     renderTokenStatus();
@@ -1486,7 +1558,10 @@
   });
   $("#clear-token-btn").addEventListener("click", () => {
     localStorage.removeItem(LS.TOKEN);
+    clearDashboardCaches();
+    resetData();
     renderTokenStatus();
+    render();
   });
 
   $("#add-repo-btn").addEventListener("click", () => {
@@ -1498,7 +1573,9 @@
     $("#add-repo-input").value = "";
     renderRepoSelect();
     resetData();
-    load();
+    const restored = restoreDashboardCache();
+    render();
+    load(restored);
   });
   $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
   $("#token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#save-token-btn").click(); });
@@ -1506,6 +1583,7 @@
   $("#remove-repo-btn").addEventListener("click", () => {
     const current = getCurrentRepo();
     if (!current) return;
+    localStorage.removeItem(cacheKey(current));
     setRepos(getRepos().filter((r) => r !== current));
     localStorage.removeItem(LS.REPO);
     renderRepoSelect();
@@ -1516,7 +1594,9 @@
   $("#repo-select").addEventListener("change", (e) => {
     localStorage.setItem(LS.REPO, e.target.value);
     resetData();
-    load();
+    const restored = restoreDashboardCache();
+    render();
+    load(restored);
   });
 
   listBody.addEventListener("click", async (e) => {
@@ -1563,6 +1643,7 @@
         await markReadyForReview(draftBtn.dataset.pr);
         const pr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
         if (pr) pr.isDraft = false;
+        saveDashboardCache();
         render();
       } catch (err) {
         alert(`Mark ready: ${err.message}`);
@@ -1584,6 +1665,7 @@
         pr.viewerCanEnableAutoMerge = !enable;
         pr.viewerCanDisableAutoMerge = enable;
         btn.outerHTML = autoMergeChip(pr);
+        saveDashboardCache();
       } else {
         render();
       }
@@ -1622,7 +1704,9 @@
   $("#view-list").classList.toggle("active", state.view === "list");
   $("#view-board").classList.toggle("active", state.view === "board");
   if (getToken() && getCurrentRepo()) {
-    load();
+    const restored = restoreDashboardCache();
+    if (restored) render();
+    load(restored);
   } else {
     $("#settings").classList.remove("hidden");
   }
