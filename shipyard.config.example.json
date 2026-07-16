@@ -1,5 +1,5 @@
 {
-  "roots": ["~/dev"],
+  "roots": ["~/dev", "~/code", "~/src"],
   "launcher": {
     "name": "VS Code",
     "mode": "url",
