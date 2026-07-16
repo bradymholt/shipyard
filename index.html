@@ -271,17 +271,15 @@
   .pr-side { flex: none; display: flex; align-items: center; gap: 14px; margin-top: 2px; }
 
   .review-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 12px; font-weight: 600;
-    border-radius: 6px; padding: 3px 10px;
-    border: 1px solid transparent;
+    display: inline-flex; align-items: center; gap: 4px;
+    font: 600 11px var(--sans);
   }
   .review-badge svg { fill: currentColor; }
-  .review-badge.approved { color: var(--green-text); background: rgba(46,125,79,.1); border-color: rgba(46,125,79,.25); }
-  .review-badge.changes { color: var(--red-text); background: rgba(179,56,44,.08); border-color: rgba(179,56,44,.25); }
-  .review-badge.pending { color: var(--gold-text); background: rgba(201,162,75,.14); border-color: rgba(201,162,75,.35); }
-  .review-badge.none { color: var(--fg-muted); background: rgba(92,112,120,.08); border-color: rgba(92,112,120,.25); }
-  .review-badge.merged { color: var(--purple); background: rgba(122,95,192,.1); border-color: rgba(122,95,192,.3); }
+  .review-badge.approved { color: var(--green-text); }
+  .review-badge.changes { color: var(--red-text); }
+  .review-badge.pending { color: var(--gold-text); }
+  .review-badge.none { color: var(--fg-muted); }
+  .review-badge.merged { color: var(--purple); }
 
   .reviewers { display: flex; align-items: center; }
   .reviewer { position: relative; margin-left: -5px; }
