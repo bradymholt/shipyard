@@ -171,6 +171,17 @@
   #new-task-form .hint { display: block; margin-bottom: 0.875rem; }
   #settings-form .scope-hint { display: block; margin: 0.375rem 0 0; }
   .settings-divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+  .views-list { list-style: none; margin: 0.375rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+  .view-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem 0.375rem 0.625rem; border: 1px solid var(--border); border-radius: 0.375rem; }
+  .view-item.current { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); background: color-mix(in srgb, var(--green) 7%, var(--surface)); }
+  .view-name { flex: 1; font: 400 0.75rem var(--mono); color: var(--fg); }
+  .view-item.current .view-name { font-weight: 600; }
+  .view-remove { border: none; background: none; color: var(--fg-faint); cursor: pointer; padding: 0.125rem 0.25rem; display: inline-flex; border-radius: 0.25rem; }
+  .view-remove:hover { color: var(--red-text); background: var(--btn-hover); }
+  .view-remove svg { fill: currentColor; }
+  .view-empty { color: var(--fg-muted); font-size: 0.75rem; padding: 0.25rem 0; }
+  .add-view-row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .add-view-row input { flex: 1; }
   .nt-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--fg-muted); }
   .nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
   .nt-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
@@ -517,13 +528,12 @@
         <button type="button" id="save-token-btn" class="primary">Save</button>
       </div>
       <hr class="settings-divider">
-      <label class="nt-field">Add view
-        <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username">
-      </label>
-      <div class="nt-actions">
-        <span class="spacer"></span>
-        <button type="button" id="remove-repo-btn">Remove current</button>
-        <button type="button" id="add-repo-btn" class="primary">Add</button>
+      <div class="nt-field">Views
+        <ul id="views-list" class="views-list"></ul>
+        <div class="add-view-row">
+          <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username">
+          <button type="button" id="add-repo-btn" class="primary">Add</button>
+        </div>
       </div>
       <div class="modal-actions"><button type="button" id="settings-close">Done</button></div>
     </form>
@@ -1694,7 +1704,45 @@
     $("#token-status").textContent = getToken() ? "Token saved ✓" : "No token saved";
   }
 
-  $("#settings-btn").addEventListener("click", () => $("#settings-dialog").showModal());
+  const REMOVE_ICON = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 0 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06Z"/></svg>';
+  function renderViewsList() {
+    const repos = getRepos();
+    const current = getCurrentRepo();
+    $("#views-list").innerHTML = repos.length
+      ? repos.map((r) => `<li class="view-item${r === current ? " current" : ""}">
+          <span class="view-name">${esc(r)}</span>
+          <button type="button" class="view-remove" data-view="${esc(r)}" title="Remove ${esc(r)}" aria-label="Remove ${esc(r)}">${REMOVE_ICON}</button>
+        </li>`).join("")
+      : '<li class="view-empty">No views yet — add one below.</li>';
+  }
+
+  function removeView(v) {
+    const wasCurrent = getCurrentRepo() === v;
+    localStorage.removeItem(cacheKey(v));
+    const remaining = getRepos().filter((r) => r !== v);
+    setRepos(remaining);
+    if (wasCurrent) {
+      if (remaining[0]) localStorage.setItem(LS.REPO, remaining[0]);
+      else localStorage.removeItem(LS.REPO);
+      resetData();
+    }
+    renderRepoSelect();
+    renderViewsList();
+    if (wasCurrent) {
+      const restored = restoreDashboardCache();
+      render();
+      load(restored);
+    } else {
+      render();
+    }
+  }
+
+  $("#views-list").addEventListener("click", (e) => {
+    const btn = e.target.closest(".view-remove");
+    if (btn) removeView(btn.dataset.view);
+  });
+
+  $("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#settings-dialog").showModal(); });
   $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
   $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
@@ -1804,6 +1852,7 @@
     localStorage.setItem(LS.REPO, v);
     $("#add-repo-input").value = "";
     renderRepoSelect();
+    renderViewsList();
     resetData();
     const restored = restoreDashboardCache();
     render();
@@ -1811,17 +1860,6 @@
   });
   $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
   $("#token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#save-token-btn").click(); });
-
-  $("#remove-repo-btn").addEventListener("click", () => {
-    const current = getCurrentRepo();
-    if (!current) return;
-    localStorage.removeItem(cacheKey(current));
-    setRepos(getRepos().filter((r) => r !== current));
-    localStorage.removeItem(LS.REPO);
-    renderRepoSelect();
-    resetData();
-    render();
-  });
 
   $("#repo-select").addEventListener("change", (e) => {
     localStorage.setItem(LS.REPO, e.target.value);
@@ -1959,6 +1997,7 @@
 
   // ---------- init ----------
   renderRepoSelect();
+  renderViewsList();
   renderTokenStatus();
   const initialView = state.filter === "review" ? state.reviewView : state.view;
   $("#view-list").classList.toggle("active", initialView === "list");
