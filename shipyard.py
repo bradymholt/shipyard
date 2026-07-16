@@ -9,10 +9,11 @@ reports, for every git worktree under the given root(s):
 
 Run it from the dashboard directory and open the printed URL:
 
-    python3 index.py                 # scan the folders set in the config file
-    python3 index.py ~/dev ~/work    # or override the roots on the command line
+    python3 shipyard.py                 # scan the folders set in the config file
+    python3 shipyard.py ~/dev ~/work    # or override the roots on the command line
 
-Binds to localhost only. Nothing it reads or serves is written to the repo.
+Binds to localhost only. Discovery is read-only; branch actions you choose can
+change local Git state.
 
 shipyard.config.json (next to this file) sets the folders to scan and
 controls how the page opens VS Code / prefills New task branch names:
@@ -506,7 +507,7 @@ def main():
     roots = normalize_roots(cli_roots or cfg_roots)
     if not roots:
         sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
-                 f'or pass them on the command line: python3 index.py ~/dev')
+                 f'or pass them on the command line: python3 shipyard.py ~/dev')
     here = os.path.dirname(os.path.abspath(__file__))
     Handler.roots = roots
     Handler.config = config

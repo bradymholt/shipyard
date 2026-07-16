@@ -1,6 +1,6 @@
 # Shipyard
 
-Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place.
+Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Use it directly from GitHub Pages, or run it locally to add Git worktree, branch, and VS Code integration.
 
 [Try Shipyard in your browser](https://bradymholt.github.io/shipyard/)
 
@@ -20,18 +20,18 @@ See drafts, waiting work, approvals, and recent merges by stage.
 
 ## Quick start
 
-### Hosted
+### Hosted mode
 
 Open the [hosted dashboard](https://bradymholt.github.io/shipyard/), click the gear icon, add a GitHub token, then add a repository, organization, or username to your views. Nothing needs to be installed.
 
-### With local integration
+### Local mode
 
-The optional local companion adds VS Code links and branch/worktree actions. It requires Git and Python 3; VS Code is only needed for the editor links.
+Local mode runs an optional companion process that adds VS Code links and branch/worktree actions. It requires Git and Python 3; VS Code is only needed for the editor links.
 
 ```bash
 git clone https://github.com/bradymholt/shipyard.git
 cd shipyard
-python3 index.py ~/dev
+python3 shipyard.py ~/dev
 ```
 
 Replace `~/dev` with a folder that directly contains your Git clones, then open the URL printed by the command. You can pass more than one folder or use `--port` to choose another port.
@@ -53,7 +53,7 @@ Your token stays in your browser's local storage and is sent only to `api.github
 
 ## Local companion
 
-`index.py` serves the dashboard locally and matches GitHub PR branches to clones found under your configured folders. It binds to localhost and accepts branch actions only from the dashboard it serves.
+Local mode starts `shipyard.py`, a small companion process that serves the dashboard and matches GitHub PR branches to clones found under your configured folders. It binds to localhost and accepts branch actions only from the dashboard it serves.
 
 Worktree discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees. Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes existing worktrees. New worktrees are created under `<repo>/.claude/worktrees/`.
 
@@ -61,7 +61,7 @@ For a persistent setup, copy the example configuration and adjust `roots`:
 
 ```bash
 cp shipyard.config.example.json shipyard.config.json
-python3 index.py
+python3 shipyard.py
 ```
 
 ```json
@@ -77,7 +77,7 @@ The default `scheme` setting uses `vscode://` links. Set it to `cli` if you pref
 
 ## Development
 
-There is no build step or dependency installation. Serve `index.html` with `python3 -m http.server`, or run `python3 index.py ~/dev` to exercise the local integration. Issues and pull requests are welcome.
+There is no build step or dependency installation. Serve `index.html` with `python3 -m http.server`, or run `python3 shipyard.py ~/dev` to exercise local mode. Issues and pull requests are welcome.
 
 ## License
 

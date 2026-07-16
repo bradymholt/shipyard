@@ -590,7 +590,7 @@
   const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
   const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
   const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
-  // "org" | "user" | undefined, from the companion's ownerQualifier cache
+  // "org" | "user" | undefined, from the ownerQualifier cache
   const ownerType = (login) => {
     try { return JSON.parse(localStorage.getItem("ghpr.ownerTypes") || "{}")[login]; } catch { return undefined; }
   };
@@ -883,7 +883,7 @@
     return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
   }
 
-  // Populated only when the local companion (index.py) is serving the page;
+  // Populated only when the local companion (shipyard.py) is serving the page;
   // on GitHub Pages the fetch fails and worktree links stay off.
   let lastWtSig = "";  // signature of the last worktrees.json, so polling only re-renders on change
   async function loadCompanionConfig() {
