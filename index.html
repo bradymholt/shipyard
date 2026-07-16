@@ -335,6 +335,7 @@
     grid-template-columns: repeat(3, 1fr);
     gap: 14px;
   }
+  .board.two-lane { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lane {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -569,7 +570,7 @@
     FILTER: "ghpr.filter",
     CACHE_PREFIX: "ghpr.cache.",
   };
-  const CACHE_VERSION = 1;
+  const CACHE_VERSION = 3;
   const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
@@ -583,8 +584,11 @@
   };
 
   const state = {
-    prs: [],              // targeted set: my PRs ∪ PRs awaiting my review (fetched on load)
+    prs: [],              // targeted set: my PRs plus open PRs awaiting my review
     merged: [],           // my last couple of merged PRs, shown as context on the My PRs tab
+    reviewedPrs: [],      // open PRs I reviewed, loaded lazily for the review board
+    reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
+    reviewBoardLoaded: false,
     targetedLoaded: false,
     allPrs: null,         // full open set, fetched lazily the first time "All open" is viewed
     total: 0,             // total open count, for the All-open truncation note
@@ -592,6 +596,7 @@
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) || "mine",
     view: localStorage.getItem("ghpr.view") || "list",
+    reviewView: localStorage.getItem("ghpr.reviewView") || "list",
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, workspace }, from the local companion
     companion: false,     // true when the local companion answered (enables worktree actions)
@@ -601,6 +606,7 @@
     branchPrefix: "",     // New task branch prefix from companion config; falls back to the signed-in username
     loading: false,
     targetedFresh: false,
+    reviewBoardFresh: false,
     allFresh: false,
     githubUpdatedAt: null,
     githubRefreshFailed: false,
@@ -609,9 +615,13 @@
   function resetData() {
     state.prs = [];
     state.merged = [];
+    state.reviewedPrs = [];
+    state.reviewedMerged = [];
+    state.reviewBoardLoaded = false;
     state.targetedLoaded = false;
     state.allPrs = null;
     state.targetedFresh = false;
+    state.reviewBoardFresh = false;
     state.allFresh = false;
     state.githubUpdatedAt = null;
     state.githubRefreshFailed = false;
@@ -635,10 +645,14 @@
         localStorage.removeItem(cacheKey(target));
         return false;
       }
-      if (!Array.isArray(cached.prs) || !Array.isArray(cached.merged)) return false;
+      if (!Array.isArray(cached.prs) || !Array.isArray(cached.merged) ||
+          !Array.isArray(cached.reviewedPrs) || !Array.isArray(cached.reviewedMerged)) return false;
       state.viewer = cached.viewer || null;
       state.prs = cached.prs;
       state.merged = cached.merged;
+      state.reviewedPrs = cached.reviewedPrs;
+      state.reviewedMerged = cached.reviewedMerged;
+      state.reviewBoardLoaded = cached.reviewBoardLoaded === true;
       state.targetedLoaded = true;
       state.allPrs = Array.isArray(cached.allPrs) ? cached.allPrs : null;
       state.total = Number.isFinite(cached.total) ? cached.total : 0;
@@ -662,6 +676,9 @@
         viewer: state.viewer,
         prs: state.prs,
         merged: state.merged,
+        reviewedPrs: state.reviewedPrs,
+        reviewedMerged: state.reviewedMerged,
+        reviewBoardLoaded: state.reviewBoardLoaded,
         allPrs: state.allPrs,
         total: state.total,
       }));
@@ -800,6 +817,16 @@
       }
     }`;
 
+  const REVIEW_OWNER_QUERY = `
+    query($q: String!, $after: String) {
+      viewer { login }
+      search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
+        issueCount
+        pageInfo { hasNextPage endCursor }
+        nodes { ... on PullRequest { ${PR_FIELDS} viewerLatestReview { state } } }
+      }
+    }`;
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // 502/503/504 and network drops are transient — retry with exponential backoff.
@@ -884,11 +911,11 @@
     return `${await ownerQualifier(target)}:${target}`;
   }
 
-  async function searchPRs(q, max = MAX_PRS) {
+  async function searchPRs(q, max = MAX_PRS, query = OWNER_QUERY) {
     const prs = [];
     let after = null, viewer = null, total = 0;
     do {
-      const data = await gql(OWNER_QUERY, { q: `${q} sort:updated-desc`, after });
+      const data = await gql(query, { q: `${q} sort:updated-desc`, after });
       viewer = data.viewer.login;
       total = data.search.issueCount;
       prs.push(...data.search.nodes.filter((n) => n && n.number));
@@ -915,6 +942,19 @@
       prs.push(pr);
     }
     return { viewer: mine.viewer || review.viewer || merged.viewer, prs, merged: merged.prs.slice(0, 2) };
+  }
+
+  async function fetchReviewBoard() {
+    const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
+    const [reviewed, reviewedMerged] = await Promise.all([
+      searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
+      searchPRs(`${base} is:merged reviewed-by:@me -author:@me`, 2, REVIEW_OWNER_QUERY),
+    ]);
+    const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
+    return {
+      prs: reviewed.prs.filter(notAuthoredByViewer),
+      merged: reviewedMerged.prs.filter(notAuthoredByViewer).slice(0, 2),
+    };
   }
 
   // The full open set, fetched only when "All open" is viewed.
@@ -989,6 +1029,28 @@
     return (pr.reviewRequests?.nodes || []).length > 0
       ? `<span class="review-badge pending">${ICONS.clock} Awaiting review</span>`
       : `<span class="review-badge none">Needs review</span>`;
+  }
+
+  function reviewRequestedForViewer(pr) {
+    return (pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer);
+  }
+
+  function reviewBoardItem(pr) {
+    if (pr.author?.login === state.viewer) return false;
+    return reviewRequestedForViewer(pr) || !!pr.viewerLatestReview;
+  }
+
+  function viewerReviewBadge(pr) {
+    if (reviewRequestedForViewer(pr))
+      return `<span class="review-badge pending">${ICONS.clock} Review requested</span>`;
+    const reviewState = pr.viewerLatestReview?.state;
+    if (reviewState === "APPROVED")
+      return `<span class="review-badge approved">${ICONS.check} You approved</span>`;
+    if (reviewState === "CHANGES_REQUESTED")
+      return `<span class="review-badge changes">${ICONS.changes} You requested changes</span>`;
+    if (reviewState === "COMMENTED")
+      return `<span class="review-badge none">${ICONS.comment} You reviewed</span>`;
+    return `<span class="review-badge none">Review submitted</span>`;
   }
 
   function ciHtml(pr) {
@@ -1262,6 +1324,10 @@
     return 0;
   }
 
+  function reviewLaneOf(pr) {
+    return reviewRequestedForViewer(pr) ? 0 : 1;
+  }
+
   function autoMergeChip(pr) {
     const on = !!pr.autoMergeRequest;
     if (on && !pr.viewerCanDisableAutoMerge)
@@ -1272,7 +1338,7 @@
       : `<button class="am-toggle off" data-pr="${esc(pr.id)}" data-action="enable" title="Auto-merge is off. Click to enable.">Auto-merge</button>`;
   }
 
-  function prCard(pr, parent, showAutoMerge = false) {
+  function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
     const repoName = pr.repository?.nameWithOwner;
     const repoPrefix = repoName && repoName !== getCurrentRepo()
       ? `<a href="https://github.com/${esc(repoName)}" target="_blank" rel="noopener">${esc(repoName)}</a> `
@@ -1283,17 +1349,20 @@
     const comments = pr.comments.totalCount
       ? `<span class="comments" title="${pr.comments.totalCount} comments">${ICONS.comment}${pr.comments.totalCount}</span>`
       : "";
-    const badge = pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
-      ? reviewBadge(pr)
-      : "";
+    const draft = reviewMode && pr.isDraft ? '<span class="draft-pill">Draft</span>' : "";
+    const badge = reviewMode
+      ? viewerReviewBadge(pr)
+      : pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
+        ? reviewBadge(pr)
+        : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
         <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
           ${comments}
-          <span class="reviewers">${buildReviewers(pr)}</span>
+          <span class="reviewers">${reviewMode ? authorAvatar(pr) : buildReviewers(pr)}</span>
           ${badge}
           ${basedOn}
           ${showAutoMerge ? autoMergeChip(pr) : ""}
@@ -1353,10 +1422,16 @@
     allCount.textContent = state.allPrs ? state.allPrs.length : "";
     allCount.classList.toggle("hidden", !state.allPrs);
 
-    const dataset = state.filter === "all" ? (state.allPrs || []) : state.prs;
-
-    const boardAllowed = state.filter === "mine";
-    const effectiveView = boardAllowed && state.view === "board" ? "board" : "list";
+    const boardAllowed = state.filter === "mine" || state.filter === "review";
+    const selectedView = state.filter === "review" ? state.reviewView : state.view;
+    const effectiveView = boardAllowed && selectedView === "board" ? "board" : "list";
+    const reviewBoard = state.filter === "review" && effectiveView === "board";
+    const reviewBoardSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
+      [`${pr.repository?.nameWithOwner || ""}#${pr.number}`, pr]
+    )).values()];
+    const dataset = state.filter === "all"
+      ? (state.allPrs || [])
+      : reviewBoard ? reviewBoardSet : state.prs;
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", effectiveView === "list");
     $("#view-board").classList.toggle("active", effectiveView === "board");
@@ -1366,12 +1441,17 @@
     let html = "", count = 0;
     if (effectiveView === "board") {
       const { parents } = buildStacks(dataset);
-      const matches = dataset.filter(matchesFilter);
+      const matches = dataset.filter(reviewBoard ? reviewBoardItem : matchesFilter);
       count = matches.length;
-      const laneItems = [[], [], []];
-      for (const pr of matches) laneItems[laneOf(pr)].push(pr);
-      const defs = [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
-      html = '<div class="board">' + defs.map(([name, color], i) => {
+      const laneItems = reviewBoard ? [[], []] : [[], [], []];
+      for (const pr of matches) laneItems[reviewBoard ? reviewLaneOf(pr) : laneOf(pr)].push(pr);
+      const defs = reviewBoard
+        ? [["Needs you", "yellow"], ["Review submitted", "green"]]
+        : [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
+      const recentMerged = reviewBoard
+        ? state.reviewedMerged.filter((pr) => pr.author?.login !== state.viewer)
+        : state.merged;
+      html = `<div class="board${reviewBoard ? " two-lane" : ""}">` + defs.map(([name, color], i) => {
         const inLane = laneItems[i];
         const laneNums = new Set(inLane.map((p) => p.number));
         const kids = new Map();
@@ -1392,10 +1472,10 @@
           seen.add(pr.number);
           const parent = parents.get(pr.number);
           const chipParent = parent && !laneNums.has(parent.number) ? parent : null;
-          const showAutoMerge = i >= 1;
+          const showAutoMerge = !reviewBoard && i >= 1;
           let out = depth === 0
-            ? prCard(pr, chipParent, showAutoMerge)
-            : `<div class="card-nest" style="margin-left: ${(depth - 1) * 14}px"><span class="stack-elbow" title="Stacked PR"></span>${prCard(pr, chipParent, showAutoMerge)}</div>`;
+            ? prCard(pr, chipParent, showAutoMerge, reviewBoard)
+            : `<div class="card-nest" style="margin-left: ${(depth - 1) * 14}px"><span class="stack-elbow" title="Stacked PR"></span>${prCard(pr, chipParent, showAutoMerge, reviewBoard)}</div>`;
           for (const kid of kids.get(pr.number) || []) out += renderCardTree(kid, depth + 1);
           return out;
         };
@@ -1408,16 +1488,19 @@
         let laneHtml = renderGroup((p) => !p.isDraft);
         const draftHtml = renderGroup((p) => p.isDraft);
         if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
-        if (i === 2 && state.merged.length) {  // recently merged sit under the Ready lane
-          laneHtml += '<div class="merged-divider"></div>' + state.merged.map(mergedCard).join("");
+        const mergedLane = reviewBoard ? 1 : 2;
+        if (i === mergedLane && recentMerged.length) {
+          laneHtml += '<div class="merged-divider"></div>' + recentMerged.map(mergedCard).join("");
         }
         return `
         <div class="lane">
           <div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>
-          ${laneHtml || '<div class="lane-empty">None</div>'}
+          ${laneHtml || (reviewBoard && i === 1 && !state.reviewBoardLoaded
+            ? '<div class="lane-empty">Loading…</div>'
+            : '<div class="lane-empty">None</div>')}
         </div>`;
       }).join("") + "</div>";
-      if (!count && !state.merged.length) html = "";
+      if (!count && !recentMerged.length) html = "";
     } else {
       const { roots, children } = buildStacks(dataset);
       roots.sort(sortComparator());
@@ -1468,11 +1551,17 @@
     }
   }
 
+  function reviewBoardActive() {
+    return state.filter === "review" && state.reviewView === "board";
+  }
+
   async function load(force = false) {
     if (state.loading) return;
     const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
+    const needReviewBoard = reviewBoardActive() &&
+      (force || !state.reviewBoardLoaded || !state.reviewBoardFresh);
     const needAll = state.filter === "all" && (force || !state.allPrs || !state.allFresh);
-    if (!needTargeted && !needAll) { render(); return; }
+    if (!needTargeted && !needReviewBoard && !needAll) { render(); return; }
     state.loading = true;
     state.loadError = null;
     state.githubRefreshFailed = false;
@@ -1483,20 +1572,32 @@
       listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     }
     try {
+      const requests = [];
       if (needTargeted) {
-        const { viewer, prs, merged } = await fetchTargeted();
-        state.viewer = viewer;
-        state.prs = prs;
-        state.merged = merged;
-        state.targetedLoaded = true;
-        state.targetedFresh = true;
+        requests.push(fetchTargeted().then(({ viewer, prs, merged }) => {
+          state.viewer = viewer;
+          state.prs = prs;
+          state.merged = merged;
+          state.targetedLoaded = true;
+          state.targetedFresh = true;
+        }));
+      }
+      if (needReviewBoard) {
+        requests.push(fetchReviewBoard().then(({ prs, merged }) => {
+          state.reviewedPrs = prs;
+          state.reviewedMerged = merged;
+          state.reviewBoardLoaded = true;
+          state.reviewBoardFresh = true;
+        }));
       }
       if (needAll) {
-        const { prs, total } = await fetchAll();
-        state.allPrs = prs;
-        state.total = total;
-        state.allFresh = true;
+        requests.push(fetchAll().then(({ prs, total }) => {
+          state.allPrs = prs;
+          state.total = total;
+          state.allFresh = true;
+        }));
       }
+      await Promise.all(requests);
       state.githubUpdatedAt = Date.now();
       state.githubRefreshFailed = false;
       restartGitHubAgeTimer();
@@ -1511,6 +1612,7 @@
       render();
     } finally {
       state.loading = false;
+      if (reviewBoardActive() && !state.reviewBoardLoaded && !state.loadError) load();
     }
   }
 
@@ -1741,9 +1843,12 @@
 
   for (const [id, view] of [["#view-list", "list"], ["#view-board", "board"]]) {
     $(id).addEventListener("click", () => {
-      state.view = view;
-      localStorage.setItem("ghpr.view", view);
+      const reviewView = state.filter === "review";
+      if (reviewView) state.reviewView = view;
+      else state.view = view;
+      localStorage.setItem(reviewView ? "ghpr.reviewView" : "ghpr.view", view);
       render();
+      if (reviewView && view === "board") load();
     });
   }
 
@@ -1759,8 +1864,9 @@
   // ---------- init ----------
   renderRepoSelect();
   renderTokenStatus();
-  $("#view-list").classList.toggle("active", state.view === "list");
-  $("#view-board").classList.toggle("active", state.view === "board");
+  const initialView = state.filter === "review" ? state.reviewView : state.view;
+  $("#view-list").classList.toggle("active", initialView === "list");
+  $("#view-board").classList.toggle("active", initialView === "board");
   if (getToken() && getCurrentRepo()) {
     const restored = restoreDashboardCache();
     if (restored) render();
