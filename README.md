@@ -97,3 +97,5 @@ The companion reads a `shipyard.config.json` next to `index.py` (it's gitignored
 ## Development
 
 No build step. Edit `index.html`, serve it locally (`python3 -m http.server`), and refresh. See `index.py` for the optional worktree integration.
+
+To iterate on the companion itself, set `SHIPYARD_DEV_RELOAD=1` before running it: the server then watches `index.py` and `shipyard.config.json` and exits when either changes, so a process supervisor (e.g. a `KeepAlive` launchd agent) restarts it with the new code. It's off by default, so a plain `python3 index.py` is unaffected.
