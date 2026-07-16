@@ -1768,7 +1768,7 @@
     const html = ntRepoOptionsHtml();
     $("#nt-repo").innerHTML = html || '<option value="">— no local clones for your views —</option>';
     const branch = $("#nt-branch");
-    branch.value = state.viewer ? `${state.viewer}/` : "";
+    branch.value = "";  // start blank so the default action is "Open default"
     const status = $("#nt-status");
     status.textContent = "";
     status.classList.remove("error");
