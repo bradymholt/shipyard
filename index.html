@@ -231,9 +231,8 @@
   .pr-row:has(.review-badge.changes) { border-left-color: var(--red); }
   .pr-row:has(.review-badge.pending) { border-left-color: var(--gold-bar); }
   .pr-row:has(.review-badge.none) { border-left-color: var(--muted-bar); }
-  /* The branch checked out in your main clone (the green open icon) — tint the whole row. */
-  .pr-row:has(.wt-link.current) { background: color-mix(in srgb, var(--green) 8%, var(--surface)); }
-  .pr-row:has(.wt-link.current):hover { background: color-mix(in srgb, var(--green) 13%, var(--surface)); }
+  /* The branch checked out in your main clone (the green open icon) — mark it with a thicker green accent. */
+  .pr-row:has(.wt-link.current) { border-left: 6px solid var(--green); }
   .pr-row.context { opacity: .55; }
   .pr-row.merged { opacity: .65; border-left-color: var(--purple-bar); }
   .pr-row.merged:not(:last-child) { border-bottom-style: dashed; }
@@ -368,10 +367,7 @@
     border-radius: 0.5rem;
     padding: 0.5rem 0.625rem;
   }
-  .card:has(.wt-link.current) {
-    background: color-mix(in srgb, var(--green) 8%, var(--surface));
-    border-color: color-mix(in srgb, var(--green) 35%, var(--border));
-  }
+  .card:has(.wt-link.current) { border: 2px solid var(--green); }
   .card.draft { background: var(--bg); border-style: dashed; border-color: var(--border-dashed); }
   .card.merged { background: var(--bg); opacity: .75; }
   .card-title { font-weight: 600; font-size: 0.8125rem; line-height: 1.4; color: var(--fg); }
