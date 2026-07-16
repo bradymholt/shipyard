@@ -6,17 +6,17 @@ Shipyard is a focused dashboard for staying on top of GitHub pull requests. It b
 
 ## Screenshots
 
-### List view
-
-Prioritize PRs with reviewer, review, and CI status visible together.
-
-![Shipyard list view](docs/list-view.png)
-
 ### Board view
 
 See drafts, waiting work, approvals, and recent merges by stage.
 
 ![Shipyard board view](docs/board-view.png)
+
+### List view
+
+Prioritize PRs with reviewer, review, and CI status visible together.
+
+![Shipyard list view](docs/list-view.png)
 
 ### Review board
 
@@ -100,6 +100,58 @@ For example, this opens the checkout folder in Xcode on macOS:
 ```
 
 `branchPrefix` optionally prefills new branch names.
+
+### Run at login (macOS)
+
+<details>
+<summary>Keep the companion always running with a <code>launchd</code> agent</summary>
+
+To start the companion at login and keep it running in the background, install it as a LaunchAgent. Save the following as `~/Library/LaunchAgents/local.shipyard.plist`, replacing the two paths with your own — LaunchAgents don't expand `~`, so both must be absolute. The Python path is `/opt/homebrew/bin/python3` on Apple Silicon and `/usr/local/bin/python3` on Intel.
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.shipyard</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/python3</string>
+    <string>/Users/you/dev/shipyard/shipyard.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/you/dev/shipyard</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/local.shipyard.stdout</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/local.shipyard.stderr</string>
+</dict>
+</plist>
+```
+
+`WorkingDirectory` lets the companion find your `shipyard.config.json`. Load it (and start it immediately) with:
+
+```bash
+launchctl load ~/Library/LaunchAgents/local.shipyard.plist
+```
+
+Output and errors go to `/tmp/local.shipyard.stdout` and `/tmp/local.shipyard.stderr`. To stop and remove it:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/local.shipyard.plist
+```
+
+</details>
 
 ## Development
 
