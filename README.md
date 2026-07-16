@@ -38,6 +38,7 @@ Local mode runs an optional companion process that opens checkouts in your prefe
 git clone https://github.com/bradymholt/shipyard.git
 cd shipyard
 python3 shipyard.py ~/dev
+open http://localhost:4321
 ```
 
 Replace `~/dev` with a folder that directly contains your Git clones, then open the URL printed by the command. You can pass more than one folder or use `--port` to choose another port.
