@@ -1533,7 +1533,10 @@
         : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
       return;
     }
-    $("#list-title").innerHTML = `${count} open pull request${count === 1 ? "" : "s"} · ${targetLink}`;
+    const titleLabel = state.filter === "review"
+      ? `${count} review pull request${count === 1 ? "" : "s"}`
+      : `${count} open pull request${count === 1 ? "" : "s"}`;
+    $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
     const reviewHistoryLoading = state.filter === "review" && !state.reviewHistoryLoaded;
     listBody.innerHTML = html || (reviewHistoryLoading
       ? state.loadError
