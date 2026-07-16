@@ -127,25 +127,50 @@ class GitError(RuntimeError):
     pass
 
 
-def git(repo, *args):
+def run_git(repo, *args, timeout=10):
     try:
-        r = subprocess.run(["git", "-C", repo, *args],
-                           capture_output=True, text=True, timeout=10)
+        return subprocess.run(["git", "-C", repo, *args],
+                              capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         raise GitError(f"git {' '.join(args)} timed out after {e.timeout} seconds") from e
     except OSError as e:
         raise GitError(f"could not run git {' '.join(args)}: {e}") from e
+
+
+def command_error(result):
+    return (result.stderr or result.stdout or
+            f"git exited with status {result.returncode}").strip()
+
+
+def git(repo, *args, timeout=10):
+    r = run_git(repo, *args, timeout=timeout)
     if r.returncode != 0:
-        detail = (r.stderr or r.stdout or f"git exited with status {r.returncode}").strip()
-        raise GitError(detail)
+        raise GitError(command_error(r))
     return r.stdout
 
 
-def try_git(repo, *args):
+def try_git(repo, *args, timeout=10):
     try:
-        return git(repo, *args)
+        return git(repo, *args, timeout=timeout)
     except GitError:
         return ""
+
+
+def git_ref_exists(repo, ref):
+    r = run_git(repo, "show-ref", "--verify", "--quiet", ref)
+    if r.returncode == 0:
+        return True
+    if r.returncode == 1:
+        return False
+    raise GitError(command_error(r))
+
+
+def mutate_git(repo, *args, timeout):
+    try:
+        r = run_git(repo, *args, timeout=timeout)
+    except GitError as e:
+        return str(e)
+    return command_error(r) if r.returncode != 0 else None
 
 
 def parse_origin(url):
@@ -265,13 +290,22 @@ def new_task_worktree(repo, branch, roots):
     base = default_branch(clone)
     try_git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
     path = worktree_path(clone, branch)
-    add = lambda *a: subprocess.run(["git", "-C", clone, "worktree", "add", *a],
-                                    capture_output=True, text=True, timeout=120)
-    r = add("-b", branch, path, f"origin/{base}")
-    if r.returncode != 0:  # branch may already exist locally → check it out instead
-        r = add(path, branch)
-    if r.returncode != 0:
-        return {"ok": False, "error": (r.stderr or "git worktree add failed").strip()}
+    try:
+        local_exists = git_ref_exists(clone, f"refs/heads/{branch}")
+        if not local_exists and not git_ref_exists(clone, f"refs/remotes/origin/{base}"):
+            return {"ok": False, "error": f"Default branch origin/{base} was not found locally."}
+    except GitError as e:
+        return {"ok": False, "error": f"Could not inspect local branches: {e}"}
+    args = ("worktree", "add", path, branch) if local_exists else (
+        "worktree", "add", "-b", branch, path, f"origin/{base}")
+    error = mutate_git(clone, *args, timeout=120)
+    if error:
+        # A checkout or post-checkout hook may have completed before a timeout/error.
+        existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+        if existing:
+            return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"),
+                    "created": os.path.realpath(existing["path"]) == os.path.realpath(path)}
+        return {"ok": False, "error": error}
     return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True, "branch": branch}
 
 
@@ -324,12 +358,20 @@ def open_in_main(repo, branch, roots):
     if main_dirty:
         return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
     try_git(clone, "fetch", "origin", branch)  # best effort so the ref is present
-    sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
-    r = sw(branch)
-    if r.returncode != 0:  # no local branch yet → create one tracking the remote
-        r = sw("-c", branch, "--track", f"origin/{branch}")
-    if r.returncode != 0:
-        return {"ok": False, "error": (r.stderr or "git switch failed").strip()}
+    try:
+        local_exists = git_ref_exists(clone, f"refs/heads/{branch}")
+        remote_exists = git_ref_exists(clone, f"refs/remotes/origin/{branch}")
+    except GitError as e:
+        return {"ok": False, "error": f"Could not inspect local branches: {e}"}
+    if local_exists:
+        args = ("switch", branch)
+    elif remote_exists:
+        args = ("switch", "-c", branch, "--track", f"origin/{branch}")
+    else:
+        return {"ok": False, "error": f"Branch {branch} was not found locally or on origin."}
+    error = mutate_git(clone, *args, timeout=60)
+    if error and try_git(clone, "branch", "--show-current").strip() != branch:
+        return {"ok": False, "error": error}
     return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
 
 
@@ -353,13 +395,17 @@ def new_branch_in_main(repo, branch, roots):
         return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
     base = default_branch(clone)
     try_git(clone, "fetch", "origin", base)  # best effort: branch off a fresh base
-    sw = lambda *a: subprocess.run(["git", "-C", clone, "switch", *a], capture_output=True, text=True, timeout=60)
-    r = sw("-c", branch, f"origin/{base}")
-    if r.returncode != 0:  # branch may already exist locally → check it out instead
-        r = sw(branch)
-    if r.returncode != 0:
-        return {"ok": False, "error": (r.stderr or "git switch failed").strip()}
-    return {"ok": True, "path": clone, "workspace": workspace_in(clone), "created": True}
+    try:
+        local_exists = git_ref_exists(clone, f"refs/heads/{branch}")
+        if not local_exists and not git_ref_exists(clone, f"refs/remotes/origin/{base}"):
+            return {"ok": False, "error": f"Default branch origin/{base} was not found locally."}
+    except GitError as e:
+        return {"ok": False, "error": f"Could not inspect local branches: {e}"}
+    args = ("switch", branch) if local_exists else ("switch", "-c", branch, f"origin/{base}")
+    error = mutate_git(clone, *args, timeout=60)
+    if error and try_git(clone, "branch", "--show-current").strip() != branch:
+        return {"ok": False, "error": error}
+    return {"ok": True, "path": clone, "workspace": workspace_in(clone), "created": not local_exists}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
