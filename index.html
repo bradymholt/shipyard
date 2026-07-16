@@ -796,6 +796,21 @@
       }
     }`;
 
+  const REQUESTED_REVIEW_QUERY = `
+    query($q: String!, $after: String) {
+      viewer { login }
+      search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
+        issueCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          ... on PullRequest {
+            ${PR_FIELDS}
+            pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
+          }
+        }
+      }
+    }`;
+
   const REVIEW_OWNER_QUERY = `
     query($q: String!, $after: String) {
       viewer { login }
@@ -807,6 +822,7 @@
             ${PR_FIELDS}
             viewerLatestReview { state commit { oid } }
             commits(last: 1) { nodes { commit { oid } } }
+            pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
           }
         }
       }
@@ -915,7 +931,7 @@
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [mine, review, merged] = await Promise.all([
       searchPRs(`${base} is:open author:@me`),
-      searchPRs(`${base} is:open review-requested:@me`),
+      searchPRs(`${base} is:open review-requested:@me`, MAX_PRS, REQUESTED_REVIEW_QUERY),
       searchPRs(`${base} is:merged author:@me`, RECENT_MERGED_LIMIT),
     ]);
     const seen = new Set();
@@ -1034,6 +1050,13 @@
   function reviewUpdateBadge(pr) {
     return hasNewCommitsSinceReview(pr)
       ? `<span class="review-badge pending">${ICONS.clock} Updated since your review</span>`
+      : "";
+  }
+
+  function pendingReviewBadge(pr) {
+    const pending = (pr.pendingReviews?.nodes || []).some((review) => review.author?.login === state.viewer);
+    return pending
+      ? `<span class="review-badge none" title="You have an unsubmitted review on GitHub">${ICONS.comment} Review in progress</span>`
       : "";
   }
 
@@ -1353,6 +1376,7 @@
         ? reviewBadge(pr)
         : "";
     const reviewUpdate = reviewMode ? reviewUpdateBadge(pr) : "";
+    const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
         <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
@@ -1363,6 +1387,7 @@
           <span class="reviewers">${reviewMode ? authorAvatar(pr) : buildReviewers(pr)}</span>
           ${badge}
           ${reviewUpdate}
+          ${pendingReview}
           ${basedOn}
           ${showAutoMerge ? autoMergeChip(pr) : ""}
           ${worktreeLinks(pr)}
