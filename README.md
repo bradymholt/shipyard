@@ -18,6 +18,12 @@ See drafts, waiting work, approvals, and recent merges by stage.
 
 ![Shipyard board view](docs/board-view.png)
 
+### Review board
+
+Track the PRs you owe a review, split into what's still waiting on you and what you've already reviewed, with counts and pending-review indicators.
+
+![Shipyard review board](docs/review-board.png)
+
 ## Quick start
 
 ### Hosted mode
