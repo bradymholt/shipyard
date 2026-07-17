@@ -1755,27 +1755,35 @@
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
 
   // ---------- new task ----------
+  const LS_START_REPO = "ghpr.startWorkRepo";
   // The repo picker offers local clones that fall under a configured view, grouped by
   // that view: a repo view contributes just itself; an org/username view contributes
   // every local clone under it. A clone is claimed by the first view (in config order)
-  // that matches, so it isn't listed twice.
+  // that matches, so it isn't listed twice. Preselects the last repo used here, then the
+  // current view's repo, then the first.
   function ntRepoOptionsHtml() {
     const localRepos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))];
     const localSet = new Set(localRepos);
-    const current = getCurrentRepo();
-    const opt = (r) => `<option value="${esc(r)}"${r === current ? " selected" : ""}>${esc(r)}</option>`;
+    const groups = [];  // { view: string|null, repos: [] }
     const seen = new Set();
-    const frags = [];
     for (const view of getRepos()) {
       if (view.includes("/")) {
-        if (localSet.has(view) && !seen.has(view)) { seen.add(view); frags.push(opt(view)); }
+        if (localSet.has(view) && !seen.has(view)) { seen.add(view); groups.push({ view: null, repos: [view] }); }
       } else {
         const repos = localRepos.filter((r) => r.split("/")[0] === view && !seen.has(r)).sort();
         repos.forEach((r) => seen.add(r));
-        if (repos.length) frags.push(`<optgroup label="${esc(view)}">${repos.map(opt).join("")}</optgroup>`);
+        if (repos.length) groups.push({ view, repos });
       }
     }
-    return frags.join("");
+    const available = groups.flatMap((g) => g.repos);
+    const last = localStorage.getItem(LS_START_REPO);
+    const current = getCurrentRepo();
+    const selected = available.includes(last) ? last
+      : available.includes(current) ? current : available[0];
+    const opt = (r) => `<option value="${esc(r)}"${r === selected ? " selected" : ""}>${esc(r)}</option>`;
+    return groups.map((g) => g.view
+      ? `<optgroup label="${esc(g.view)}">${g.repos.map(opt).join("")}</optgroup>`
+      : g.repos.map(opt).join("")).join("");
   }
   function openNewTaskDialog() {
     const html = ntRepoOptionsHtml();
@@ -1839,6 +1847,7 @@
       const res = await companionPost(query);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
+        localStorage.setItem(LS_START_REPO, repo);
         await openInApp(launchTarget(data));
         $("#new-task-dialog").close();
         loadWorktrees();
