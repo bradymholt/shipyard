@@ -515,10 +515,10 @@ def _review_running(info):
 
 def start_agent_review(repo, pr, roots):
     """Start a Claude session that reviews the PR and posts a pending review.
-    On macOS it opens an interactive session in a Terminal window so the run is
-    watchable (and can be steered afterwards); elsewhere it runs headless with
-    output to a log. Returns immediately; progress is visible via /agent-reviews
-    and the result lands on the PR itself."""
+    On macOS it runs in a Terminal window so the run is watchable, closing the
+    window when it succeeds; elsewhere it runs headless with output to a log.
+    Returns immediately; progress is visible via /agent-reviews and the result
+    lands on the PR itself."""
     clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
@@ -537,18 +537,27 @@ def start_agent_review(repo, pr, roots):
     stem = os.path.join(tempfile.gettempdir(), f"shipyard-review-{pr_num}-{secrets.token_hex(4)}")
 
     if sys.platform == "darwin":
-        # Interactive session in a Terminal window. The trap marks the session
-        # over (even if the window is closed mid-run) so the dashboard's chip
-        # reverts to the button.
+        # Watchable run in a Terminal window: print mode with verbose turn-by-turn
+        # output, which exits when the review is done (interactive mode would sit
+        # waiting for input forever). On success the window closes itself; on
+        # failure it stays open showing the error. The trap marks the session
+        # over (even if the window is closed mid-run) so the chip reverts.
         status_file = stem + ".status"
         script_path = stem + ".command"
+        close_window = ("osascript -e \"tell application \\\"Terminal\\\" to close "
+                        "(every window whose selected tab's tty is \\\"$TTY\\\") saving no\"")
         script = ("#!/bin/zsh\n"
                   f"export PATH={shlex.quote(os.path.dirname(claude))}:/opt/homebrew/bin:/usr/local/bin:$PATH\n"
                   f"trap 'touch {shlex.quote(status_file)}' EXIT HUP INT TERM\n"
                   f"cd {shlex.quote(clone)} || exit 1\n"
                   # Prompt must come before --allowedTools: the flag is variadic
                   # and would swallow a trailing positional as another tool rule.
-                  f"{shlex.quote(claude)} {shlex.quote(prompt)} --allowedTools {shlex.quote(REVIEW_ALLOWED_TOOLS)}\n")
+                  f"{shlex.quote(claude)} -p --verbose {shlex.quote(prompt)} --allowedTools {shlex.quote(REVIEW_ALLOWED_TOOLS)}\n"
+                  "rc=$?\n"
+                  f"touch {shlex.quote(status_file)}\n"
+                  "TTY=$(tty)\n"
+                  f"[ $rc -eq 0 ] && {close_window}\n"
+                  "exit $rc\n")
         try:
             with open(script_path, "w") as f:
                 f.write(script)

@@ -1097,7 +1097,7 @@
     const st = state.agentReviews[`${repoName}#${pr.number}`];
     if (st?.running)
       return `<span class="review-badge pending" title="${st.terminal
-        ? "Claude is reviewing this PR in a Terminal window — pending comments land on the PR; close the session to get the button back"
+        ? "Claude is reviewing this PR in a Terminal window — it closes itself when done, and pending comments land on the PR"
         : "Claude is reviewing this PR — pending comments will appear on it when done"}">${SPARKLE_ICON} Claude reviewing…</span>`;
     if (st && st.exitCode === 0)
       return `<span class="review-badge approved" title="Claude left a pending review — open the PR to edit and submit it">${SPARKLE_ICON} Pending review ready</span>`;
