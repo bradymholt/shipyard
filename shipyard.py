@@ -39,6 +39,7 @@ import os
 import re
 import secrets
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -506,9 +507,17 @@ def find_claude():
     return None
 
 
+def _review_running(info):
+    if "proc" in info:
+        return info["proc"].poll() is None
+    return not os.path.exists(info["status_file"])
+
+
 def start_agent_review(repo, pr, roots):
-    """Spawn a detached headless Claude session that reviews the PR and posts a
-    pending review. Returns immediately; progress is visible via /agent-reviews
+    """Start a Claude session that reviews the PR and posts a pending review.
+    On macOS it opens an interactive session in a Terminal window so the run is
+    watchable (and can be steered afterwards); elsewhere it runs headless with
+    output to a log. Returns immediately; progress is visible via /agent-reviews
     and the result lands on the PR itself."""
     clone = find_clone(repo, roots)
     if not clone:
@@ -519,13 +528,39 @@ def start_agent_review(repo, pr, roots):
         return {"ok": False, "error": "Invalid PR number."}
     key = f"{repo}#{pr_num}"
     running = AGENT_REVIEWS.get(key)
-    if running and running["proc"].poll() is None:
+    if running and _review_running(running):
         return {"ok": False, "error": "A Claude review for this PR is already running."}
     claude = find_claude()
     if not claude:
         return {"ok": False, "error": "The claude CLI was not found (checked PATH and common install locations)."}
     prompt = REVIEW_PROMPT.replace("PRNUM", str(pr_num)).replace("REPO", repo)
-    log_path = os.path.join(tempfile.gettempdir(), f"shipyard-review-{pr_num}-{secrets.token_hex(4)}.log")
+    stem = os.path.join(tempfile.gettempdir(), f"shipyard-review-{pr_num}-{secrets.token_hex(4)}")
+
+    if sys.platform == "darwin":
+        # Interactive session in a Terminal window. The trap marks the session
+        # over (even if the window is closed mid-run) so the dashboard's chip
+        # reverts to the button.
+        status_file = stem + ".status"
+        script_path = stem + ".command"
+        script = ("#!/bin/zsh\n"
+                  f"export PATH={shlex.quote(os.path.dirname(claude))}:/opt/homebrew/bin:/usr/local/bin:$PATH\n"
+                  f"trap 'touch {shlex.quote(status_file)}' EXIT HUP INT TERM\n"
+                  f"cd {shlex.quote(clone)} || exit 1\n"
+                  f"{shlex.quote(claude)} --allowedTools {shlex.quote(REVIEW_ALLOWED_TOOLS)} {shlex.quote(prompt)}\n")
+        try:
+            with open(script_path, "w") as f:
+                f.write(script)
+            os.chmod(script_path, 0o755)
+            r = subprocess.run(["open", "-a", "Terminal", script_path],
+                               capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return {"ok": False, "error": f"Could not open a Terminal window: {e}"}
+        if r.returncode != 0:
+            return {"ok": False, "error": (r.stderr or "Could not open a Terminal window.").strip()}
+        AGENT_REVIEWS[key] = {"status_file": status_file, "script": script_path}
+        return {"ok": True, "terminal": True}
+
+    log_path = stem + ".log"
     env = os.environ.copy()
     env["PATH"] = os.path.dirname(claude) + os.pathsep + env.get("PATH", "")
     try:
@@ -542,10 +577,23 @@ def start_agent_review(repo, pr, roots):
 
 
 def agent_review_status():
-    return {key: {"running": info["proc"].poll() is None,
-                  "exitCode": info["proc"].poll(),
-                  "log": info["log"]}
-            for key, info in AGENT_REVIEWS.items()}
+    out = {}
+    for key, info in list(AGENT_REVIEWS.items()):
+        if "proc" in info:
+            rc = info["proc"].poll()
+            out[key] = {"running": rc is None, "exitCode": rc, "log": info["log"]}
+        elif os.path.exists(info["status_file"]):
+            # Terminal session over — the pending review (if any) is on GitHub.
+            # Forget the entry so the card's button comes back.
+            for path in (info["status_file"], info["script"]):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+            del AGENT_REVIEWS[key]
+        else:
+            out[key] = {"running": True, "terminal": True}
+    return out
 
 
 def new_branch_in_main(repo, branch, roots):
