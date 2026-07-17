@@ -546,7 +546,9 @@ def start_agent_review(repo, pr, roots):
                   f"export PATH={shlex.quote(os.path.dirname(claude))}:/opt/homebrew/bin:/usr/local/bin:$PATH\n"
                   f"trap 'touch {shlex.quote(status_file)}' EXIT HUP INT TERM\n"
                   f"cd {shlex.quote(clone)} || exit 1\n"
-                  f"{shlex.quote(claude)} --allowedTools {shlex.quote(REVIEW_ALLOWED_TOOLS)} {shlex.quote(prompt)}\n")
+                  # Prompt must come before --allowedTools: the flag is variadic
+                  # and would swallow a trailing positional as another tool rule.
+                  f"{shlex.quote(claude)} {shlex.quote(prompt)} --allowedTools {shlex.quote(REVIEW_ALLOWED_TOOLS)}\n")
         try:
             with open(script_path, "w") as f:
                 f.write(script)
