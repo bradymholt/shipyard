@@ -41,6 +41,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -450,6 +451,103 @@ def move_to_main(repo, branch, roots):
     return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
 
 
+# Headless Claude reviews in flight, keyed "owner/repo#number". In-memory only:
+# a companion restart forgets them, and the pending review on GitHub is the
+# durable result anyway.
+AGENT_REVIEWS = {}
+
+# Read-only exploration plus the gh commands needed to fetch the PR and post
+# the review. The review JSON is passed to `gh api` via stdin heredoc, so no
+# file-writing permission is needed.
+REVIEW_ALLOWED_TOOLS = ("Read,Grep,Glob,"
+                        "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh api:*)")
+
+REVIEW_PROMPT = """Review pull request #PRNUM in REPO and leave your findings as a PENDING \
+GitHub review that I will edit and submit myself.
+
+You are running headless inside a local clone of REPO, but the PR branch is probably NOT \
+checked out. Get the change from GitHub:
+- `gh pr view PRNUM -R REPO` for the title, description, and discussion
+- `gh pr diff PRNUM -R REPO` for the full diff
+- `gh api` for file contents at the PR head when you need surrounding context that may \
+differ from the local working tree; local files are fine for general orientation.
+
+Review for real problems only: correctness bugs, security issues, data loss, broken edge \
+cases, misleading names or docs. No style nits, no subjective rewrites. Only comment where \
+you are confident the issue is real.
+
+If you found things worth flagging, post them as ONE pending review:
+1. Check `gh api repos/REPO/pulls/PRNUM/reviews` first — if I already have a review with \
+state PENDING there, do NOT create another; print your findings to stdout instead and stop.
+2. Get the head SHA: `gh pr view PRNUM -R REPO --json headRefOid`
+3. Create the pending review in a single call, passing the JSON via stdin:
+   gh api repos/REPO/pulls/PRNUM/reviews --input - <<'JSON'
+   {"commit_id": "<head sha>", "body": "<one-paragraph summary>", "comments": [{"path": "<file>", "line": <line>, "side": "RIGHT", "body": "<comment>"}]}
+   JSON
+   Anchor each comment to a line that appears in the diff. Do NOT include an "event" field — \
+omitting it is what keeps the review PENDING. Never approve, request changes, or submit.
+
+If nothing is worth flagging, do not create a review; print your assessment instead.
+End with one line: how many comments you left, or why none."""
+
+
+def find_claude():
+    """The companion often runs with a minimal PATH (launchd, app launchers)
+    that misses claude's install dir, so probe the usual locations too."""
+    found = shutil.which("claude")
+    if found:
+        return found
+    for candidate in (os.path.expanduser("~/.local/bin/claude"),
+                      os.path.expanduser("~/.claude/local/claude"),
+                      "/opt/homebrew/bin/claude",
+                      "/usr/local/bin/claude"):
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def start_agent_review(repo, pr, roots):
+    """Spawn a detached headless Claude session that reviews the PR and posts a
+    pending review. Returns immediately; progress is visible via /agent-reviews
+    and the result lands on the PR itself."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    try:
+        pr_num = int(pr)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "Invalid PR number."}
+    key = f"{repo}#{pr_num}"
+    running = AGENT_REVIEWS.get(key)
+    if running and running["proc"].poll() is None:
+        return {"ok": False, "error": "A Claude review for this PR is already running."}
+    claude = find_claude()
+    if not claude:
+        return {"ok": False, "error": "The claude CLI was not found (checked PATH and common install locations)."}
+    prompt = REVIEW_PROMPT.replace("PRNUM", str(pr_num)).replace("REPO", repo)
+    log_path = os.path.join(tempfile.gettempdir(), f"shipyard-review-{pr_num}-{secrets.token_hex(4)}.log")
+    env = os.environ.copy()
+    env["PATH"] = os.path.dirname(claude) + os.pathsep + env.get("PATH", "")
+    try:
+        log = open(log_path, "w")
+        proc = subprocess.Popen(
+            [claude, "-p", prompt, "--allowedTools", REVIEW_ALLOWED_TOOLS],
+            cwd=clone, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+            start_new_session=True, env=env)
+        log.close()
+    except OSError as e:
+        return {"ok": False, "error": f"Could not start the review: {e}"}
+    AGENT_REVIEWS[key] = {"proc": proc, "log": log_path}
+    return {"ok": True, "log": log_path}
+
+
+def agent_review_status():
+    return {key: {"running": info["proc"].poll() is None,
+                  "exitCode": info["proc"].poll(),
+                  "log": info["log"]}
+            for key, info in AGENT_REVIEWS.items()}
+
+
 def new_branch_in_main(repo, branch, roots):
     """Create a new branch off the default branch, checked out in the main clone
     (instead of a worktree). Guarded: won't switch a main clone with uncommitted work."""
@@ -526,6 +624,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/worktrees.json":
             return self._json(discover(self.roots))
+        if path == "/agent-reviews":
+            return self._json(agent_review_status())
         if path == "/config.json":
             return self._json({"launcher": self.config["launcher"],
                                "companionToken": self.session_token})
@@ -543,7 +643,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-main",
-                               "/open-default-main", "/open-app"}:
+                               "/open-default-main", "/open-app", "/review-pr"}:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
@@ -571,6 +671,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if parsed.path == "/open-default-main":
             repo = (q.get("repo") or [""])[0]
             result = open_default_in_main(repo, self.roots)
+            return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/review-pr":
+            repo = (q.get("repo") or [""])[0]
+            pr = (q.get("pr") or [""])[0]
+            result = start_agent_review(repo, pr, self.roots)
             return self._json(result, 200 if result.get("ok") else 500)
         if parsed.path == "/open-app":
             target = (q.get("path") or [""])[0]
