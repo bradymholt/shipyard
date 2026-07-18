@@ -1573,10 +1573,10 @@
         return `
         <div class="lane">
           <div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>
-          ${laneAction}
           ${laneHtml || (reviewBoard && i === 1 && !state.reviewHistoryLoaded
             ? '<div class="lane-empty">Loading…</div>'
             : `<div class="lane-empty">${EMPTY_ICON}<span>${laneEmptyText(name, reviewBoard)}</span></div>`)}
+          ${laneAction}
         </div>`;
       }).join("") + "</div>";
       if (!count && !recentMerged.length) html = "";
