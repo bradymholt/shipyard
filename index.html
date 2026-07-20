@@ -811,13 +811,16 @@
   const PAGE_SIZE = 25;
   const MAX_PRS = 100;
   const RECENT_MERGED_DAYS = 3;
-  const mergedCutoff = () => Date.now() - RECENT_MERGED_DAYS * 24 * 60 * 60 * 1000;
-  // Search qualifier bounds the fetch to the window (day granularity); the exact
-  // cutoff is applied client-side on mergedAt.
-  const mergedQualifier = () => `merged:>=${new Date(mergedCutoff()).toISOString().slice(0, 10)}`;
-  const recentlyMerged = (prs) => prs
-    .filter((pr) => pr.mergedAt && new Date(pr.mergedAt).getTime() >= mergedCutoff())
-    .sort((a, b) => new Date(b.mergedAt) - new Date(a.mergedAt));
+  const RECENT_MERGED_MIN = 3;
+  // Everything merged in the window — but never fewer than the most recent few,
+  // so a quiet stretch still shows the latest merges.
+  const recentlyMerged = (prs) => {
+    const sorted = prs.filter((pr) => pr.mergedAt)
+      .sort((a, b) => new Date(b.mergedAt) - new Date(a.mergedAt));
+    const cutoff = Date.now() - RECENT_MERGED_DAYS * 24 * 60 * 60 * 1000;
+    const windowed = sorted.filter((pr) => new Date(pr.mergedAt).getTime() >= cutoff);
+    return windowed.length >= RECENT_MERGED_MIN ? windowed : sorted.slice(0, RECENT_MERGED_MIN);
+  };
 
   const OWNER_QUERY = `
     query($q: String!, $after: String) {
@@ -965,7 +968,7 @@
     const [mine, review, merged] = await Promise.all([
       searchPRs(`${base} is:open author:@me`),
       searchPRs(`${base} is:open review-requested:@me`, MAX_PRS, REQUESTED_REVIEW_QUERY),
-      searchPRs(`${base} is:merged author:@me ${mergedQualifier()}`),
+      searchPRs(`${base} is:merged author:@me`, PAGE_SIZE),
     ]);
     const seen = new Set();
     const prs = [];
@@ -986,7 +989,7 @@
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [reviewed, reviewedMerged] = await Promise.all([
       searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
-      searchPRs(`${base} is:merged reviewed-by:@me -author:@me ${mergedQualifier()}`, MAX_PRS, REVIEW_OWNER_QUERY),
+      searchPRs(`${base} is:merged reviewed-by:@me -author:@me`, PAGE_SIZE, REVIEW_OWNER_QUERY),
     ]);
     const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
     return {
