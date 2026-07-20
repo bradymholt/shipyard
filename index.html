@@ -1502,6 +1502,8 @@
     reviewCountEl.title = reviewCount
       ? `${reviewCount} pull request${reviewCount === 1 ? "" : "s"} ${reviewCount === 1 ? "needs" : "need"} your review`
       : "";
+    const attention = workingCount + reviewCount;
+    document.title = attention ? `(${attention}) Shipyard` : "Shipyard";
     const boardAllowed = state.filter === "mine" || state.filter === "review";
     const selectedView = state.filter === "review" ? state.reviewView : state.view;
     const effectiveView = boardAllowed && selectedView === "board" ? "board" : "list";
