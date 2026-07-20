@@ -589,7 +589,7 @@
     FILTER: "ghpr.filter",
     CACHE_PREFIX: "ghpr.cache.",
   };
-  const CACHE_VERSION = 4;
+  const CACHE_VERSION = 5;
   const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
@@ -810,7 +810,14 @@
   // we page up to MAX_PRS to preserve the "most recent 100" behavior.
   const PAGE_SIZE = 25;
   const MAX_PRS = 100;
-  const RECENT_MERGED_LIMIT = 3;
+  const RECENT_MERGED_DAYS = 3;
+  const mergedCutoff = () => Date.now() - RECENT_MERGED_DAYS * 24 * 60 * 60 * 1000;
+  // Search qualifier bounds the fetch to the window (day granularity); the exact
+  // cutoff is applied client-side on mergedAt.
+  const mergedQualifier = () => `merged:>=${new Date(mergedCutoff()).toISOString().slice(0, 10)}`;
+  const recentlyMerged = (prs) => prs
+    .filter((pr) => pr.mergedAt && new Date(pr.mergedAt).getTime() >= mergedCutoff())
+    .sort((a, b) => new Date(b.mergedAt) - new Date(a.mergedAt));
 
   const OWNER_QUERY = `
     query($q: String!, $after: String) {
@@ -958,7 +965,7 @@
     const [mine, review, merged] = await Promise.all([
       searchPRs(`${base} is:open author:@me`),
       searchPRs(`${base} is:open review-requested:@me`, MAX_PRS, REQUESTED_REVIEW_QUERY),
-      searchPRs(`${base} is:merged author:@me`, RECENT_MERGED_LIMIT),
+      searchPRs(`${base} is:merged author:@me ${mergedQualifier()}`),
     ]);
     const seen = new Set();
     const prs = [];
@@ -971,7 +978,7 @@
     return {
       viewer: mine.viewer || review.viewer || merged.viewer,
       prs,
-      merged: merged.prs.slice(0, RECENT_MERGED_LIMIT),
+      merged: recentlyMerged(merged.prs),
     };
   }
 
@@ -979,12 +986,12 @@
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [reviewed, reviewedMerged] = await Promise.all([
       searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
-      searchPRs(`${base} is:merged reviewed-by:@me -author:@me`, RECENT_MERGED_LIMIT, REVIEW_OWNER_QUERY),
+      searchPRs(`${base} is:merged reviewed-by:@me -author:@me ${mergedQualifier()}`, MAX_PRS, REVIEW_OWNER_QUERY),
     ]);
     const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
     return {
       prs: reviewed.prs.filter(notAuthoredByViewer),
-      merged: reviewedMerged.prs.filter(notAuthoredByViewer).slice(0, RECENT_MERGED_LIMIT),
+      merged: recentlyMerged(reviewedMerged.prs.filter(notAuthoredByViewer)),
     };
   }
 
