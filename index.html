@@ -323,6 +323,7 @@
   .wt-link.current:hover { color: var(--green-text); }
   .wt-link.worktree { color: var(--purple); }      /* opens an isolated worktree */
   .wt-link.worktree:hover { color: color-mix(in srgb, var(--purple) 78%, #000); }
+  .wt-link.wt-move-wt:not(.blocked):hover { color: var(--purple); }  /* moves the branch out to a worktree */
   /* switch blocked by uncommitted changes — muted "unavailable" tone, not an alarm */
   .wt-link.blocked, .wt-link.blocked:hover { color: color-mix(in srgb, var(--red) 50%, var(--fg-faint)); }
   button.wt-link.blocked:disabled { opacity: 1; cursor: not-allowed; }
@@ -758,6 +759,8 @@
   const LAUNCH_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M9 1h6v6h-1.5V3.56L7.53 9.53 6.47 8.47 12.44 2.5H9V1ZM2.75 3.5H7V5H2.75a.25.25 0 0 0-.25.25v8c0 .138.112.25.25.25h8a.25.25 0 0 0 .25-.25V9H14.5v4.25A1.75 1.75 0 0 1 12.75 15h-8A1.75 1.75 0 0 1 3 13.25v-8A1.75 1.75 0 0 1 4.75 3.5Z"/></svg>';
   // Arrow into a trunk bar — "move this branch into the main clone".
   const MOVE_MAIN_ICON = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M7.28 3.22 11.06 7H2.5v1.5h8.56l-3.78 3.78 1.06 1.06L14.06 8 8.34 2.16 7.28 3.22Z"/><path d="M12.5 2H14v12h-1.5V2Z"/></svg>';
+  // Trunk bar on the left with the arrow leaving it — the opposite of MOVE_MAIN_ICON: out to a worktree.
+  const MOVE_WT_ICON = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M9.28 3.22 13.06 7H4.5v1.5h8.56l-3.78 3.78 1.06 1.06L16.06 8 10.34 2.16 9.28 3.22Z"/><path d="M2 2h1.5v12H2V2Z"/></svg>';
   const EMPTY_ICON = '<svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-2.53a.75.75 0 0 1 0 1.06l-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06L7.25 8.94l3.47-3.47a.75.75 0 0 1 1.06 0Z"/></svg>';
   const BRANCH_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>';
   const laneEmptyText = (name, reviewBoard) => reviewBoard
@@ -1250,18 +1253,28 @@
         moveBtn = blocked
           ? `<button class="wt-link wt-move-main blocked" disabled title="${esc(blocked)}">${MOVE_MAIN_ICON}</button>`
           : `<button class="wt-link wt-move-main" data-repo="${repo}" data-branch="${branch}" title="Move this branch to your main clone (removes this worktree) and open it in ${esc(appName)}">${MOVE_MAIN_ICON}</button>`;
+      } else {
+        // Occupying the main clone → offer moving it out to a worktree (switches the
+        // main clone to its default branch first, so it can't with uncommitted work).
+        const blocked = wt.dirty
+          ? "Can't move — your main clone has uncommitted changes. Commit or stash them first."
+          : "";
+        moveBtn = blocked
+          ? `<button class="wt-link wt-move-wt blocked" disabled title="${esc(blocked)}">${MOVE_WT_ICON}</button>`
+          : `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Move this branch out to a new worktree and open it in ${esc(appName)}">${MOVE_WT_ICON}</button>`;
       }
       return `<span class="wt-links">${openBtn}${moveBtn}</span>`;
     }
 
-    // Not checked out anywhere → open by checking the branch out in the main repo,
-    // unless the main repo has uncommitted changes (then it isn't currently possible).
+    // Not checked out anywhere → open by checking the branch out in the main repo
+    // (blocked if the main repo has uncommitted changes), or spin up a worktree for it.
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repoName && w.main);
     const mainOn = mainWt && mainWt.branch ? ` (on ${mainWt.branch})` : "";
-    const btn = mainWt && mainWt.dirty
+    const mainBtn = mainWt && mainWt.dirty
       ? `<button class="wt-link wt-main blocked" disabled title="${esc(`Can't check out here — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`)}">${LAUNCH_ICON}</button>`
       : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main clone and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
-    return `<span class="wt-links">${btn}</span>`;
+    const wtBtn = `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Create a worktree for this branch and open it in ${esc(state.launcher.name)}">${MOVE_WT_ICON}</button>`;
+    return `<span class="wt-links">${mainBtn}${wtBtn}</span>`;
   }
 
   function mergedRepoPrefix(pr) {
@@ -1981,6 +1994,29 @@
       } finally {
         moveMainBtn.disabled = false;
         moveMainBtn.innerHTML = original;
+      }
+      return;
+    }
+
+    const moveWtBtn = e.target.closest("button.wt-move-wt");
+    if (moveWtBtn) {
+      moveWtBtn.disabled = true;
+      const original = moveWtBtn.innerHTML;
+      moveWtBtn.textContent = "…";
+      try {
+        const res = await companionPost(`move-to-worktree?repo=${encodeURIComponent(moveWtBtn.dataset.repo)}&branch=${encodeURIComponent(moveWtBtn.dataset.branch)}`);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          await openInApp(launchTarget(data));
+          loadWorktrees();
+        } else {
+          showError(data.error || `Couldn't create a worktree (${res.status}).`, "Can't move to worktree");
+        }
+      } catch (err) {
+        showError(err.message, "Can't move to worktree");
+      } finally {
+        moveWtBtn.disabled = false;
+        moveWtBtn.innerHTML = original;
       }
       return;
     }
