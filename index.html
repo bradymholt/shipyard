@@ -184,8 +184,10 @@
   .nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
   .nt-optional { font-weight: 400; font-size: 0.6875rem; color: var(--fg-faint); text-transform: none; }
   .nt-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
-  .nt-actions #nt-status, .nt-actions #token-status, .nt-actions .spacer { flex: 1; margin: 0; }
-  .nt-actions #nt-status.error { color: var(--red-text); }
+  .nt-actions #token-status, .nt-actions .spacer { flex: 1; margin: 0; }
+  .nt-status { margin: 0.75rem 0 0; }
+  .nt-status:empty { display: none; }
+  .nt-status.error { color: var(--red-text); }
 
   /* ---------- list ---------- */
   .list-head { display: flex; align-items: baseline; gap: 0.625rem; margin-bottom: 0.625rem; }
@@ -504,8 +506,9 @@
       <label class="nt-field">Branch name <span class="nt-optional">optional</span>
         <input type="text" id="nt-branch" placeholder="you/short-description" autocomplete="off">
       </label>
+      <p id="nt-status" class="hint nt-status"></p>
       <div class="nt-actions">
-        <span id="nt-status" class="hint"></span>
+        <span class="spacer"></span>
         <button type="button" id="nt-cancel">Cancel</button>
         <button type="submit" id="nt-worktree" data-dest="worktree" class="hidden">Create worktree</button>
         <button type="submit" id="nt-main" class="primary">Create branch</button>
