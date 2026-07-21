@@ -1281,7 +1281,7 @@
   function mergedRepoPrefix(pr) {
     const repoName = pr.repository?.nameWithOwner;
     return repoName && repoName !== getCurrentRepo()
-      ? `<a href="https://github.com/${esc(repoName)}/pulls" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> ` : "";
+      ? `<a href="https://github.com/${esc(repoName)}/pulls${state.viewer ? `/${esc(state.viewer)}` : ""}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> ` : "";
   }
 
   function mergedRow(pr) {
@@ -1319,7 +1319,7 @@
       : "";
     const repoName = pr.repository?.nameWithOwner;
     const repoPrefix = repoName && repoName !== getCurrentRepo()
-      ? `<a href="https://github.com/${esc(repoName)}/pulls" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> `
+      ? `<a href="https://github.com/${esc(repoName)}/pulls${state.viewer ? `/${esc(state.viewer)}` : ""}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> `
       : "";
     const badge = state.filter === "review"
       ? (isContext ? "" : viewerReviewBadge(pr))
@@ -1428,7 +1428,7 @@
   function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
     const repoName = pr.repository?.nameWithOwner;
     const repoPrefix = repoName && repoName !== getCurrentRepo()
-      ? `<a href="https://github.com/${esc(repoName)}/pulls" target="_blank" rel="noopener">${esc(repoName)}</a> `
+      ? `<a href="https://github.com/${esc(repoName)}/pulls${state.viewer ? `/${esc(state.viewer)}` : ""}" target="_blank" rel="noopener">${esc(repoName)}</a> `
       : "";
     const basedOn = parent
       ? `<a class="card-stack" href="${esc(parent.url)}" target="_blank" rel="noopener" title="Stacked on #${parent.number}">↳ #${parent.number}</a>`
