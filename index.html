@@ -1278,10 +1278,23 @@
     return `<span class="wt-links">${mainBtn}${wtBtn}</span>`;
   }
 
+  // Where the owner/repo link goes: on My PRs, your authored PRs; on Reviews, the
+  // repo's review queue scoped to the PR's column (still waiting on you vs. reviewed).
+  function repoPullsUrl(pr) {
+    const base = `https://github.com/${pr.repository?.nameWithOwner || ""}/pulls`;
+    if (state.filter === "review") {
+      const q = reviewLaneOf(pr) === 0
+        ? "is:open is:pr user-review-requested:@me"
+        : "is:open is:pr reviewed-by:@me";
+      return `${base}?q=${encodeURIComponent(q)}`;
+    }
+    return state.viewer ? `${base}/${state.viewer}` : base;
+  }
+
   function mergedRepoPrefix(pr) {
     const repoName = pr.repository?.nameWithOwner;
     return repoName && repoName !== getCurrentRepo()
-      ? `<a href="https://github.com/${esc(repoName)}/pulls${state.viewer ? `/${esc(state.viewer)}` : ""}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> ` : "";
+      ? `<a href="${esc(repoPullsUrl(pr))}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> ` : "";
   }
 
   function mergedRow(pr) {
@@ -1319,7 +1332,7 @@
       : "";
     const repoName = pr.repository?.nameWithOwner;
     const repoPrefix = repoName && repoName !== getCurrentRepo()
-      ? `<a href="https://github.com/${esc(repoName)}/pulls${state.viewer ? `/${esc(state.viewer)}` : ""}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> `
+      ? `<a href="${esc(repoPullsUrl(pr))}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> `
       : "";
     const badge = state.filter === "review"
       ? (isContext ? "" : viewerReviewBadge(pr))
@@ -1428,7 +1441,7 @@
   function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
     const repoName = pr.repository?.nameWithOwner;
     const repoPrefix = repoName && repoName !== getCurrentRepo()
-      ? `<a href="https://github.com/${esc(repoName)}/pulls${state.viewer ? `/${esc(state.viewer)}` : ""}" target="_blank" rel="noopener">${esc(repoName)}</a> `
+      ? `<a href="${esc(repoPullsUrl(pr))}" target="_blank" rel="noopener">${esc(repoName)}</a> `
       : "";
     const basedOn = parent
       ? `<a class="card-stack" href="${esc(parent.url)}" target="_blank" rel="noopener" title="Stacked on #${parent.number}">↳ #${parent.number}</a>`
