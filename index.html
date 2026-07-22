@@ -253,6 +253,10 @@
   .pr-main { flex: 1; min-width: 0; }
   .pr-title { font-weight: 600; font-size: 0.9375rem; color: var(--fg); }
   .pr-title a:hover { color: var(--teal); }
+  .pr-title code, .card-title code {
+    font-family: var(--mono); font-size: 0.85em; font-weight: 500;
+    background: var(--bg-inset); padding: 0.05em 0.35em; border-radius: 0.3em;
+  }
   .pr-num { font-family: var(--mono); font-size: 0.6875rem; color: var(--teal); }
   .label-pill {
     display: inline-block;
@@ -773,6 +777,9 @@
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Render `backtick`-delimited spans in a PR title as inline code, like GitHub.
+  // esc() runs first, so the code content is already HTML-safe.
+  const fmtTitle = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 
   function timeAgo(iso) {
     const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -1305,7 +1312,7 @@
       <div class="pr-row merged">
         <span class="pr-icon merged">${ICONS.merged}</span>
         <div class="pr-main">
-          <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+          <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
           <div class="pr-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> by <strong>${esc(pr.author?.login || "ghost")}</strong> · merged ${timeAgo(pr.mergedAt)}</div>
         </div>
         <div class="pr-side"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
@@ -1315,7 +1322,7 @@
   function mergedCard(pr) {
     return `
       <div class="card merged">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a></div>
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
         <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · merged ${timeAgo(pr.mergedAt)}</div>
         <div class="card-icons"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
       </div>`;
@@ -1346,7 +1353,7 @@
         ${elbow}
         <span class="pr-icon ${pr.isDraft ? "draft" : "open"}">${ICONS.pr}</span>
         <div class="pr-main">
-          <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}${labels}</div>
+          <div class="pr-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}${labels}</div>
           <div class="pr-meta">
             ${repoPrefix}<span class="pr-num">#${pr.number}</span> opened ${timeAgo(pr.createdAt)} by <strong>${esc(pr.author?.login || "ghost")}</strong>
             · updated ${timeAgo(pr.updatedAt)}
@@ -1462,7 +1469,7 @@
     const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${esc(pr.title)}</a>${draft}</div>
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}</div>
         <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
