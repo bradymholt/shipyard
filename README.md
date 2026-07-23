@@ -28,7 +28,7 @@ Track the PRs you owe a review, split into what's still waiting on you and what 
 
 ### Hosted mode
 
-Open the [hosted dashboard](https://bradymholt.github.io/shipyard/), click the gear icon, add a GitHub token, then add a repository, organization, or username to your views. Nothing needs to be installed.
+Open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a GitHub token, then add a repository, organization, or username to your views. Nothing needs to be installed.
 
 ### Local mode
 
