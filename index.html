@@ -1290,14 +1290,16 @@
 
   // Where the owner/repo link goes: on My PRs, your authored PRs; on Reviews, the
   // repo's review queue scoped to the PR's column (still waiting on you vs. reviewed).
+  // Merged items (from Recently merged) carry mergedAt, so scope those to is:closed —
+  // they're no longer open and wouldn't show under the open filter.
   function repoPullsUrl(pr) {
     const base = `https://github.com/${pr.repository?.nameWithOwner || ""}/pulls`;
+    const openState = pr.mergedAt ? "is:closed" : "is:open";
     if (state.filter === "review") {
-      const q = reviewLaneOf(pr) === 0
-        ? "is:open is:pr user-review-requested:@me"
-        : "is:open is:pr reviewed-by:@me";
-      return `${base}?q=${encodeURIComponent(q)}`;
+      const who = !pr.mergedAt && reviewLaneOf(pr) === 0 ? "user-review-requested:@me" : "reviewed-by:@me";
+      return `${base}?q=${encodeURIComponent(`${openState} is:pr ${who}`)}`;
     }
+    if (pr.mergedAt) return `${base}?q=${encodeURIComponent(`is:pr is:closed author:${state.viewer || "@me"}`)}`;
     return state.viewer ? `${base}/${state.viewer}` : base;
   }
 
