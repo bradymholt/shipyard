@@ -1083,6 +1083,8 @@
     if (reviewRequestedForViewer(pr))
       return `<span class="review-badge pending">${ICONS.clock} Review requested</span>`;
     const reviewState = pr.viewerLatestReview?.state;
+    if (reviewState === "DISMISSED")
+      return `<span class="review-badge pending">${ICONS.dot} Your review was dismissed</span>`;
     if (reviewState === "APPROVED")
       return `<span class="review-badge approved">${ICONS.check} You approved</span>`;
     if (reviewState === "CHANGES_REQUESTED")
@@ -1090,6 +1092,12 @@
     if (reviewState === "COMMENTED")
       return `<span class="review-badge none">${ICONS.comment} You reviewed</span>`;
     return `<span class="review-badge none">Review submitted</span>`;
+  }
+
+  // Repos with a "dismiss stale reviews" ruleset void the review on a push; without one
+  // the review still stands, so new commits alone don't put the PR back on the reviewer.
+  function viewerReviewDismissed(pr) {
+    return pr.viewerLatestReview?.state === "DISMISSED";
   }
 
   function hasNewCommitsSinceReview(pr) {
@@ -1292,11 +1300,13 @@
   // repo's review queue scoped to the PR's column (still waiting on you vs. reviewed).
   // Merged items (from Recently merged) carry mergedAt, so scope those to is:closed —
   // they're no longer open and wouldn't show under the open filter.
+  // A dismissed review lands in Waiting but has no matching search qualifier, so it
+  // falls back to reviewed-by:@me — the one list GitHub will actually return it in.
   function repoPullsUrl(pr) {
     const base = `https://github.com/${pr.repository?.nameWithOwner || ""}/pulls`;
     const openState = pr.mergedAt ? "is:closed" : "is:open";
     if (state.filter === "review") {
-      const who = !pr.mergedAt && reviewLaneOf(pr) === 0 ? "user-review-requested:@me" : "reviewed-by:@me";
+      const who = !pr.mergedAt && reviewRequestedForViewer(pr) ? "user-review-requested:@me" : "reviewed-by:@me";
       return `${base}?q=${encodeURIComponent(`${openState} is:pr ${who}`)}`;
     }
     if (pr.mergedAt) return `${base}?q=${encodeURIComponent(`is:pr is:closed author:${state.viewer || "@me"}`)}`;
@@ -1437,7 +1447,7 @@
   }
 
   function reviewLaneOf(pr) {
-    return reviewRequestedForViewer(pr) || hasNewCommitsSinceReview(pr) ? 0 : 1;
+    return reviewRequestedForViewer(pr) || viewerReviewDismissed(pr) ? 0 : 1;
   }
 
   function autoMergeChip(pr) {
