@@ -1817,45 +1817,29 @@
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
 
   // ---------- new task ----------
-  // The repo picker offers local clones that fall under a configured view, grouped by
-  // that view: a repo view contributes just itself; an org/username view contributes
-  // every local clone under it. A clone is claimed by the first view (in config order)
-  // that matches, so it isn't listed twice. Repos you worked in most recently sort
-  // first — within a group, and by pulling their group up — using the companion's
-  // per-worktree activity stamp, so work done outside Shipyard counts too. Preselects
-  // the most recently worked-in repo, else the current view's repo, else the first.
+  // The repo picker offers local clones under the current view only, so it matches the
+  // view selector: a repo view contributes just itself; an org/username view contributes
+  // every local clone under it. Repos you worked in most recently sort first — by the
+  // companion's per-worktree activity stamp, so work done outside Shipyard counts too —
+  // and the most recent one is preselected. Clones with no activity fall in alphabetically.
   function ntRepoOptionsHtml() {
     const localRepos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))];
-    const localSet = new Set(localRepos);
     const activity = new Map();  // repo -> newest activity across its worktrees
     for (const w of Object.values(state.worktrees)) {
       if (w.repo) activity.set(w.repo, Math.max(activity.get(w.repo) || 0, w.activity || 0));
     }
     const seenAt = (r) => activity.get(r) || 0;
-    const groups = [];  // { view: string|null, repos: [] }
-    const seen = new Set();
-    for (const view of getRepos()) {
-      if (view.includes("/")) {
-        if (localSet.has(view) && !seen.has(view)) { seen.add(view); groups.push({ view: null, repos: [view] }); }
-      } else {
-        const repos = localRepos.filter((r) => r.split("/")[0] === view && !seen.has(r)).sort();
-        repos.forEach((r) => seen.add(r));
-        if (repos.length) groups.push({ view, repos: repos.sort((a, b) => seenAt(b) - seenAt(a) || a.localeCompare(b)) });
-      }
-    }
-    groups.sort((a, b) => seenAt(b.repos[0]) - seenAt(a.repos[0]));
-    const available = groups.flatMap((g) => g.repos);
-    const current = getCurrentRepo();
-    const selected = seenAt(available[0]) ? available[0]
-      : available.includes(current) ? current : available[0];
-    const opt = (r) => `<option value="${esc(r)}"${r === selected ? " selected" : ""}>${esc(r)}</option>`;
-    return groups.map((g) => g.view
-      ? `<optgroup label="${esc(g.view)}">${g.repos.map(opt).join("")}</optgroup>`
-      : g.repos.map(opt).join("")).join("");
+    const view = getCurrentRepo();
+    const available = (view.includes("/")
+      ? localRepos.filter((r) => r === view)
+      : localRepos.filter((r) => r.split("/")[0] === view)
+    ).sort((a, b) => seenAt(b) - seenAt(a) || a.localeCompare(b));
+    return available.map((r, i) =>
+      `<option value="${esc(r)}"${i === 0 ? " selected" : ""}>${esc(r)}</option>`).join("");
   }
   function openNewTaskDialog() {
     const html = ntRepoOptionsHtml();
-    $("#nt-repo").innerHTML = html || '<option value="">— no local clones for your views —</option>';
+    $("#nt-repo").innerHTML = html || '<option value="">— no local clones in this view —</option>';
     const branch = $("#nt-branch");
     branch.value = "";  // start blank so the default action is "Open default"
     const status = $("#nt-status");
