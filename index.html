@@ -1817,33 +1817,21 @@
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
 
   // ---------- new task ----------
-  const LS_START_REPO = "ghpr.startWorkRepo";  // legacy single value; seeds the recent list
-  const LS_RECENT_REPOS = "ghpr.recentRepos";
-  const RECENT_REPO_LIMIT = 20;
-  function recentRepos() {
-    try {
-      const list = JSON.parse(localStorage.getItem(LS_RECENT_REPOS) || "[]");
-      if (Array.isArray(list) && list.length) return list.filter((r) => typeof r === "string");
-    } catch { /* fall through to the legacy key */ }
-    const legacy = localStorage.getItem(LS_START_REPO);
-    return legacy ? [legacy] : [];
-  }
-  function touchRepo(repo) {
-    if (!repo) return;
-    const list = [repo, ...recentRepos().filter((r) => r !== repo)].slice(0, RECENT_REPO_LIMIT);
-    localStorage.setItem(LS_RECENT_REPOS, JSON.stringify(list));
-  }
   // The repo picker offers local clones that fall under a configured view, grouped by
   // that view: a repo view contributes just itself; an org/username view contributes
   // every local clone under it. A clone is claimed by the first view (in config order)
-  // that matches, so it isn't listed twice. Recently used repos sort first — within a
-  // group, and by pulling their group up — then the rest alphabetically in config order.
-  // Preselects the most recent repo, then the current view's repo, then the first.
+  // that matches, so it isn't listed twice. Repos you worked in most recently sort
+  // first — within a group, and by pulling their group up — using the companion's
+  // per-worktree activity stamp, so work done outside Shipyard counts too. Preselects
+  // the most recently worked-in repo, else the current view's repo, else the first.
   function ntRepoOptionsHtml() {
     const localRepos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))];
     const localSet = new Set(localRepos);
-    const recent = recentRepos();
-    const rank = (r) => { const i = recent.indexOf(r); return i === -1 ? recent.length : i; };
+    const activity = new Map();  // repo -> newest activity across its worktrees
+    for (const w of Object.values(state.worktrees)) {
+      if (w.repo) activity.set(w.repo, Math.max(activity.get(w.repo) || 0, w.activity || 0));
+    }
+    const seenAt = (r) => activity.get(r) || 0;
     const groups = [];  // { view: string|null, repos: [] }
     const seen = new Set();
     for (const view of getRepos()) {
@@ -1852,13 +1840,13 @@
       } else {
         const repos = localRepos.filter((r) => r.split("/")[0] === view && !seen.has(r)).sort();
         repos.forEach((r) => seen.add(r));
-        if (repos.length) groups.push({ view, repos: repos.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)) });
+        if (repos.length) groups.push({ view, repos: repos.sort((a, b) => seenAt(b) - seenAt(a) || a.localeCompare(b)) });
       }
     }
-    groups.sort((a, b) => rank(a.repos[0]) - rank(b.repos[0]));
+    groups.sort((a, b) => seenAt(b.repos[0]) - seenAt(a.repos[0]));
     const available = groups.flatMap((g) => g.repos);
     const current = getCurrentRepo();
-    const selected = rank(available[0]) < recent.length ? available[0]
+    const selected = seenAt(available[0]) ? available[0]
       : available.includes(current) ? current : available[0];
     const opt = (r) => `<option value="${esc(r)}"${r === selected ? " selected" : ""}>${esc(r)}</option>`;
     return groups.map((g) => g.view
@@ -1934,7 +1922,6 @@
       const res = await companionPost(query);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
-        touchRepo(repo);
         await openInApp(launchTarget(data));
         $("#new-task-dialog").close();
         loadWorktrees();
@@ -2015,7 +2002,6 @@
         const res = await companionPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          touchRepo(mainBtn.dataset.repo);
           await openInApp(launchTarget(data));
           loadWorktrees();
         } else {
@@ -2039,7 +2025,6 @@
         const res = await companionPost(`move-to-main?repo=${encodeURIComponent(moveMainBtn.dataset.repo)}&branch=${encodeURIComponent(moveMainBtn.dataset.branch)}`);
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          touchRepo(moveMainBtn.dataset.repo);
           await openInApp(launchTarget(data));
           loadWorktrees();
         } else {
@@ -2063,7 +2048,6 @@
         const res = await companionPost(`move-to-worktree?repo=${encodeURIComponent(moveWtBtn.dataset.repo)}&branch=${encodeURIComponent(moveWtBtn.dataset.branch)}`);
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
-          touchRepo(moveWtBtn.dataset.repo);
           await openInApp(launchTarget(data));
           loadWorktrees();
         } else {

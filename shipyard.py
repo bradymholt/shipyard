@@ -237,6 +237,33 @@ def workspace_in(path):
     return str(files[0]) if files else None
 
 
+def git_dir_for(work_dir):
+    dot = os.path.join(work_dir, ".git")
+    if os.path.isdir(dot):
+        return dot
+    try:  # a linked worktree's .git is a file pointing at the real git dir
+        line = Path(dot).read_text().strip()
+    except OSError:
+        return None
+    return line[7:].strip() if line.startswith("gitdir:") else None
+
+
+def last_activity(work_dir):
+    """When HEAD last moved here (commit, checkout, merge, reset) — one stat, no git call.
+
+    The index would also catch staging, but our own read-only status checks refresh
+    its mtime, which would make every clone look freshly used. The HEAD reflog only
+    moves when the user does something.
+    """
+    git_dir = git_dir_for(work_dir)
+    if not git_dir:
+        return 0
+    try:
+        return int(os.path.getmtime(os.path.join(git_dir, "logs", "HEAD")))
+    except OSError:
+        return 0
+
+
 def worktrees_for_repo(repo_dir):
     repo = parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url"))
     out, cur = [], {}
@@ -262,7 +289,8 @@ def worktrees_for_repo(repo_dir):
                 print(f"Warning: could not verify status for {cur['path']}: {e}")
                 dirty = True
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
-                        "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty})
+                        "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty,
+                        "activity": last_activity(cur["path"])})
             cur = {}
     return out
 
