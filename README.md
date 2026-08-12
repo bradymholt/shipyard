@@ -107,50 +107,24 @@ For example, this opens the checkout folder in Xcode on macOS:
 <details>
 <summary>Keep the companion always running with a <code>launchd</code> agent</summary>
 
-To start the companion at login and keep it running in the background, install it as a LaunchAgent. Save the following as `~/Library/LaunchAgents/local.shipyard.plist`, replacing the two paths with your own — LaunchAgents don't expand `~`, so both must be absolute. The Python path is `/opt/homebrew/bin/python3` on Apple Silicon and `/usr/local/bin/python3` on Intel.
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>local.shipyard</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/opt/homebrew/bin/python3</string>
-    <string>/Users/you/dev/shipyard/shipyard.py</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>/Users/you/dev/shipyard</string>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  </dict>
-  <key>StandardOutPath</key>
-  <string>/tmp/local.shipyard.stdout</string>
-  <key>StandardErrorPath</key>
-  <string>/tmp/local.shipyard.stderr</string>
-</dict>
-</plist>
-```
-
-`WorkingDirectory` lets the companion find your `shipyard.config.json`. Load it (and start it immediately) with:
+`shipyard-launchd.py` runs the companion as a `launchd` user agent, so it starts at login and comes back if it exits.
 
 ```bash
-launchctl load ~/Library/LaunchAgents/local.shipyard.plist
+./shipyard-launchd.py install
 ```
 
-Output and errors go to `/tmp/local.shipyard.stdout` and `/tmp/local.shipyard.stderr`. To stop and remove it:
+That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the companion, and `local.shipyard-restart` watches `shipyard.py` and `shipyard.config.json` to reload it when you save. `install` then confirms the companion actually stayed running rather than crash-looping. Re-run it after moving the repo, upgrading Python, or creating your config.
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/local.shipyard.plist
+./shipyard-launchd.py status     # state, pid, restart count, log sizes
+./shipyard-launchd.py restart
+./shipyard-launchd.py logs -f
+./shipyard-launchd.py uninstall
 ```
+
+Output goes to `~/Library/Logs/shipyard.out.log` and `shipyard.err.log`. The plists are ordinary launchd agents, so read or tweak them directly if you want different settings. Saving a plist is not enough on its own, though: launchd only picks up changes at login or through `install`.
+
+If a plist in `~/Library/LaunchAgents` is a symlink, something else already owns it (a dotfiles repo, say). `install` leaves those files alone and just loads them, so it stays useful for starting agents your own setup only symlinked into place, and `uninstall` stops them without deleting anything it did not write.
 
 </details>
 

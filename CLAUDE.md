@@ -16,6 +16,12 @@ same guidance. Edit `CLAUDE.md`; never create a second copy.
   Binds to localhost; discovery is read-only.
 - **`shipyard.config.json`** — local companion config (scan roots, app launcher, branch
   prefix). Copy from `shipyard.config.example.json`.
+- **`shipyard-launchd.py`** — macOS-only setup helper that runs the companion as a
+  `launchd` agent (`install`, `status`, `restart`, `logs`, `uninstall`). Manages two
+  labels: `local.shipyard` for the companion and `local.shipyard-restart`, a `WatchPaths`
+  agent that reloads it on save. A plist that is a symlink belongs to an external manager,
+  so it is loaded but never rewritten. Nothing else depends on this file; the app never
+  calls it. Keep platform-specific service code here rather than in `shipyard.py`.
 
 Dashboard data and the GitHub token live in the browser's local storage; the token is
 sent only to `api.github.com`.
