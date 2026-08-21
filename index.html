@@ -188,8 +188,23 @@
   .nt-status { margin: 0.75rem 0 0; }
   .nt-status:empty { display: none; }
   .nt-status.error { color: var(--red-text); }
+  #token-status.token-bad { color: var(--red-text); font-weight: 600; }
 
   /* ---------- list ---------- */
+  .stale-banner {
+    display: flex; align-items: center; gap: 0.625rem;
+    margin-bottom: 0.75rem; padding: 0.625rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--red) 40%, var(--border));
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--red) 8%, var(--surface));
+    color: var(--red-text); font-size: 0.8125rem;
+  }
+  .stale-banner svg { fill: currentColor; flex: none; }
+  .stale-banner .stale-text { flex: 1; }
+  .stale-banner .stale-text strong { font-weight: 600; }
+  .stale-banner .stale-detail { display: block; color: var(--fg-muted); font-size: 0.75rem; }
+  .stale-banner button { padding: 0.25rem 0.625rem; font-size: 0.75rem; }
+
   .list-head { display: flex; align-items: baseline; gap: 0.625rem; margin-bottom: 0.625rem; }
   #list-title { font: 600 0.8125rem var(--sans); color: var(--fg); }
   #list-title a { font: 500 0.6875rem var(--mono); color: var(--teal); }
@@ -550,6 +565,13 @@
     </form>
   </dialog>
 
+  <div id="stale-banner" class="stale-banner hidden">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>
+    <span class="stale-text"><strong id="stale-headline"></strong><span class="stale-detail" id="stale-detail"></span></span>
+    <button type="button" id="stale-token-btn" class="hidden">Update token</button>
+    <button type="button" id="stale-retry-btn">Retry</button>
+  </div>
+
   <div class="list-head">
     <span id="list-title">Open pull requests</span>
     <select id="sort-select" title="Sort order">
@@ -619,6 +641,7 @@
     reviewHistoryLoaded: false,
     targetedLoaded: false,
     loadError: null,
+    loadErrorAuth: false,
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
     view: localStorage.getItem("ghpr.view") || "board",
@@ -637,6 +660,8 @@
   };
 
   function resetData() {
+    state.loadError = null;
+    state.loadErrorAuth = false;
     state.prs = [];
     state.merged = [];
     state.reviewedPrs = [];
@@ -723,16 +748,36 @@
 
   function updateGitHubStatus(refreshing = false) {
     const el = $("#last-updated");
+    const failed = state.githubRefreshFailed && !refreshing;
     $("#github-status").classList.toggle("hidden", !refreshing && !state.githubUpdatedAt);
+    $("#github-status").classList.toggle("failed", failed);
     $("#footer-refresh-btn").disabled = refreshing;
     if (refreshing) {
       el.textContent = "GitHub refreshing…";
+    } else if (failed) {
+      el.textContent = state.githubUpdatedAt
+        ? `GitHub refresh failed · data from ${githubAge(state.githubUpdatedAt)}`
+        : "GitHub refresh failed";
     } else {
       el.textContent = state.githubUpdatedAt ? `GitHub updated ${githubAge(state.githubUpdatedAt)}` : "";
     }
-    el.title = state.githubRefreshFailed
-      ? "The last refresh failed. Showing previously loaded GitHub data."
-      : "";
+    el.title = failed ? state.loadError || "The last refresh failed." : "";
+    renderStaleBanner(refreshing);
+  }
+
+  // A failed refresh on top of restored cache would otherwise look like live data:
+  // the board renders normally and only the footer age hints that nothing updated.
+  function renderStaleBanner(refreshing = false) {
+    const banner = $("#stale-banner");
+    const show = state.githubRefreshFailed && !refreshing && state.targetedLoaded;
+    banner.classList.toggle("hidden", !show);
+    if (!show) return;
+    $("#stale-headline").textContent = state.loadErrorAuth
+      ? "Not updating — GitHub rejected your token"
+      : "Not updating — the last GitHub refresh failed";
+    const age = state.githubUpdatedAt ? `Showing data from ${githubAge(state.githubUpdatedAt)}. ` : "";
+    $("#stale-detail").textContent = `${age}${state.loadError || ""}`;
+    $("#stale-token-btn").classList.toggle("hidden", !state.loadErrorAuth);
   }
 
   let githubAgeTimer = null;
@@ -881,6 +926,13 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // A rejected token needs a different remedy than a flaky network, so tag it.
+  function authError(message) {
+    const err = new Error(message);
+    err.auth = true;
+    return err;
+  }
+
   // 502/503/504 and network drops are transient — retry with exponential backoff.
   async function gql(query, variables) {
     const RETRYABLE = new Set([502, 503, 504]);
@@ -898,7 +950,7 @@
         lastErr = new Error("Network error reaching GitHub. Check your connection.");
         continue;
       }
-      if (res.status === 401) throw new Error("Invalid or expired token (401). Update it in settings.");
+      if (res.status === 401) throw authError("GitHub rejected the saved token (401) — it was revoked, expired, or edited.");
       if (RETRYABLE.has(res.status)) {
         lastErr = new Error(`GitHub is temporarily unavailable (${res.status}). Try refreshing in a moment.`);
         continue;
@@ -906,7 +958,11 @@
       if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
       const json = await res.json();
       const allNull = json.data && Object.values(json.data).every((v) => v === null);
-      if (json.errors?.length && (!json.data || allNull)) throw new Error(json.errors.map((e) => e.message).join("; "));
+      if (json.errors?.length && (!json.data || allNull)) {
+        const message = json.errors.map((e) => e.message).join("; ");
+        throw /bad credentials|requires authentication|resource not accessible/i.test(message)
+          ? authError(message) : new Error(message);
+      }
       return json.data;
     }
     throw lastErr;
@@ -1673,7 +1729,7 @@
       if (!getToken() || !getCurrentRepo()) return;  // not configured: keep the setup prompt
       $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
       listBody.innerHTML = state.loadError
-        ? `<div class="error-box">${esc(state.loadError)}</div>`
+        ? loadErrorHtml()
         : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
       return;
     }
@@ -1684,7 +1740,7 @@
     const reviewHistoryLoading = state.filter === "review" && !state.reviewHistoryLoaded;
     listBody.innerHTML = html || (reviewHistoryLoading
       ? state.loadError
-        ? `<div class="error-box">${esc(state.loadError)}</div>`
+        ? loadErrorHtml()
         : '<div class="loading"><div class="spinner"></div>Loading review history…</div>'
       : `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`);
 
@@ -1703,6 +1759,11 @@
     }
   }
 
+  function loadErrorHtml() {
+    const hint = state.loadErrorAuth ? " Save a new token in settings (⚙)." : "";
+    return `<div class="error-box">${esc(state.loadError + hint)}</div>`;
+  }
+
   function reviewHistoryActive() {
     return state.filter === "review";
   }
@@ -1715,6 +1776,7 @@
     if (!needTargeted && !needReviewHistory) { render(); return; }
     state.loading = true;
     state.loadError = null;
+    state.loadErrorAuth = false;
     state.githubRefreshFailed = false;
     updateGitHubStatus(true);
     const hasVisibleData = state.targetedLoaded;
@@ -1751,7 +1813,10 @@
       render();
     } catch (err) {
       state.loadError = err.message;
+      state.loadErrorAuth = err.auth === true;
       state.githubRefreshFailed = true;
+      console.warn("Shipyard: GitHub refresh failed —", err.message);
+      renderTokenStatus();
       updateGitHubStatus();
       render();
     } finally {
@@ -1771,7 +1836,11 @@
   }
 
   function renderTokenStatus() {
-    $("#token-status").textContent = getToken() ? "Token saved ✓" : "No token saved";
+    const el = $("#token-status");
+    el.textContent = !getToken() ? "No token saved"
+      : state.loadErrorAuth ? "Token rejected by GitHub — save a new one"
+      : "Token saved ✓";
+    el.classList.toggle("token-bad", Boolean(getToken()) && state.loadErrorAuth);
   }
 
   const REMOVE_ICON = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 0 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06Z"/></svg>';
@@ -1815,6 +1884,13 @@
   $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
   $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
   $("#footer-refresh-btn").addEventListener("click", () => load(true));
+  $("#stale-retry-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
+  $("#stale-token-btn").addEventListener("click", () => {
+    renderViewsList();
+    renderTokenStatus();
+    $("#settings-dialog").showModal();
+    $("#token-input").focus();
+  });
 
   // ---------- new task ----------
   // The repo picker offers local clones under the current view only, so it matches the
