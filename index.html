@@ -1137,14 +1137,27 @@
     return (pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer);
   }
 
+  const prKey = (pr) => `${pr.repository?.nameWithOwner || ""}#${pr.number}`;
+
+  // GitHub has no diff comment outside a review: "Add single comment" still creates a
+  // review with state COMMENTED, so reviewed-by:@me matches PRs you merely chimed in
+  // on. Only a verdict counts as having reviewed.
+  function viewerGaveVerdict(pr) {
+    const verdict = pr.viewerLatestReview?.state;
+    return verdict === "APPROVED" || verdict === "CHANGES_REQUESTED" || verdict === "DISMISSED";
+  }
+
   function reviewItem(pr) {
     if (pr.author?.login === state.viewer) return false;
-    const key = `${pr.repository?.nameWithOwner || ""}#${pr.number}`;
-    const reviewedByViewer = state.reviewedPrs.some((reviewed) =>
-      `${reviewed.repository?.nameWithOwner || ""}#${reviewed.number}` === key
-    );
-    return reviewRequestedForViewer(pr) || reviewedByViewer;
+    if (reviewRequestedForViewer(pr)) return true;
+    // viewerLatestReview only comes back on the reviewed-by fetch, so check that copy.
+    const reviewed = state.reviewedPrs.find((r) => prKey(r) === prKey(pr));
+    return !!reviewed && viewerGaveVerdict(reviewed);
   }
+
+  const reviewedMergedItems = () => state.reviewedMerged.filter((pr) =>
+    pr.author?.login !== state.viewer && viewerGaveVerdict(pr)
+  );
 
   function viewerReviewBadge(pr) {
     if (reviewRequestedForViewer(pr))
@@ -1157,7 +1170,7 @@
     if (reviewState === "CHANGES_REQUESTED")
       return `<span class="review-badge changes">${ICONS.changes} You requested changes</span>`;
     if (reviewState === "COMMENTED")
-      return `<span class="review-badge none">${ICONS.comment} You reviewed</span>`;
+      return `<span class="review-badge none">${ICONS.comment} You commented</span>`;
     return `<span class="review-badge none">Review submitted</span>`;
   }
 
@@ -1619,7 +1632,7 @@
       ? `${workingCount} pull request${workingCount === 1 ? "" : "s"} in Working`
       : "";
     const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
-      [`${pr.repository?.nameWithOwner || ""}#${pr.number}`, pr]
+      [prKey(pr), pr]
     )).values()];
     const reviewCount = reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
     const reviewCountEl = $("#count-review");
@@ -1651,9 +1664,7 @@
       const defs = reviewBoard
         ? [["Waiting", "yellow"], ["Review submitted", "green"]]
         : [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
-      const recentMerged = reviewBoard
-        ? state.reviewedMerged.filter((pr) => pr.author?.login !== state.viewer)
-        : state.merged;
+      const recentMerged = reviewBoard ? reviewedMergedItems() : state.merged;
       html = `<div class="board${reviewBoard ? " two-lane" : ""}">` + defs.map(([name, color], i) => {
         const inLane = laneItems[i];
         const laneNums = new Set(inLane.map((p) => p.number));
@@ -1756,7 +1767,7 @@
     const listMerged = state.filter === "mine"
       ? state.merged
       : state.filter === "review"
-        ? state.reviewedMerged.filter((pr) => pr.author?.login !== state.viewer)
+        ? reviewedMergedItems()
         : [];
     const band = effectiveView === "board";
     if (listMerged.length) {
