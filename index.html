@@ -412,6 +412,8 @@
   .card:has(.wt-link.current) { border: 1px solid var(--green); }
   .card.draft { background: var(--bg); border-style: dashed; border-color: var(--border-dashed); }
   .card.merged { background: var(--bg); opacity: .75; }
+  .card.merged .card-title { display: flex; gap: 0.375rem; }
+  .card.merged .card-title .pr-icon { margin-top: 0.125rem; }
   .card-title { font-weight: 600; font-size: 0.8125rem; line-height: 1.4; color: var(--fg); }
   .card-meta { font-size: 0.75rem; color: var(--fg-muted); margin-top: 0.1875rem; overflow-wrap: anywhere; }
   .card-meta .pr-num { font-family: var(--mono); font-size: 0.6875rem; color: var(--teal); }
@@ -456,8 +458,14 @@
   /* List view: recently-merged sits in its own .list card, with the divider between. */
   #merged-wrap .merged-divider { margin: 0.875rem 0; }
   #merged-wrap .merged-divider::before { background: var(--bg); }
+  /* Board view: a full-width band under the lanes so merge history can't stretch one lane. */
+  #merged-wrap.band .list { background: none; border: none; overflow: visible; }
+  .merged-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
 
-  @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 900px) {
+    .board { grid-template-columns: repeat(2, 1fr); }
+    .merged-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
 
   .empty, .loading, .error-box { padding: 3rem 1.25rem; text-align: center; color: var(--fg-muted); }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 0.625rem; color: var(--fg-faint); }
@@ -1393,9 +1401,8 @@
   function mergedCard(pr) {
     return `
       <div class="card merged">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
-        <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · merged ${timeAgo(pr.mergedAt)}</div>
-        <div class="card-icons"><span class="review-badge merged">${ICONS.merged} Merged</span></div>
+        <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
+        <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)}</div>
       </div>`;
   }
 
@@ -1684,10 +1691,6 @@
         let laneHtml = renderGroup((p) => !p.isDraft);
         const draftHtml = renderGroup((p) => p.isDraft);
         if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
-        const mergedLane = reviewBoard ? 1 : 2;
-        if (i === mergedLane && recentMerged.length) {
-          laneHtml += '<div class="merged-divider"></div>' + recentMerged.map(mergedCard).join("");
-        }
         const laneAction = (!reviewBoard && i === 0 && state.companion)
           ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
           : "";
@@ -1747,15 +1750,20 @@
         : '<div class="loading"><div class="spinner"></div>Loading review history…</div>'
       : `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`);
 
-    // Recently merged live in their own .list card (list view only), with the divider between.
+    // Recently merged sit below the main view, never inside it: rows in their own .list
+    // card in list view, a full-width grid band under the lanes in board view.
     const mergedWrap = $("#merged-wrap");
     const listMerged = state.filter === "mine"
       ? state.merged
       : state.filter === "review"
         ? state.reviewedMerged.filter((pr) => pr.author?.login !== state.viewer)
         : [];
-    if (effectiveView === "list" && listMerged.length) {
-      $("#merged-body").innerHTML = listMerged.map(mergedRow).join("");
+    const band = effectiveView === "board";
+    if (listMerged.length) {
+      mergedWrap.classList.toggle("band", band);
+      const mergedBody = $("#merged-body");
+      mergedBody.className = band ? "merged-grid" : "";
+      mergedBody.innerHTML = listMerged.map(band ? mergedCard : mergedRow).join("");
       mergedWrap.classList.remove("hidden");
     } else {
       mergedWrap.classList.add("hidden");
