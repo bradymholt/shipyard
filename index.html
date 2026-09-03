@@ -469,14 +469,14 @@
   /* List view: recently-merged sits in its own .list card, with the divider between. */
   #merged-wrap .merged-divider { margin: 0.875rem 0; }
   #merged-wrap .merged-divider::before { background: var(--bg); }
-  /* Board view: a full-width band under the lanes so merge history can't stretch one lane. */
-  #merged-wrap.band .list { background: none; border: none; overflow: visible; }
-  .merged-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
-
-  @media (max-width: 900px) {
-    .board { grid-template-columns: repeat(2, 1fr); }
-    .merged-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Board view: capped inside the lane, so merge history can't stretch it. */
+  .merged-more {
+    align-self: center; padding: 0.125rem 0.5rem; border: 0; border-radius: 0.25rem;
+    background: none; color: var(--fg-faint); font: 600 0.6875rem var(--sans);
   }
+  .merged-more:hover, .merged-more:focus-visible { color: var(--teal); }
+
+  @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
 
   .empty, .loading, .error-box { padding: 3rem 1.25rem; text-align: center; color: var(--fg-muted); }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 0.625rem; color: var(--fg-faint); }
@@ -904,6 +904,9 @@
   const MAX_PRS = 100;
   const RECENT_MERGED_DAYS = 3;
   const RECENT_MERGED_MIN = 3;
+  // Board view keeps merges inside the Ready lane, so only a few show until asked.
+  const MERGED_LANE_CAP = 3;
+  let mergedExpanded = false;
   // Everything merged in the window — but never fewer than the most recent few,
   // so a quiet stretch still shows the latest merges.
   const recentlyMerged = (prs) => {
@@ -1723,6 +1726,14 @@
         let laneHtml = renderGroup((p) => !p.isDraft);
         const draftHtml = renderGroup((p) => p.isDraft);
         if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
+        if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
+          const shown = mergedExpanded ? recentMerged : recentMerged.slice(0, MERGED_LANE_CAP);
+          laneHtml += '<div class="merged-divider"></div>' + shown.map(mergedCard).join("");
+          const rest = recentMerged.length - shown.length;
+          if (rest > 0 || mergedExpanded) {
+            laneHtml += `<button type="button" class="merged-more">${rest > 0 ? `+${rest} more` : "Show less"}</button>`;
+          }
+        }
         const laneAction = (!reviewBoard && i === 0 && state.companion)
           ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
           : "";
@@ -1782,20 +1793,15 @@
         : '<div class="loading"><div class="spinner"></div>Loading review history…</div>'
       : `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`);
 
-    // Recently merged sit below the main view, never inside it: rows in their own .list
-    // card in list view, a full-width grid band under the lanes in board view.
+    // List view has no lane to hang merges off, so they get their own .list card below.
     const mergedWrap = $("#merged-wrap");
     const listMerged = state.filter === "mine"
       ? state.merged
       : state.filter === "review"
         ? reviewedMergedItems()
         : [];
-    const band = effectiveView === "board";
-    if (listMerged.length) {
-      mergedWrap.classList.toggle("band", band);
-      const mergedBody = $("#merged-body");
-      mergedBody.className = band ? "merged-grid" : "";
-      mergedBody.innerHTML = listMerged.map(band ? mergedCard : mergedRow).join("");
+    if (effectiveView === "list" && listMerged.length) {
+      $("#merged-body").innerHTML = listMerged.map(mergedRow).join("");
       mergedWrap.classList.remove("hidden");
     } else {
       mergedWrap.classList.add("hidden");
@@ -2082,6 +2088,7 @@
 
   listBody.addEventListener("click", async (e) => {
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
+    if (e.target.closest("button.merged-more")) { mergedExpanded = !mergedExpanded; render(); return; }
 
     const openBtn = e.target.closest("button.wt-open");
     if (openBtn) {
