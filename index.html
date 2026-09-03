@@ -1349,7 +1349,6 @@
     finally { sessPollInFlight = false; }
   }
 
-  const DEFAULT_BRANCHES = new Set(["main", "master", "develop"]);
   const STATUS_RANK = { working: 0, waiting: 1, idle: 2 };
   const STATUS_TEXT = { working: "Working", waiting: "Waiting for you", idle: "Idle" };
   const ENTRYPOINT_NAMES = { cli: "terminal", "claude-desktop": "Claude desktop", vscode: "VS Code" };
@@ -1400,7 +1399,7 @@
     const out = [];
     for (const [key, sessions] of agents) {
       const wt = state.worktrees[key];
-      if (!wt || DEFAULT_BRANCHES.has(wt.branch) || prBranches.has(key)) continue;
+      if (!wt || prBranches.has(key)) continue;
       out.push({ wt, session: sessions[0], sessions });
     }
     out.sort((a, b) => (STATUS_RANK[a.session.status] - STATUS_RANK[b.session.status]) || (b.session.activity - a.session.activity));
