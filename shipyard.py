@@ -615,7 +615,40 @@ def parse_iso(ts):
         return 0
 
 
-def session_state(transcript):
+TITLE_CACHE = {}
+
+
+def session_title(transcript, session_id):
+    """Title records are written once, anywhere in the file, so scan only the bytes
+    added since the last look and remember what was found."""
+    entry = TITLE_CACHE.setdefault(session_id, {"offset": 0, "custom": None, "ai": None})
+    try:
+        size = os.path.getsize(transcript)
+        if size < entry["offset"]:
+            entry.update(offset=0, custom=None, ai=None)
+        if size > entry["offset"]:
+            with open(transcript, "rb") as f:
+                f.seek(entry["offset"])
+                chunk = f.read()
+            cut = chunk.rfind(b"\n") + 1  # leave a trailing partial record for next time
+            for line in chunk[:cut].splitlines():
+                if b'-title"' not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if rec.get("type") == "custom-title":
+                    entry["custom"] = rec.get("customTitle")
+                elif rec.get("type") == "ai-title":
+                    entry["ai"] = rec.get("aiTitle")
+            entry["offset"] += cut
+    except OSError:
+        pass
+    return entry["custom"] or entry["ai"]
+
+
+def session_state(transcript, session_id):
     """Guess what a session is doing from the tail of its transcript.
 
     working — the model's turn is in progress (a prompt or tool result was the last
@@ -628,13 +661,8 @@ def session_state(transcript):
         state["activity"] = int(os.path.getmtime(transcript))
     except OSError:
         pass
-    title = ai_title = None
     for rec in transcript_tail_records(transcript):
         kind = rec.get("type")
-        if kind == "custom-title" and not title:
-            title = rec.get("customTitle")
-        elif kind == "ai-title" and not ai_title:
-            ai_title = rec.get("aiTitle")
         if kind not in ("assistant", "user") or not isinstance(rec.get("message"), dict):
             continue
         content = rec["message"].get("content")
@@ -653,7 +681,7 @@ def session_state(transcript):
         else:
             state["status"] = "working"
         break
-    state["title"] = title or ai_title
+    state["title"] = session_title(transcript, session_id)
     return state
 
 
@@ -681,7 +709,7 @@ def live_sessions():
                 "branch": None, "title": None}
         transcript = transcript_for(session_id)
         if transcript:
-            info.update(session_state(transcript))
+            info.update(session_state(transcript, session_id))
         # Claude Code reports idle itself once a turn ends; trust it when it's newer
         # than anything in the transcript.
         if reg.get("status") == "idle" and int((reg.get("statusUpdatedAt") or 0) / 1000) >= info["activity"]:
