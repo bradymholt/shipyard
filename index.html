@@ -928,6 +928,7 @@
   // Board view keeps merges inside the Ready lane, so only a few show until asked.
   const MERGED_LANE_CAP = 3;
   let mergedExpanded = false;
+  let inFlightExpanded = false;
   // Everything merged in the window — but never fewer than the most recent few,
   // so a quiet stretch still shows the latest merges.
   const recentlyMerged = (prs) => {
@@ -1392,28 +1393,36 @@
     return `<span class="agent ${esc(s.status)}" title="${esc(title)}"><span class="agent-dot"></span>${esc(s.status)}</span>`;
   }
 
-  // Checkouts with a live session but no PR yet: work that hasn't reached GitHub.
+  // Branches checked out locally, in the current view's repos, with no PR yet: work that
+  // hasn't reached GitHub. The branch is the card; a live session is a badge on it, so a
+  // worktree stays visible after its window closes. Default branches never become PRs.
+  const DEFAULT_BRANCHES = new Set(["main", "master", "develop"]);
   function inFlightItems() {
     if (!state.companion || state.filter !== "mine") return [];
-    const prBranches = new Set(state.prs.map((pr) => `${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`));
+    const target = getCurrentRepo();
+    const inView = (repo) => repo === target || repo.startsWith(target + "/");
+    const prKeyOf = (pr) => `${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`;
+    const known = new Set([...state.prs, ...state.merged].map(prKeyOf));
     const out = [];
-    for (const [key, sessions] of agents) {
-      const wt = state.worktrees[key];
-      if (!wt || prBranches.has(key)) continue;
-      out.push({ wt, session: sessions[0], sessions });
+    for (const [key, wt] of Object.entries(state.worktrees)) {
+      if (!wt.repo || !inView(wt.repo) || DEFAULT_BRANCHES.has(wt.branch) || known.has(key)) continue;
+      const sessions = agents.get(key) || [];
+      const session = sessions[0] || null;
+      out.push({ wt, session, sessions, activity: Math.max(wt.activity || 0, session?.activity || 0) });
     }
-    out.sort((a, b) => (STATUS_RANK[a.session.status] - STATUS_RANK[b.session.status]) || (b.session.activity - a.session.activity));
+    const rank = (item) => item.session ? STATUS_RANK[item.session.status] : 3;
+    out.sort((a, b) => (rank(a) - rank(b)) || (b.activity - a.activity));
     return out;
   }
 
   const inFlightPr = (wt) => ({ repository: { nameWithOwner: wt.repo }, headRefName: wt.branch });
 
-  function inFlightCard({ wt, session, sessions }) {
+  function inFlightCard({ wt, session, sessions, activity }) {
     const repoPrefix = wt.repo && wt.repo !== getCurrentRepo() ? `${esc(wt.repo)} · ` : "";
     return `
       <div class="card inflight">
-        <div class="card-title">${esc(session.title || wt.branch)}</div>
-        <div class="card-meta">${repoPrefix}<span class="branch">${esc(wt.branch)}</span> · ${timeAgo(session.activity * 1000)}</div>
+        <div class="card-title">${esc(session?.title || wt.branch)}</div>
+        <div class="card-meta">${repoPrefix}<span class="branch">${esc(wt.branch)}</span> · ${timeAgo(activity * 1000)}</div>
         <div class="card-icons">
           ${agentBadge(sessions)}
           ${worktreeLinks(inFlightPr(wt))}
@@ -1421,14 +1430,14 @@
       </div>`;
   }
 
-  function inFlightRow({ wt, session, sessions }) {
+  function inFlightRow({ wt, session, sessions, activity }) {
     const repoPrefix = wt.repo && wt.repo !== getCurrentRepo() ? `<strong>${esc(wt.repo)}</strong> · ` : "";
     return `
       <div class="pr-row inflight" style="padding-left: 1rem">
         <span class="pr-icon inflight">${BRANCH_ICON}</span>
         <div class="pr-main">
-          <div class="pr-title">${esc(session.title || wt.branch)}</div>
-          <div class="pr-meta">${repoPrefix}<span class="branch">${esc(wt.branch)}</span> · no pull request yet · last activity ${timeAgo(session.activity * 1000)}</div>
+          <div class="pr-title">${esc(session?.title || wt.branch)}</div>
+          <div class="pr-meta">${repoPrefix}<span class="branch">${esc(wt.branch)}</span> · no pull request yet · last activity ${timeAgo(activity * 1000)}</div>
         </div>
         <div class="pr-side">
           ${agentBadge(sessions)}
@@ -1858,7 +1867,12 @@
         const draftHtml = renderGroup((p) => p.isDraft);
         if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
         if (!reviewBoard && i === 0 && inFlight.length) {
-          laneHtml += '<div class="inflight-divider"></div>' + inFlight.map(inFlightCard).join("");
+          const shown = inFlightExpanded ? inFlight : inFlight.slice(0, MERGED_LANE_CAP);
+          laneHtml += '<div class="inflight-divider"></div>' + shown.map(inFlightCard).join("");
+          const rest = inFlight.length - shown.length;
+          if (rest > 0 || inFlightExpanded) {
+            laneHtml += `<button type="button" class="merged-more inflight-more">${rest > 0 ? `+${rest} more` : "Show less"}</button>`;
+          }
         }
         if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
           const shown = mergedExpanded ? recentMerged : recentMerged.slice(0, MERGED_LANE_CAP);
@@ -2230,6 +2244,7 @@
 
   listBody.addEventListener("click", async (e) => {
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
+    if (e.target.closest("button.inflight-more")) { inFlightExpanded = !inFlightExpanded; render(); return; }
     if (e.target.closest("button.merged-more")) { mergedExpanded = !mergedExpanded; render(); return; }
 
     const openBtn = e.target.closest("button.wt-open");
