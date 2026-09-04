@@ -7,12 +7,6 @@ reports, for every git worktree under the given root(s):
 
     { "repo": "owner/name", "branch": "...", "path": "/abs/path", "workspace": "…|null" }
 
-It also serves /sessions.json: the Claude Code sessions currently running on this
-machine (read from ~/.claude, never written), each with its working directory and a
-status guess so the page can mark which branches an agent is working on:
-
-    { "sessionId": "…", "cwd": "/abs/path", "status": "working|waiting|idle", "activity": 1700000000 }
-
 Run it from the dashboard directory and open the printed URL:
 
     python3 shipyard.py                 # scan the folders set in the config file
@@ -47,7 +41,6 @@ import secrets
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -564,160 +557,6 @@ def new_branch_in_main(repo, branch, roots):
     return {"ok": True, "path": clone, "workspace": workspace_in(clone), "created": not local_exists}
 
 
-CLAUDE_DIR = Path.home() / ".claude"
-WORKING_STALE_SECS = 10 * 60
-
-
-def pid_alive(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except (PermissionError, OSError):
-        return True
-    return True
-
-
-def transcript_for(session_id):
-    if not re.fullmatch(r"[0-9a-f-]{36}", session_id or ""):
-        return None
-    matches = list((CLAUDE_DIR / "projects").glob(f"*/{session_id}.jsonl"))
-    return matches[0] if matches else None
-
-
-def transcript_tail_records(path, size=128 * 1024):
-    """The last records of a transcript, newest first, without reading the whole file."""
-    try:
-        with open(path, "rb") as f:
-            f.seek(0, os.SEEK_END)
-            end = f.tell()
-            f.seek(max(0, end - size))
-            chunk = f.read()
-    except OSError:
-        return []
-    lines = chunk.decode("utf-8", errors="ignore").splitlines()
-    if end > size:
-        lines = lines[1:]  # the first line is almost certainly a partial record
-    out = []
-    for line in reversed(lines):
-        try:
-            out.append(json.loads(line))
-        except ValueError:
-            continue
-    return out
-
-
-def parse_iso(ts):
-    try:
-        from datetime import datetime
-        return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
-    except (ValueError, AttributeError, TypeError):
-        return 0
-
-
-TITLE_CACHE = {}
-
-
-def session_title(transcript, session_id):
-    """Title records are written once, anywhere in the file, so scan only the bytes
-    added since the last look and remember what was found."""
-    entry = TITLE_CACHE.setdefault(session_id, {"offset": 0, "custom": None, "ai": None})
-    try:
-        size = os.path.getsize(transcript)
-        if size < entry["offset"]:
-            entry.update(offset=0, custom=None, ai=None)
-        if size > entry["offset"]:
-            with open(transcript, "rb") as f:
-                f.seek(entry["offset"])
-                chunk = f.read()
-            cut = chunk.rfind(b"\n") + 1  # leave a trailing partial record for next time
-            for line in chunk[:cut].splitlines():
-                if b'-title"' not in line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue
-                if rec.get("type") == "custom-title":
-                    entry["custom"] = rec.get("customTitle")
-                elif rec.get("type") == "ai-title":
-                    entry["ai"] = rec.get("aiTitle")
-            entry["offset"] += cut
-    except OSError:
-        pass
-    return entry["custom"] or entry["ai"]
-
-
-def session_state(transcript, session_id):
-    """Guess what a session is doing from the tail of its transcript.
-
-    working — the model's turn is in progress (a prompt or tool result was the last
-              record, or the assistant's last record called a tool)
-    waiting — the assistant finished its turn; it needs the user
-    idle    — a turn looks in progress but nothing has happened for a while
-    """
-    state = {"status": "idle", "activity": 0, "branch": None, "title": None}
-    try:
-        state["activity"] = int(os.path.getmtime(transcript))
-    except OSError:
-        pass
-    for rec in transcript_tail_records(transcript):
-        kind = rec.get("type")
-        if kind not in ("assistant", "user") or not isinstance(rec.get("message"), dict):
-            continue
-        content = rec["message"].get("content")
-        blocks = content if isinstance(content, list) else []
-        if kind == "assistant":
-            in_turn = any(isinstance(b, dict) and b.get("type") == "tool_use" for b in blocks)
-        else:
-            in_turn = True
-        ts = parse_iso(rec.get("timestamp")) or state["activity"]
-        state["activity"] = ts
-        state["branch"] = rec.get("gitBranch") or None
-        if not in_turn:
-            state["status"] = "waiting"
-        elif time.time() - ts > WORKING_STALE_SECS:
-            state["status"] = "idle"
-        else:
-            state["status"] = "working"
-        break
-    state["title"] = session_title(transcript, session_id)
-    return state
-
-
-def live_sessions():
-    registry = CLAUDE_DIR / "sessions"
-    if not registry.is_dir():
-        return []
-    out = []
-    for entry in sorted(registry.glob("*.json")):
-        try:
-            reg = json.loads(entry.read_text())
-        except (OSError, ValueError):
-            continue
-        pid = reg.get("pid")
-        if not isinstance(pid, int) or not pid_alive(pid):
-            continue
-        session_id = reg.get("sessionId")
-        cwd = reg.get("cwd")
-        if not session_id or not cwd:
-            continue
-        started = int((reg.get("startedAt") or 0) / 1000)
-        info = {"sessionId": session_id, "pid": pid, "cwd": cwd,
-                "entrypoint": reg.get("entrypoint"), "name": reg.get("name"),
-                "startedAt": started, "status": "idle", "activity": started,
-                "branch": None, "title": None}
-        transcript = transcript_for(session_id)
-        if transcript:
-            info.update(session_state(transcript, session_id))
-        # Claude Code reports idle itself once a turn ends; trust it when it's newer
-        # than anything in the transcript.
-        if reg.get("status") == "idle" and int((reg.get("statusUpdatedAt") or 0) / 1000) >= info["activity"]:
-            info["status"] = "waiting"
-        out.append(info)
-    return out
-
-
 class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
@@ -761,8 +600,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/worktrees.json":
             return self._json(discover(self.roots))
-        if path == "/sessions.json":
-            return self._json(live_sessions())
         if path == "/config.json":
             return self._json({"launcher": self.config["launcher"],
                                "companionToken": self.session_token})
