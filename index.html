@@ -1395,7 +1395,8 @@
 
   // Branches checked out locally, in the current view's repos, with no PR yet: work that
   // hasn't reached GitHub. The branch is the card; a live session is a badge on it, so a
-  // worktree stays visible after its window closes. Default branches never become PRs.
+  // worktree stays visible after its window closes. A clone parked on its default branch
+  // is just at rest, so it only earns a card while a session is live on it.
   const DEFAULT_BRANCHES = new Set(["main", "master", "develop"]);
   function inFlightItems() {
     if (!state.companion || state.filter !== "mine") return [];
@@ -1405,9 +1406,10 @@
     const known = new Set([...state.prs, ...state.merged].map(prKeyOf));
     const out = [];
     for (const [key, wt] of Object.entries(state.worktrees)) {
-      if (!wt.repo || !inView(wt.repo) || DEFAULT_BRANCHES.has(wt.branch) || known.has(key)) continue;
+      if (!wt.repo || !inView(wt.repo) || known.has(key)) continue;
       const sessions = agents.get(key) || [];
       const session = sessions[0] || null;
+      if (DEFAULT_BRANCHES.has(wt.branch) && !session) continue;
       out.push({ wt, session, sessions, activity: Math.max(wt.activity || 0, session?.activity || 0) });
     }
     const rank = (item) => item.session ? STATUS_RANK[item.session.status] : 3;
