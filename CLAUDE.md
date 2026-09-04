@@ -13,10 +13,7 @@ same guidance. Edit `CLAUDE.md`; never create a second copy.
   framework, no bundler, no build step, no dependencies to install. Edit it directly.
 - **`shipyard.py`** — optional local companion (Python 3 stdlib only). Serves the page
   and a `/worktrees.json` endpoint, and runs branch/worktree actions for local mode.
-  Also serves `/sessions.json`: live Claude Code sessions read from `~/.claude`
-  (the per-PID registry in `sessions/` plus the tail of each transcript under
-  `projects/`), so the page can mark which checkouts an agent is working on. Binds to
-  localhost; discovery is read-only.
+  Binds to localhost; discovery is read-only.
 - **`shipyard.config.json`** — local companion config (scan roots, app launcher, branch
   prefix). Copy from `shipyard.config.example.json`.
 - **`shipyard-launchd.py`** — macOS-only setup helper that runs the companion as a

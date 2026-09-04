@@ -64,8 +64,6 @@ Local mode starts `shipyard.py`, a small companion process that serves the dashb
 
 Worktree discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees. Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes existing worktrees. New worktrees are created under `<repo>/.claude/worktrees/`.
 
-The companion also reports live Claude Code sessions on your machine, read from `~/.claude` and never written. A PR whose branch has a session shows a small status word next to its open button: **working** while a turn is in progress, **waiting** once the agent has stopped and needs you, and **idle** when a turn has gone quiet. Branches checked out locally with no pull request yet appear in an "in flight" group under Working, whether or not a session is open on them, so work started with **Start work** stays visible until it reaches GitHub. A clone on its default branch appears only while a session is live on it.
-
 For a persistent setup, copy the example configuration and adjust `roots`:
 
 ```bash

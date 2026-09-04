@@ -376,18 +376,6 @@
   button.wt-link:disabled { opacity: .5; cursor: default; }
   .wt-links { display: inline-flex; align-items: center; gap: 0.5rem; }
 
-  /* Live Claude Code session on this checkout (local companion only). */
-  .agent { display: inline-flex; align-items: center; gap: 0.3125rem; color: var(--fg-muted); font: 500 0.6875rem var(--sans); white-space: nowrap; }
-  .agent-dot { width: 0.4375rem; height: 0.4375rem; border-radius: 50%; flex: none; background: var(--muted-bar); }
-  .agent.working { color: var(--teal); }
-  .agent.working .agent-dot { background: var(--teal); animation: agent-pulse 1.6s ease-in-out infinite; }
-  .agent.waiting { color: var(--gold-text); }
-  .agent.waiting .agent-dot { background: var(--gold); }
-  .agent.idle { color: var(--fg-faint); }
-  @keyframes agent-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-  .pr-icon.inflight svg { fill: var(--fg-muted); }
-  .card-meta .branch { font-family: var(--mono); font-size: 0.6875rem; }
-
   /* ---------- board ---------- */
   .board {
     display: grid;
@@ -461,15 +449,15 @@
   .card-nest > .stack-elbow { margin-top: 0.125rem; border-color: var(--border-dashed); }
   .card-nest > .card { flex: 1; min-width: 0; }
 
-  .merged-divider, .drafts-divider, .inflight-divider {
+  .merged-divider, .drafts-divider {
     position: relative; text-align: center; line-height: 1;
   }
-  .merged-divider::after, .drafts-divider::after, .inflight-divider::after {
+  .merged-divider::after, .drafts-divider::after {
     content: ""; position: absolute; left: 1.125rem; right: 1.125rem; top: 50%;
     transform: translateY(-50%);
     border-top: 1px dashed var(--border); z-index: 0;
   }
-  .merged-divider::before, .drafts-divider::before, .inflight-divider::before {
+  .merged-divider::before, .drafts-divider::before {
     position: relative; z-index: 1;
     display: inline-block; background: var(--surface); padding: 0 0.75rem;
     font: 700 0.625rem var(--display); color: var(--fg-faint);
@@ -477,13 +465,10 @@
   }
   .merged-divider::before { content: "recently merged"; }
   .drafts-divider::before { content: "drafts"; }
-  .inflight-divider::before { content: "in flight · no PR yet"; }
-  .lane .merged-divider, .lane .drafts-divider, .lane .inflight-divider { margin: 0.5rem 0 0.375rem; }
+  .lane .merged-divider, .lane .drafts-divider { margin: 0.5rem 0 0.375rem; }
   /* List view: recently-merged sits in its own .list card, with the divider between. */
   #merged-wrap .merged-divider { margin: 0.875rem 0; }
   #merged-wrap .merged-divider::before { background: var(--bg); }
-  #inflight-wrap .inflight-divider { margin: 0.875rem 0; }
-  #inflight-wrap .inflight-divider::before { background: var(--bg); }
   /* Board view: capped inside the lane, so merge history can't stretch it. */
   .merged-more {
     align-self: center; padding: 0.125rem 0.5rem; border: 0; border-radius: 0.25rem;
@@ -635,11 +620,6 @@
     </div>
   </div>
 
-  <div id="inflight-wrap" class="hidden">
-    <div class="inflight-divider"></div>
-    <div class="list"><div id="inflight-body"></div></div>
-  </div>
-
   <div id="merged-wrap" class="hidden">
     <div class="merged-divider"></div>
     <div class="list"><div id="merged-body"></div></div>
@@ -698,7 +678,6 @@
     companion: false,     // true when the local companion answered (enables worktree actions)
     companionChecked: false,
     companionToken: "",  // per-process token required for local companion mutations
-    sessions: [],         // live Claude Code sessions on this machine, from the local companion
     launcher: DEFAULT_LAUNCHER,
     loading: false,
     targetedFresh: false,
@@ -928,7 +907,6 @@
   // Board view keeps merges inside the Ready lane, so only a few show until asked.
   const MERGED_LANE_CAP = 3;
   let mergedExpanded = false;
-  let inFlightExpanded = false;
   // Everything merged in the window — but never fewer than the most recent few,
   // so a quiet stretch still shows the latest merges.
   const recentlyMerged = (prs) => {
@@ -1302,7 +1280,6 @@
         state.worktrees = map;
         lastWtSig = JSON.stringify(map);
         state.companion = await loadCompanionConfig();
-        loadSessions();
       }
     } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
     finally {
@@ -1331,121 +1308,6 @@
 
   function worktreeFor(pr) {
     return state.worktrees[`${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`];
-  }
-
-  // Live Claude Code sessions, polled more often than worktrees since status flips
-  // within a turn. Re-renders only when something changed.
-  let lastSessSig = "";
-  let sessPollInFlight = false;
-  async function loadSessions() {
-    if (!state.companion || document.hidden || sessPollInFlight) return;
-    sessPollInFlight = true;
-    try {
-      const res = await fetch("sessions.json", { cache: "no-store" });
-      if (!res.ok) return;
-      const list = await res.json();
-      const sig = JSON.stringify(list);
-      if (sig !== lastSessSig) { lastSessSig = sig; state.sessions = list; render(); }
-    } catch { /* transient — keep the last known state */ }
-    finally { sessPollInFlight = false; }
-  }
-
-  const STATUS_RANK = { working: 0, waiting: 1, idle: 2 };
-  const STATUS_TEXT = { working: "Working", waiting: "Waiting for you", idle: "Idle" };
-  const ENTRYPOINT_NAMES = { cli: "terminal", "claude-desktop": "Claude desktop", "claude-vscode": "VS Code", vscode: "VS Code" };
-
-  // A session belongs to the checkout whose path contains its working directory.
-  function sessionWorktree(s) {
-    let best = null;
-    for (const w of Object.values(state.worktrees)) {
-      if (s.cwd === w.path || s.cwd.startsWith(w.path + "/")) {
-        if (!best || w.path.length > best.path.length) best = w;
-      }
-    }
-    return best;
-  }
-
-  // "repo#branch" -> live sessions on that checkout, most relevant first. Rebuilt per render.
-  let agents = new Map();
-  function agentIndex() {
-    const index = new Map();
-    if (!state.companion) return index;
-    for (const s of state.sessions) {
-      const wt = sessionWorktree(s);
-      if (!wt) continue;
-      const key = `${wt.repo || ""}#${wt.branch}`;
-      if (!index.has(key)) index.set(key, []);
-      index.get(key).push(s);
-    }
-    for (const list of index.values()) {
-      list.sort((a, b) => (STATUS_RANK[a.status] - STATUS_RANK[b.status]) || (b.activity - a.activity));
-    }
-    return index;
-  }
-  const agentFor = (pr) => agents.get(`${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`);
-
-  function agentBadge(sessions) {
-    if (!sessions || !sessions.length) return "";
-    const s = sessions[0];
-    const where = ENTRYPOINT_NAMES[s.entrypoint] || s.entrypoint || "Claude Code";
-    const more = sessions.length > 1 ? ` · +${sessions.length - 1} more session${sessions.length > 2 ? "s" : ""}` : "";
-    const title = `Claude Code · ${s.title || s.name || s.sessionId.slice(0, 8)} (${where}) · ${STATUS_TEXT[s.status] || s.status} · last activity ${timeAgo(s.activity * 1000)}${more}`;
-    return `<span class="agent ${esc(s.status)}" title="${esc(title)}"><span class="agent-dot"></span>${esc(s.status)}</span>`;
-  }
-
-  // Branches checked out locally, in the current view's repos, with no PR yet: work that
-  // hasn't reached GitHub. The branch is the card; a live session is a badge on it, so a
-  // worktree stays visible after its window closes. A clone parked on its default branch
-  // is just at rest, so it only earns a card while a session is live on it.
-  const DEFAULT_BRANCHES = new Set(["main", "master", "develop"]);
-  function inFlightItems() {
-    if (!state.companion || state.filter !== "mine") return [];
-    const target = getCurrentRepo();
-    const inView = (repo) => repo === target || repo.startsWith(target + "/");
-    const prKeyOf = (pr) => `${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`;
-    const known = new Set([...state.prs, ...state.merged].map(prKeyOf));
-    const out = [];
-    for (const [key, wt] of Object.entries(state.worktrees)) {
-      if (!wt.repo || !inView(wt.repo) || known.has(key)) continue;
-      const sessions = agents.get(key) || [];
-      const session = sessions[0] || null;
-      if (DEFAULT_BRANCHES.has(wt.branch) && !session) continue;
-      out.push({ wt, session, sessions, activity: Math.max(wt.activity || 0, session?.activity || 0) });
-    }
-    const rank = (item) => item.session ? STATUS_RANK[item.session.status] : 3;
-    out.sort((a, b) => (rank(a) - rank(b)) || (b.activity - a.activity));
-    return out;
-  }
-
-  const inFlightPr = (wt) => ({ repository: { nameWithOwner: wt.repo }, headRefName: wt.branch });
-
-  function inFlightCard({ wt, session, sessions, activity }) {
-    const repoPrefix = wt.repo && wt.repo !== getCurrentRepo() ? `${esc(wt.repo)} · ` : "";
-    return `
-      <div class="card inflight">
-        <div class="card-title">${esc(session?.title || wt.branch)}</div>
-        <div class="card-meta">${repoPrefix}<span class="branch">${esc(wt.branch)}</span> · ${timeAgo(activity * 1000)}</div>
-        <div class="card-icons">
-          ${agentBadge(sessions)}
-          ${worktreeLinks(inFlightPr(wt))}
-        </div>
-      </div>`;
-  }
-
-  function inFlightRow({ wt, session, sessions, activity }) {
-    const repoPrefix = wt.repo && wt.repo !== getCurrentRepo() ? `<strong>${esc(wt.repo)}</strong> · ` : "";
-    return `
-      <div class="pr-row inflight" style="padding-left: 1rem">
-        <span class="pr-icon inflight">${BRANCH_ICON}</span>
-        <div class="pr-main">
-          <div class="pr-title">${esc(session?.title || wt.branch)}</div>
-          <div class="pr-meta">${repoPrefix}<span class="branch">${esc(wt.branch)}</span> · no pull request yet · last activity ${timeAgo(activity * 1000)}</div>
-        </div>
-        <div class="pr-side">
-          ${agentBadge(sessions)}
-          ${worktreeLinks(inFlightPr(wt))}
-        </div>
-      </div>`;
   }
 
   function showError(message, title = "Can't open") {
@@ -1617,7 +1479,6 @@
           ${ciHtml(pr)}
           ${comments}
           <span class="reviewers">${state.filter === "review" ? authorAvatar(pr) : buildReviewers(pr)}</span>
-          ${agentBadge(agentFor(pr))}
           ${worktreeLinks(pr)}
           ${badge}
           ${reviewUpdate}
@@ -1734,7 +1595,6 @@
           ${pendingReview}
           ${basedOn}
           ${showAutoMerge ? autoMergeChip(pr) : ""}
-          ${agentBadge(agentFor(pr))}
           ${worktreeLinks(pr)}
         </div>
       </div>`;
@@ -1818,8 +1678,6 @@
     $("#sort-select").value = state.sort;
     sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
-    agents = agentIndex();
-    const inFlight = inFlightItems();
     let html = "", count = 0;
     if (effectiveView === "board") {
       const { parents } = buildStacks(dataset);
@@ -1868,14 +1726,6 @@
         let laneHtml = renderGroup((p) => !p.isDraft);
         const draftHtml = renderGroup((p) => p.isDraft);
         if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
-        if (!reviewBoard && i === 0 && inFlight.length) {
-          const shown = inFlightExpanded ? inFlight : inFlight.slice(0, MERGED_LANE_CAP);
-          laneHtml += '<div class="inflight-divider"></div>' + shown.map(inFlightCard).join("");
-          const rest = inFlight.length - shown.length;
-          if (rest > 0 || inFlightExpanded) {
-            laneHtml += `<button type="button" class="merged-more inflight-more">${rest > 0 ? `+${rest} more` : "Show less"}</button>`;
-          }
-        }
         if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
           const shown = mergedExpanded ? recentMerged : recentMerged.slice(0, MERGED_LANE_CAP);
           laneHtml += '<div class="merged-divider"></div>' + shown.map(mergedCard).join("");
@@ -1896,7 +1746,7 @@
           ${laneAction}
         </div>`;
       }).join("") + "</div>";
-      if (!count && !recentMerged.length && !inFlight.length) html = "";
+      if (!count && !recentMerged.length) html = "";
     } else {
       const { roots, children } = buildStacks(dataset);
       roots.sort(sortComparator());
@@ -1925,7 +1775,6 @@
     const dataReady = state.targetedLoaded;
     if (!dataReady) {
       $("#merged-wrap").classList.add("hidden");
-      $("#inflight-wrap").classList.add("hidden");
       if (!getToken() || !getCurrentRepo()) return;  // not configured: keep the setup prompt
       $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
       listBody.innerHTML = state.loadError
@@ -1956,13 +1805,6 @@
       mergedWrap.classList.remove("hidden");
     } else {
       mergedWrap.classList.add("hidden");
-    }
-    const inflightWrap = $("#inflight-wrap");
-    if (effectiveView === "list" && inFlight.length) {
-      $("#inflight-body").innerHTML = inFlight.map(inFlightRow).join("");
-      inflightWrap.classList.remove("hidden");
-    } else {
-      inflightWrap.classList.add("hidden");
     }
   }
 
@@ -2246,7 +2088,6 @@
 
   listBody.addEventListener("click", async (e) => {
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
-    if (e.target.closest("button.inflight-more")) { inFlightExpanded = !inFlightExpanded; render(); return; }
     if (e.target.closest("button.merged-more")) { mergedExpanded = !mergedExpanded; render(); return; }
 
     const openBtn = e.target.closest("button.wt-open");
@@ -2413,18 +2254,16 @@
   }
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
-  setInterval(loadSessions, 15000);
   setInterval(() => {
     if (!document.hidden && getToken() && getCurrentRepo()) load(true);
   }, 5 * 60 * 1000);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
     pollWorktrees();
-    loadSessions();
     if (getToken() && getCurrentRepo()) load(true);
   });
 
-  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees, loadSessions };
+  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees };
 })();
 </script>
 </body>
