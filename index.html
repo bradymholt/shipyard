@@ -889,6 +889,8 @@
         requestedReviewer {
           __typename
           ... on User { login avatarUrl }
+          ... on Bot { login avatarUrl }
+          ... on Mannequin { login avatarUrl }
           ... on Team { name }
         }
       }
@@ -1106,9 +1108,12 @@
 
   // ---------- rendering ----------
   function reviewerHtml(login, avatarUrl, stateClass, stateIcon, title) {
+    // A reviewer type we don't have a fragment for comes back without a name, and a
+    // missing name must never take the board down with it.
+    const initials = String(login || "?").slice(0, 2).toUpperCase();
     const avatar = avatarUrl
       ? `<img src="${esc(avatarUrl)}&s=48" alt="${esc(login)}">`
-      : `<span class="team-avatar">${esc(login.slice(0, 2).toUpperCase())}</span>`;
+      : `<span class="team-avatar">${esc(initials)}</span>`;
     return `<span class="reviewer" title="${esc(title)}">${avatar}<span class="state-dot ${stateClass}">${stateIcon}</span></span>`;
   }
 
@@ -1140,7 +1145,7 @@
     for (const req of pr.reviewRequests?.nodes || []) {
       const rr = req.requestedReviewer;
       if (!rr) continue;
-      const login = rr.login || rr.name;
+      const login = rr.login || rr.name || rr.__typename || "reviewer";
       if (reviewed.has(login)) continue;
       parts.push(reviewerHtml(login, rr.avatarUrl, "state-pending", ICONS.clock, `${login} — review requested`));
     }
@@ -1859,7 +1864,6 @@
       saveDashboardCache();
       updateGitHubStatus();
       $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
-      render();
     } catch (err) {
       state.loadError = err.message;
       state.loadErrorAuth = err.auth === true;
@@ -1867,9 +1871,11 @@
       console.warn("Shipyard: GitHub refresh failed —", err.message);
       renderTokenStatus();
       updateGitHubStatus();
-      render();
     } finally {
       state.loading = false;
+      // Rendering sits outside the catch on purpose: a bug in render() is not a failed
+      // refresh, and blaming GitHub for one sends you looking in the wrong place.
+      render();
       if (reviewHistoryActive() && !state.reviewHistoryLoaded && !state.loadError) load();
     }
   }
