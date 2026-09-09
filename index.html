@@ -469,12 +469,15 @@
   /* List view: recently-merged sits in its own .list card, with the divider between. */
   #merged-wrap .merged-divider { margin: 0.875rem 0; }
   #merged-wrap .merged-divider::before { background: var(--bg); }
-  /* Board view: capped inside the lane, so merge history can't stretch it. */
+  .merged-actions {
+    display: flex; justify-content: center; gap: 0.75rem; padding: 0.375rem 0;
+  }
   .merged-more {
-    align-self: center; padding: 0.125rem 0.5rem; border: 0; border-radius: 0.25rem;
+    padding: 0.125rem 0.5rem; border: 0; border-radius: 0.25rem;
     background: none; color: var(--fg-faint); font: 600 0.6875rem var(--sans);
   }
-  .merged-more:hover, .merged-more:focus-visible { color: var(--teal); }
+  .merged-more:hover:not(:disabled), .merged-more:focus-visible { color: var(--teal); }
+  .merged-more:disabled { cursor: default; }
 
   @media (max-width: 900px) { .board { grid-template-columns: repeat(2, 1fr); } }
 
@@ -665,6 +668,8 @@
     merged: [],           // my recently merged PRs, shown as context on the My PRs tab
     reviewedPrs: [],      // open PRs I reviewed, loaded lazily for the review board
     reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
+    mergedCursor: null,        // how far back each merged feed has been walked
+    reviewedMergedCursor: null,
     reviewHistoryLoaded: false,
     targetedLoaded: false,
     loadError: null,
@@ -693,6 +698,9 @@
     state.merged = [];
     state.reviewedPrs = [];
     state.reviewedMerged = [];
+    state.mergedCursor = null;
+    state.reviewedMergedCursor = null;
+    mergedExtra = 0;
     state.reviewHistoryLoaded = false;
     state.targetedLoaded = false;
     state.targetedFresh = false;
@@ -747,9 +755,9 @@
         savedAt: state.githubUpdatedAt || Date.now(),
         viewer: state.viewer,
         prs: state.prs,
-        merged: state.merged,
+        merged: state.merged.slice(0, MERGED_CACHE_CAP),
         reviewedPrs: state.reviewedPrs,
-        reviewedMerged: state.reviewedMerged,
+        reviewedMerged: state.reviewedMerged.slice(0, MERGED_CACHE_CAP),
         reviewHistoryLoaded: state.reviewHistoryLoaded,
       }));
     } catch { /* storage unavailable or full: live data still works */ }
@@ -902,19 +910,31 @@
   // we page up to MAX_PRS to preserve the "most recent 100" behavior.
   const PAGE_SIZE = 25;
   const MAX_PRS = 100;
-  const RECENT_MERGED_DAYS = 3;
-  const RECENT_MERGED_MIN = 3;
-  // Board view keeps merges inside the Ready lane, so only a few show until asked.
-  const MERGED_LANE_CAP = 3;
-  let mergedExpanded = false;
-  // Everything merged in the window — but never fewer than the most recent few,
-  // so a quiet stretch still shows the latest merges.
-  const recentlyMerged = (prs) => {
-    const sorted = prs.filter((pr) => pr.mergedAt)
-      .sort((a, b) => new Date(b.mergedAt) - new Date(a.mergedAt));
-    const cutoff = Date.now() - RECENT_MERGED_DAYS * 24 * 60 * 60 * 1000;
-    const windowed = sorted.filter((pr) => new Date(pr.mergedAt).getTime() >= cutoff);
-    return windowed.length >= RECENT_MERGED_MIN ? windowed : sorted.slice(0, RECENT_MERGED_MIN);
+  // Merged history has no date cutoff: a few show at first, and each "Show more"
+  // reveals another batch, paging the API further back whenever the local list runs out.
+  const MERGED_INITIAL_BOARD = 3;
+  const MERGED_INITIAL_LIST = 10;
+  const MERGED_STEP = 10;
+  // A page can be spent entirely on merges that get filtered out, so walk a few.
+  const MERGED_MAX_PAGES_PER_CLICK = 4;
+  // Persisting the whole walked-back history would blow the cache budget.
+  const MERGED_CACHE_CAP = 50;
+  let mergedExtra = 0;
+  let mergedLoading = false;
+
+  const byMergedAt = (prs) => prs.filter((pr) => pr.mergedAt)
+    .sort((a, b) => new Date(b.mergedAt) - new Date(a.mergedAt));
+
+  const mergeMergedLists = (...lists) => {
+    const seen = new Set();
+    const out = [];
+    for (const pr of lists.flat()) {
+      const key = prKey(pr);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(pr);
+    }
+    return byMergedAt(out);
   };
 
   const OWNER_QUERY = `
@@ -1054,9 +1074,9 @@
     return `${await ownerQualifier(target)}:${target}`;
   }
 
-  async function searchPRs(q, max = MAX_PRS, query = OWNER_QUERY) {
+  async function searchPRs(q, max = MAX_PRS, query = OWNER_QUERY, after = null) {
     const prs = [];
-    let after = null, viewer = null, total = 0;
+    let viewer = null, total = 0;
     do {
       const data = await gql(query, { q: `${q} sort:updated-desc`, after });
       viewer = data.viewer.login;
@@ -1064,7 +1084,19 @@
       prs.push(...data.search.nodes.filter((n) => n && n.number));
       after = data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null;
     } while (after && prs.length < max);
-    return { viewer, prs, total };
+    return { viewer, prs, total, after };
+  }
+
+  // Search qualifiers for each merged-history feed, so "Show more" can resume the walk.
+  const MERGED_SEARCHES = {
+    mine: { suffix: "is:merged author:@me", query: OWNER_QUERY, listKey: "merged", cursorKey: "mergedCursor" },
+    review: { suffix: "is:merged reviewed-by:@me -author:@me", query: REVIEW_OWNER_QUERY, listKey: "reviewedMerged", cursorKey: "reviewedMergedCursor" },
+  };
+
+  async function fetchMergedPage(kind, after) {
+    const { suffix, query } = MERGED_SEARCHES[kind];
+    const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
+    return searchPRs(`${base} ${suffix}`, PAGE_SIZE, query, after);
   }
 
   // The cheap default: only my PRs and PRs awaiting my review, plus my last
@@ -1074,7 +1106,7 @@
     const [mine, review, merged] = await Promise.all([
       searchPRs(`${base} is:open author:@me`),
       searchPRs(`${base} is:open review-requested:@me`, MAX_PRS, REQUESTED_REVIEW_QUERY),
-      searchPRs(`${base} is:merged author:@me`, PAGE_SIZE),
+      fetchMergedPage("mine", null),
     ]);
     const seen = new Set();
     const prs = [];
@@ -1087,7 +1119,8 @@
     return {
       viewer: mine.viewer || review.viewer || merged.viewer,
       prs,
-      merged: recentlyMerged(merged.prs),
+      merged: byMergedAt(merged.prs),
+      mergedCursor: merged.after,
     };
   }
 
@@ -1095,12 +1128,13 @@
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [reviewed, reviewedMerged] = await Promise.all([
       searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
-      searchPRs(`${base} is:merged reviewed-by:@me -author:@me`, PAGE_SIZE, REVIEW_OWNER_QUERY),
+      fetchMergedPage("review", null),
     ]);
     const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
     return {
       prs: reviewed.prs.filter(notAuthoredByViewer),
-      merged: recentlyMerged(reviewedMerged.prs.filter(notAuthoredByViewer)),
+      merged: byMergedAt(reviewedMerged.prs.filter(notAuthoredByViewer)),
+      mergedCursor: reviewedMerged.after,
     };
   }
 
@@ -1443,6 +1477,56 @@
       </div>`;
   }
 
+  function effectiveView() {
+    const boardAllowed = state.filter === "mine" || state.filter === "review";
+    const selectedView = state.filter === "review" ? state.reviewView : state.view;
+    return boardAllowed && selectedView === "board" ? "board" : "list";
+  }
+
+  // ---------- merged history paging ----------
+  const mergedKind = () => (state.filter === "review" ? "review" : "mine");
+  const mergedInitial = () => (effectiveView() === "board" ? MERGED_INITIAL_BOARD : MERGED_INITIAL_LIST);
+  const mergedItems = () => (mergedKind() === "review" ? reviewedMergedItems() : state.merged);
+  const mergedHasMore = () => state[MERGED_SEARCHES[mergedKind()].cursorKey] != null;
+
+  function mergedSection(items, renderItem) {
+    const shown = items.slice(0, mergedInitial() + mergedExtra);
+    let out = shown.map(renderItem).join("");
+    const actions = mergedLoading
+      ? `<button type="button" class="merged-more" disabled>Loading…</button>`
+      : (items.length > shown.length || mergedHasMore()
+          ? `<button type="button" class="merged-more" data-merged="more">Show more</button>` : "")
+        + (mergedExtra > 0
+          ? `<button type="button" class="merged-more" data-merged="less">Show less</button>` : "");
+    if (actions) out += `<div class="merged-actions">${actions}</div>`;
+    return out;
+  }
+
+  // Reveal another batch, walking the search further back when the local list runs dry.
+  async function revealMoreMerged() {
+    mergedExtra += MERGED_STEP;
+    const kind = mergedKind();
+    const { listKey, cursorKey } = MERGED_SEARCHES[kind];
+    const want = mergedInitial() + mergedExtra;
+    if (mergedItems().length >= want || !state[cursorKey] || mergedLoading) { render(); return; }
+    mergedLoading = true;
+    render();
+    try {
+      for (let page = 0; page < MERGED_MAX_PAGES_PER_CLICK; page++) {
+        const { prs, after } = await fetchMergedPage(kind, state[cursorKey]);
+        state[listKey] = mergeMergedLists(state[listKey], prs);
+        state[cursorKey] = after;
+        if (!after || mergedItems().length >= want) break;
+      }
+      saveDashboardCache();
+    } catch (err) {
+      console.warn("Shipyard: loading more merged PRs failed —", err.message);
+    } finally {
+      mergedLoading = false;
+      render();
+    }
+  }
+
   function prRow(pr, depth = 0, isContext = false, parent = null) {
     const labels = (pr.labels?.nodes || [])
       .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
@@ -1667,19 +1751,18 @@
       : "";
     const attention = workingCount + reviewCount;
     document.title = attention ? `Shipyard (${attention})` : "Shipyard";
-    const boardAllowed = state.filter === "mine" || state.filter === "review";
-    const selectedView = state.filter === "review" ? state.reviewView : state.view;
-    const effectiveView = boardAllowed && selectedView === "board" ? "board" : "list";
-    const reviewBoard = state.filter === "review" && effectiveView === "board";
+    const view = effectiveView();
+    const reviewBoard = state.filter === "review" && view === "board";
     const dataset = state.filter === "review" ? reviewSet : state.prs;
+    const boardAllowed = state.filter === "mine" || state.filter === "review";
     document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
-    $("#view-list").classList.toggle("active", effectiveView === "list");
-    $("#view-board").classList.toggle("active", effectiveView === "board");
+    $("#view-list").classList.toggle("active", view === "list");
+    $("#view-board").classList.toggle("active", view === "board");
     $("#sort-select").value = state.sort;
     sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
     let html = "", count = 0;
-    if (effectiveView === "board") {
+    if (view === "board") {
       const { parents } = buildStacks(dataset);
       const matches = dataset.filter(reviewBoard ? reviewItem : matchesFilter);
       count = matches.length;
@@ -1688,7 +1771,7 @@
       const defs = reviewBoard
         ? [["Waiting", "yellow"], ["Review submitted", "green"]]
         : [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
-      const recentMerged = reviewBoard ? reviewedMergedItems() : state.merged;
+      const recentMerged = mergedItems();
       html = `<div class="board${reviewBoard ? " two-lane" : ""}">` + defs.map(([name, color], i) => {
         const inLane = laneItems[i];
         const laneNums = new Set(inLane.map((p) => p.number));
@@ -1727,12 +1810,7 @@
         const draftHtml = renderGroup((p) => p.isDraft);
         if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
         if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
-          const shown = mergedExpanded ? recentMerged : recentMerged.slice(0, MERGED_LANE_CAP);
-          laneHtml += '<div class="merged-divider"></div>' + shown.map(mergedCard).join("");
-          const rest = recentMerged.length - shown.length;
-          if (rest > 0 || mergedExpanded) {
-            laneHtml += `<button type="button" class="merged-more">${rest > 0 ? `+${rest} more` : "Show less"}</button>`;
-          }
+          laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
         }
         const laneAction = (!reviewBoard && i === 0 && state.companion)
           ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
@@ -1795,13 +1873,9 @@
 
     // List view has no lane to hang merges off, so they get their own .list card below.
     const mergedWrap = $("#merged-wrap");
-    const listMerged = state.filter === "mine"
-      ? state.merged
-      : state.filter === "review"
-        ? reviewedMergedItems()
-        : [];
-    if (effectiveView === "list" && listMerged.length) {
-      $("#merged-body").innerHTML = listMerged.map(mergedRow).join("");
+    const listMerged = mergedItems();
+    if (view === "list" && listMerged.length) {
+      $("#merged-body").innerHTML = mergedSection(listMerged, mergedRow);
       mergedWrap.classList.remove("hidden");
     } else {
       mergedWrap.classList.add("hidden");
@@ -1836,18 +1910,20 @@
     try {
       const requests = [];
       if (needTargeted) {
-        requests.push(fetchTargeted().then(({ viewer, prs, merged }) => {
+        requests.push(fetchTargeted().then(({ viewer, prs, merged, mergedCursor }) => {
           state.viewer = viewer;
           state.prs = prs;
-          state.merged = merged;
+          state.merged = mergeMergedLists(merged, state.merged);
+          if (!state.mergedCursor) state.mergedCursor = mergedCursor;
           state.targetedLoaded = true;
           state.targetedFresh = true;
         }));
       }
       if (needReviewHistory) {
-        requests.push(fetchReviewHistory().then(({ prs, merged }) => {
+        requests.push(fetchReviewHistory().then(({ prs, merged, mergedCursor }) => {
           state.reviewedPrs = prs;
-          state.reviewedMerged = merged;
+          state.reviewedMerged = mergeMergedLists(merged, state.reviewedMerged);
+          if (!state.reviewedMergedCursor) state.reviewedMergedCursor = mergedCursor;
           state.reviewHistoryLoaded = true;
           state.reviewHistoryFresh = true;
         }));
@@ -2086,9 +2162,19 @@
     load(restored);
   });
 
+  // List view hangs merges off their own card outside #list-body, so both roots listen.
+  function handleMergedClick(e) {
+    const btn = e.target.closest("button.merged-more");
+    if (!btn) return false;
+    if (btn.dataset.merged === "less") { mergedExtra = 0; render(); }
+    else revealMoreMerged();
+    return true;
+  }
+  $("#merged-body").addEventListener("click", handleMergedClick);
+
   listBody.addEventListener("click", async (e) => {
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
-    if (e.target.closest("button.merged-more")) { mergedExpanded = !mergedExpanded; render(); return; }
+    if (handleMergedClick(e)) return;
 
     const openBtn = e.target.closest("button.wt-open");
     if (openBtn) {
@@ -2231,6 +2317,7 @@
   document.querySelectorAll(".tab").forEach((tab) =>
     tab.addEventListener("click", () => {
       state.filter = tab.dataset.filter;
+      mergedExtra = 0;
       localStorage.setItem(LS.FILTER, state.filter);
       render();
       load();
