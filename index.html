@@ -650,7 +650,7 @@
     FILTER: "ghpr.filter",
     CACHE_PREFIX: "ghpr.cache.",
   };
-  const CACHE_VERSION = 5;
+  const CACHE_VERSION = 6;
   const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
@@ -971,7 +971,7 @@
         nodes {
           ... on PullRequest {
             ${PR_FIELDS}
-            viewerLatestReview { state commit { oid } }
+            viewerLatestReview { state commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
             commits(last: 1) { nodes { commit { oid } } }
             pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
           }
@@ -1199,9 +1199,12 @@
 
   // GitHub has no diff comment outside a review: "Add single comment" still creates a
   // review with state COMMENTED, so reviewed-by:@me matches PRs you merely chimed in
-  // on. Only a verdict counts as having reviewed.
+  // on. A COMMENTED review only counts when onBehalfOf names a team, which GitHub sets
+  // just for a review submitted to fulfill that team's request.
   function viewerGaveVerdict(pr) {
     const verdict = pr.viewerLatestReview?.state;
+    if (verdict === "COMMENTED")
+      return (pr.viewerLatestReview?.onBehalfOf?.nodes || []).length > 0;
     return verdict === "APPROVED" || verdict === "CHANGES_REQUESTED" || verdict === "DISMISSED";
   }
 
