@@ -42,6 +42,7 @@
     --yellow: #c9971d;
     --purple: #7a5fc0;
     --purple-bar: #b9a8e0;
+    --claude: #d97757;
     --muted-bar: #9fb3bb;
 
     --btn-bg: #ffffff;
@@ -369,6 +370,8 @@
   .wt-link.worktree { color: var(--purple); }      /* opens an isolated worktree */
   .wt-link.worktree:hover { color: color-mix(in srgb, var(--purple) 78%, #000); }
   .wt-link.wt-move-wt:not(.blocked):hover { color: var(--purple); }  /* moves the branch out to a worktree */
+  .wt-link.wt-agent { color: var(--claude); }
+  .wt-link.wt-agent:hover { color: color-mix(in srgb, var(--claude) 78%, #000); }
   /* switch blocked by uncommitted changes — muted "unavailable" tone, not an alarm */
   .wt-link.blocked, .wt-link.blocked:hover { color: color-mix(in srgb, var(--red) 50%, var(--fg-faint)); }
   button.wt-link.blocked:disabled { opacity: 1; cursor: not-allowed; }
