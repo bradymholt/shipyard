@@ -38,6 +38,7 @@ launcher, and the prefix used for new branch names:
     }
 """
 import argparse
+import concurrent.futures
 import functools
 import hashlib
 import http.server
@@ -298,6 +299,18 @@ def last_activity(work_dir):
         return 0
 
 
+def is_dirty(path):
+    # Dirty state gates the move/open actions: a dirty main clone can't switch
+    # branches, and a dirty linked worktree can't be removed to relocate its
+    # branch. "dirty" = uncommitted edits to tracked files; untracked files
+    # (node_modules, build output) carry across a switch, so they don't count.
+    try:
+        return has_tracked_changes(path)
+    except GitError as e:
+        print(f"Warning: could not verify status for {path}: {e}")
+        return True
+
+
 def worktrees_for_repo(repo_dir):
     repo = parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url"))
     out, cur = [], {}
@@ -313,20 +326,18 @@ def worktrees_for_repo(repo_dir):
             cur["branch"] = line[7:].replace("refs/heads/", "")
         elif line == "" and cur.get("path") and cur.get("branch"):
             is_main = os.path.realpath(cur["path"]) == os.path.realpath(repo_dir)
-            # Dirty state gates the move/open actions: a dirty main clone can't switch
-            # branches, and a dirty linked worktree can't be removed to relocate its
-            # branch. "dirty" = uncommitted edits to tracked files; untracked files
-            # (node_modules, build output) carry across a switch, so they don't count.
-            try:
-                dirty = has_tracked_changes(cur["path"])
-            except GitError as e:
-                print(f"Warning: could not verify status for {cur['path']}: {e}")
-                dirty = True
             out.append({"repo": repo, "branch": cur["branch"], "path": cur["path"],
-                        "workspace": workspace_in(cur["path"]), "main": is_main, "dirty": dirty,
+                        "workspace": workspace_in(cur["path"]), "main": is_main,
                         "activity": last_activity(cur["path"])})
             cur = {}
     return out
+
+
+def with_dirty_state(worktrees):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        for w, dirty in zip(worktrees, pool.map(is_dirty, [w["path"] for w in worktrees])):
+            w["dirty"] = dirty
+    return worktrees
 
 
 def clone_dirs(roots):
@@ -409,13 +420,10 @@ def latest_sessions(paths, agent):
 
 
 def discover(roots, agent=None):
-    out, seen = [], set()
-    for repo_dir in clone_dirs(roots):
-        repo_dir = os.path.realpath(repo_dir)
-        if repo_dir in seen:
-            continue
-        seen.add(repo_dir)
-        out.extend(worktrees_for_repo(repo_dir))
+    repo_dirs = list(dict.fromkeys(os.path.realpath(d) for d in clone_dirs(roots)))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        out = [w for worktrees in pool.map(worktrees_for_repo, repo_dirs) for w in worktrees]
+    with_dirty_state(out)
     sessions = latest_sessions([w["path"] for w in out], agent)
     for w in out:
         w["session"] = sessions.get(w["path"])
