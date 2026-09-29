@@ -6,5 +6,12 @@
     "target": "workspace",
     "url": "vscode://file/{path}",
     "command": ["code", "{path}"]
+  },
+  "agent": {
+    "name": "Claude Code",
+    "sessions": "claude-code",
+    "mode": "url",
+    "url": "claude://resume?session={session}",
+    "command": ["open", "claude://resume?session={session}"]
   }
 }

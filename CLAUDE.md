@@ -14,7 +14,7 @@ same guidance. Edit `CLAUDE.md`; never create a second copy.
 - **`shipyard.py`** — optional local companion (Python 3 stdlib only). Serves the page
   and a `/worktrees.json` endpoint, and runs branch/worktree actions for local mode.
   Binds to localhost; discovery is read-only.
-- **`shipyard.config.json`** — local companion config (scan roots, app launcher, branch
+- **`shipyard.config.json`** — local companion config (scan roots, app launcher, coding agent, branch
   prefix). Copy from `shipyard.config.example.json`.
 - **`shipyard-launchd.py`** — macOS-only setup helper that runs the companion as a
   `launchd` agent (`install`, `status`, `restart`, `logs`, `uninstall`). Manages two

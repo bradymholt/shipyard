@@ -100,6 +100,24 @@ For example, this opens the checkout folder in Xcode on macOS:
 }
 ```
 
+### Resume a coding agent
+
+When a checkout has a recent coding-agent session, a second icon next to the open icon resumes the latest one. Claude Code is the default:
+
+```json
+{
+  "agent": {
+    "name": "Claude Code",
+    "sessions": "claude-code",
+    "mode": "url",
+    "url": "claude://resume?session={session}",
+    "command": ["open", "claude://resume?session={session}"]
+  }
+}
+```
+
+`sessions` picks where to look for transcripts: `claude-code` reads `~/.claude/projects/`, and `codex` reads `~/.codex/sessions/`. The companion matches sessions to checkouts by working directory and uses the most recently written one. `mode` works as it does for the launcher; `{session}` is the session id and `{path}` the checkout path. Set `"agent": null` to hide the icon.
+
 `branchPrefix` optionally prefills new branch names.
 
 ### Run at login (macOS)

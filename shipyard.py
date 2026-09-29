@@ -27,6 +27,13 @@ launcher, and the prefix used for new branch names:
         "target": "workspace",
         "url": "vscode://file/{path}",
         "command": ["code", "{path}"]
+      },
+      "agent": {               // resume a coding agent's latest session in a
+        "name": "Claude Code", // checkout; set to null to turn it off
+        "sessions": "claude-code",   // or "codex"
+        "mode": "url",
+        "url": "claude://resume?session={session}",
+        "command": ["open", "claude://resume?session={session}"]
       }
     }
 """
@@ -53,7 +60,50 @@ DEFAULT_LAUNCHER = {
     "url": "vscode://file/{path}",
     "command": ["code", "{path}"],
 }
-DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER}
+DEFAULT_AGENT = {
+    "name": "Claude Code",
+    "sessions": "claude-code",
+    "mode": "url",
+    "url": "claude://resume?session={session}",
+    "command": ["open", "claude://resume?session={session}"],
+}
+DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT}
+
+
+def validate_open_settings(label, settings, placeholder):
+    if not isinstance(settings["name"], str) or not settings["name"].strip():
+        raise ValueError(f'{label} "name" must be a non-empty string')
+    if settings["mode"] not in ("url", "command"):
+        raise ValueError(f'{label} "mode" must be either "url" or "command"')
+    if not isinstance(settings["url"], str):
+        raise ValueError(f'{label} "url" must be a string')
+    if (not isinstance(settings["command"], list) or not settings["command"] or
+            any(not isinstance(arg, str) for arg in settings["command"])):
+        raise ValueError(f'{label} "command" must be a non-empty array of strings')
+    if settings["mode"] == "url":
+        has_placeholder = placeholder in settings["url"]
+        scheme = urlparse(settings["url"].replace(placeholder, "x")).scheme.lower()
+        if not scheme or scheme in ("data", "javascript"):
+            raise ValueError(f'{label} "url" must use a safe URL scheme')
+    else:
+        has_placeholder = any(placeholder in arg for arg in settings["command"])
+    if not has_placeholder:
+        raise ValueError(f'{label} {settings["mode"]!r} must include a "{placeholder}" placeholder')
+
+
+def validate_agent(raw):
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError('"agent" must be an object or null')
+    unknown = sorted(set(raw) - set(DEFAULT_AGENT))
+    if unknown:
+        raise ValueError(f"unknown agent setting(s): {', '.join(unknown)}")
+    agent = {**DEFAULT_AGENT, **raw}
+    if agent["sessions"] not in SESSION_FINDERS:
+        raise ValueError(f'agent "sessions" must be one of: {", ".join(SESSION_FINDERS)}')
+    validate_open_settings("agent", agent, "{session}")
+    return agent
 
 
 def validate_config(raw):
@@ -74,29 +124,12 @@ def validate_config(raw):
     if launcher_unknown:
         raise ValueError(f"unknown launcher setting(s): {', '.join(launcher_unknown)}")
     launcher = {**DEFAULT_LAUNCHER, **launcher_raw}
-
-    if not isinstance(launcher["name"], str) or not launcher["name"].strip():
-        raise ValueError('launcher "name" must be a non-empty string')
-    if launcher["mode"] not in ("url", "command"):
-        raise ValueError('launcher "mode" must be either "url" or "command"')
     if launcher["target"] not in ("folder", "workspace"):
         raise ValueError('launcher "target" must be either "folder" or "workspace"')
-    if not isinstance(launcher["url"], str):
-        raise ValueError('launcher "url" must be a string')
-    if (not isinstance(launcher["command"], list) or not launcher["command"] or
-            any(not isinstance(arg, str) for arg in launcher["command"])):
-        raise ValueError('launcher "command" must be a non-empty array of strings')
-    if launcher["mode"] == "url":
-        has_path = "{path}" in launcher["url"]
-        scheme = urlparse(launcher["url"].replace("{path}", "path")).scheme.lower()
-        if not scheme or scheme in ("data", "javascript"):
-            raise ValueError('launcher "url" must use a safe URL scheme')
-    else:
-        has_path = any("{path}" in arg for arg in launcher["command"])
-    if not has_path:
-        raise ValueError(f'launcher {launcher["mode"]!r} must include a "{{path}}" placeholder')
+    validate_open_settings("launcher", launcher, "{path}")
 
-    return {"roots": roots, "launcher": launcher}
+    agent = validate_agent(raw.get("agent", DEFAULT_AGENT))
+    return {"roots": roots, "launcher": launcher, "agent": agent}
 
 
 def load_config():
@@ -112,9 +145,10 @@ def load_config():
         cfg = validate_config(raw)
     except ValueError as e:
         sys.exit(f"Invalid {CONFIG_FILE}: {e}")
-    launcher = cfg["launcher"]
-    if launcher["mode"] == "command" and not shutil.which(launcher["command"][0]):
-        print(f"Warning: launcher command {launcher['command'][0]!r} is not on PATH.")
+    for label in ("launcher", "agent"):
+        settings = cfg[label]
+        if settings and settings["mode"] == "command" and not shutil.which(settings["command"][0]):
+            print(f"Warning: {label} command {settings['command'][0]!r} is not on PATH.")
     return cfg
 
 
@@ -306,7 +340,75 @@ def clone_dirs(roots):
                 yield repo_dir
 
 
-def discover(roots):
+def newest_session(files):
+    """(session id, mtime) of the most recently written transcript, or None."""
+    best = None
+    for f in files:
+        try:
+            mtime = os.path.getmtime(f)
+        except OSError:
+            continue
+        if best is None or mtime > best[1]:
+            best = (f, mtime)
+    return best
+
+
+def claude_code_sessions(paths):
+    # Claude Code keeps each session as ~/.claude/projects/<cwd, non-alphanumerics
+    # replaced by "-">/<session id>.jsonl.
+    projects = Path.home() / ".claude" / "projects"
+    found = {}
+    for path in paths:
+        dirs = {projects / re.sub(r"[^A-Za-z0-9]", "-", p) for p in (path, os.path.realpath(path))}
+        best = newest_session(f for d in dirs for f in d.glob("*.jsonl"))
+        if best:
+            found[path] = {"id": Path(best[0]).stem, "updated": int(best[1])}
+    return found
+
+
+_codex_meta = {}  # rollout file -> (cwd, session id); a rollout's first line never changes
+
+
+def codex_sessions(paths):
+    # Codex writes ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, whose first line is
+    # a session_meta record carrying the session id and working directory.
+    wanted = {os.path.realpath(p): p for p in paths}
+    by_path = {}
+    for f in (Path.home() / ".codex" / "sessions").glob("*/*/*/rollout-*.jsonl"):
+        if f not in _codex_meta:
+            try:
+                with f.open() as fh:
+                    payload = json.loads(fh.readline()).get("payload") or {}
+            except (OSError, ValueError, AttributeError):
+                continue
+            _codex_meta[f] = (payload.get("cwd"), payload.get("id"))
+        cwd, session = _codex_meta[f]
+        path = wanted.get(os.path.realpath(cwd)) if cwd and session else None
+        if path:
+            by_path.setdefault(path, []).append((f, session))
+    found = {}
+    for path, entries in by_path.items():
+        best = newest_session(f for f, _ in entries)
+        if best:
+            session = next(s for f, s in entries if f == best[0])
+            found[path] = {"id": session, "updated": int(best[1])}
+    return found
+
+
+SESSION_FINDERS = {"claude-code": claude_code_sessions, "codex": codex_sessions}
+
+
+def latest_sessions(paths, agent):
+    if not agent or not paths:
+        return {}
+    try:
+        return SESSION_FINDERS[agent["sessions"]](paths)
+    except OSError as e:
+        print(f"Warning: could not look up {agent['name']} sessions: {e}")
+        return {}
+
+
+def discover(roots, agent=None):
     out, seen = [], set()
     for repo_dir in clone_dirs(roots):
         repo_dir = os.path.realpath(repo_dir)
@@ -314,6 +416,9 @@ def discover(roots):
             continue
         seen.add(repo_dir)
         out.extend(worktrees_for_repo(repo_dir))
+    sessions = latest_sessions([w["path"] for w in out], agent)
+    for w in out:
+        w["session"] = sessions.get(w["path"])
     return out
 
 
@@ -368,7 +473,8 @@ def new_task_worktree(repo, branch, roots):
     return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True, "branch": branch}
 
 
-def launch_app(target, roots, config):
+def checked_path(target, roots):
+    """(real path, error) for a path the dashboard asked to open."""
     real = os.path.realpath(target)
     def is_within(root):
         try:
@@ -376,20 +482,46 @@ def launch_app(target, roots, config):
         except ValueError:
             return False
     if not any(is_within(root) for root in roots):
-        return {"ok": False, "error": "Path is outside the configured roots."}
+        return None, "Path is outside the configured roots."
     if not os.path.exists(real):
-        return {"ok": False, "error": f"Path does not exist: {real}"}
-    launcher = config["launcher"]
-    if launcher["mode"] != "command":
-        return {"ok": False, "error": "This launcher opens through a browser URL."}
-    command = [arg.replace("{path}", real) for arg in launcher["command"]]
+        return None, f"Path does not exist: {real}"
+    return real, None
+
+
+def run_open_command(name, command):
     try:
         r = subprocess.run(command, capture_output=True, text=True, timeout=30)
     except Exception as e:
         return {"ok": False, "error": str(e)}
     if r.returncode != 0:
-        return {"ok": False, "error": (r.stderr or f"{launcher['name']} failed to open").strip()}
+        return {"ok": False, "error": (r.stderr or f"{name} failed to open").strip()}
     return {"ok": True}
+
+
+def launch_app(target, roots, config):
+    real, error = checked_path(target, roots)
+    if error:
+        return {"ok": False, "error": error}
+    launcher = config["launcher"]
+    if launcher["mode"] != "command":
+        return {"ok": False, "error": "This launcher opens through a browser URL."}
+    return run_open_command(launcher["name"],
+                            [arg.replace("{path}", real) for arg in launcher["command"]])
+
+
+def launch_agent(target, roots, config):
+    agent = config["agent"]
+    if not agent or agent["mode"] != "command":
+        return {"ok": False, "error": "No agent command is configured."}
+    real, error = checked_path(target, roots)
+    if error:
+        return {"ok": False, "error": error}
+    session = latest_sessions([target], agent).get(target)
+    if not session:
+        return {"ok": False, "error": f"No {agent['name']} session found for {real}."}
+    return run_open_command(agent["name"], [
+        arg.replace("{session}", session["id"]).replace("{path}", real)
+        for arg in agent["command"]])
 
 
 def has_tracked_changes(work_dir):
@@ -599,9 +731,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json({"ok": False, "error": "Invalid Host header."}, 403)
         path = urlparse(self.path).path
         if path == "/worktrees.json":
-            return self._json(discover(self.roots))
+            return self._json(discover(self.roots, self.config["agent"]))
         if path == "/config.json":
             return self._json({"launcher": self.config["launcher"],
+                               "agent": self.config["agent"],
                                "companionToken": self.session_token})
         if path in self.STATIC_PATHS:
             return super().do_GET()
@@ -617,7 +750,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         if parsed.path not in {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-main",
-                               "/move-to-worktree", "/open-default-main", "/open-app"}:
+                               "/move-to-worktree", "/open-default-main", "/open-app", "/open-agent"}:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
@@ -655,6 +788,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             target = (q.get("path") or [""])[0]
             result = launch_app(target, self.roots, self.config)
             return self._json(result, 200 if result.get("ok") else 500)
+        if parsed.path == "/open-agent":
+            target = (q.get("path") or [""])[0]
+            result = launch_agent(target, self.roots, self.config)
+            return self._json(result, 200 if result.get("ok") else 500)
         return self._not_found()
 
     def log_message(self, *args):
@@ -681,6 +818,9 @@ def main():
     print(f"Scanning worktrees under: {', '.join(roots)}")
     launcher = Handler.config["launcher"]
     print(f"Opens in: {launcher['name']} via {launcher['mode']}")
+    agent = Handler.config["agent"]
+    if agent:
+        print(f"Resumes sessions in: {agent['name']} via {agent['mode']}")
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()

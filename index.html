@@ -684,6 +684,7 @@
     companionChecked: false,
     companionToken: "",  // per-process token required for local companion mutations
     launcher: DEFAULT_LAUNCHER,
+    agent: null,          // coding agent whose latest session a checkout can resume
     loading: false,
     targetedFresh: false,
     reviewHistoryFresh: false,
@@ -853,6 +854,10 @@
   const MOVE_MAIN_ICON = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M7.28 3.22 11.06 7H2.5v1.5h8.56l-3.78 3.78 1.06 1.06L14.06 8 8.34 2.16 7.28 3.22Z"/><path d="M12.5 2H14v12h-1.5V2Z"/></svg>';
   // A stylized tree — trunk, two limbs, three canopy nodes — for anything that lands a
   // branch in a worktree.
+  const AGENT_ICONS = {
+    "claude-code": '<svg viewBox="0 0 120 120" width="15" height="15"><path d="M23 80L47 67L47 66L47 65L46 65L42 65L28 64L17 64L5 63L3 63L0 59L0 58L3 56L6 56L14 57L25 58L33 58L45 59L47 59L48 58L47 58L46 58L35 50L22 41L15 36L12 34L10 32L9 27L12 23L17 23L18 24L22 27L32 34L44 43L46 45L47 44L46 43L39 31L32 18L29 13L28 10C28 9 28 8 28 6L31 1L33 1L38 1L40 3L43 10L48 21L56 36L58 41L60 45L60 46L61 46L61 45L61 37L63 27L64 13L64 9L66 5L70 2L73 4L75 7L75 9L73 19L71 33L69 43L70 43L71 42L76 35L84 25L88 21L92 16L95 14L100 14L104 20L102 25L97 32L92 38L86 46L82 53L82 54L83 53L97 50L105 49L114 48L118 49L119 51L117 55L107 58L96 60L79 64L79 65L87 65L90 66L98 66L113 67L117 69L119 72L119 75L113 78L105 76L86 71L79 70L78 70L84 76L94 85L106 96L107 99L105 101L103 101L92 93L88 89L79 81L78 81L78 82L80 85L92 103L93 108L92 110L89 111L85 110L79 101L71 90L66 80L65 81L62 117L60 119L57 120L54 118L52 114L54 107L55 97L57 89L58 80L59 77L51 87L41 101L32 110L30 111L26 109L27 106L29 103L41 88L48 79L52 73L52 72L21 93L15 94L12 91L13 88L14 86L23 80Z"/></svg>',
+  };
+  const DEFAULT_AGENT_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25ZM7 11a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 0 1.5h-3.5A.75.75 0 0 1 7 11ZM4.22 5.22a.75.75 0 0 1 1.06 0l2.25 2.25a.75.75 0 0 1 0 1.06l-2.25 2.25a.75.75 0 0 1-1.06-1.06L5.94 8 4.22 6.28a.75.75 0 0 1 0-1.06Z"/></svg>';
   const MOVE_WT_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M7.25 5.6h1.5v8.7h-1.5Z"/><path d="M8.55 10.1 5.15 6.7 4.02 7.83l3.4 3.4Z"/><path d="M7.45 10.1l3.4-3.4 1.13 1.13-3.4 3.4Z"/><circle cx="4.05" cy="5.9" r="2.05"/><circle cx="11.95" cy="5.9" r="2.05"/><circle cx="8" cy="4" r="2.05"/></svg>';
   const EMPTY_ICON = '<svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm11.78-2.53a.75.75 0 0 1 0 1.06l-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 1 1 1.06-1.06L7.25 8.94l3.47-3.47a.75.75 0 0 1 1.06 0Z"/></svg>';
   const BRANCH_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/></svg>';
@@ -1284,6 +1289,7 @@
       const c = await cfg.json();
       if (!c.companionToken) return false;
       state.launcher = c.launcher || DEFAULT_LAUNCHER;
+      state.agent = c.agent || null;
       state.companionToken = c.companionToken;
       return true;
     } catch {
@@ -1376,6 +1382,30 @@
     }
   }
 
+  async function openAgent(path) {
+    try {
+      const res = await companionPost(`open-agent?path=${encodeURIComponent(path)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) showError(data.error || `Open in ${state.agent.name} failed (${res.status}).`);
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  function agentButton(checkout) {
+    const agent = state.agent;
+    if (!agent || !checkout.session) return "";
+    const icon = AGENT_ICONS[agent.sessions] || DEFAULT_AGENT_ICON;
+    const title = `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
+    if (agent.mode === "command") {
+      return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" title="${esc(title)}">${icon}</button>`;
+    }
+    const url = agent.url
+      .replaceAll("{session}", encodeURIComponent(checkout.session.id))
+      .replaceAll("{path}", String(checkout.path).split("/").map(encodeURIComponent).join("/"));
+    return `<a class="wt-link wt-agent" href="${esc(url)}" title="${esc(title)}">${icon}</a>`;
+  }
+
   function worktreeLinks(pr) {
     // A single "Open" control; where it opens (and how it
     // looks) depends on where the branch is checked out. It runs through the
@@ -1423,7 +1453,7 @@
           ? `<button class="wt-link wt-move-wt blocked" disabled title="${esc(blocked)}">${MOVE_WT_ICON}</button>`
           : `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Move this branch out to a new worktree and open it in ${esc(appName)}">${MOVE_WT_ICON}</button>`;
       }
-      return `<span class="wt-links">${openBtn}${moveBtn}</span>`;
+      return `<span class="wt-links">${openBtn}${agentButton(wt)}${moveBtn}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo
@@ -2190,6 +2220,17 @@
       return;
     }
 
+
+    const agentBtn = e.target.closest("button.wt-agent");
+    if (agentBtn) {
+      agentBtn.disabled = true;
+      try {
+        await openAgent(agentBtn.dataset.path);
+      } finally {
+        agentBtn.disabled = false;
+      }
+      return;
+    }
 
     const mainBtn = e.target.closest("button.wt-main");
     if (mainBtn) {
