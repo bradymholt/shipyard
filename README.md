@@ -1,5 +1,13 @@
 # Shipyard
 
+<img align="left" src="https://user-images.githubusercontent.com/759811/210273710-b13913e2-0a71-4d9d-94da-1fe538b8a73e.gif"/>
+
+<br/>
+
+ &nbsp;**Would you take a quick second and ⭐️ my repo?**
+
+<br/>
+
 Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Use it directly from GitHub Pages, or run it locally to connect PRs to local branches and open them in your preferred app or IDE.
 
 [Try Shipyard in your browser](https://bradymholt.github.io/shipyard/)
