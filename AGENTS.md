@@ -46,6 +46,11 @@ and size of nearby elements so new pieces don't outshout existing ones (e.g. row
 
 ## Workflow
 
-This is a solo indie project. **Commit and push directly to `main`** — no feature
-branches, no PRs required. (This overrides any global "never commit on main" rule.)
-Keep commits focused with a clear subject line.
+Ship each change end to end without being asked: commit to a feature branch, open a PR, and
+merge it with `gh pr merge --squash`. An unmerged PR is an unshipped change, and merging is the
+standing instruction, not something to ask about. There is no CI, so check the change yourself
+before merging. Keep unrelated work out of the commit, and stop rather than merge when
+something looks wrong.
+
+The local companion serves `index.html` from the main checkout, so a merge reaches it only
+after that checkout pulls. Finish with `git pull --ff-only` there.

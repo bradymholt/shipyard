@@ -3,4 +3,5 @@ __pycache__/
 .DS_Store
 *.local
 shipyard.config.json
-.claude/
+.claude/*
+!.claude/settings.json
