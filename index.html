@@ -2389,8 +2389,8 @@
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
   setInterval(() => {
-    if (!document.hidden && getToken() && getCurrentRepo()) load(true);
-  }, 5 * 60 * 1000);
+    if (getToken() && getCurrentRepo()) load(true);
+  }, 60 * 1000);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
     pollWorktrees();
