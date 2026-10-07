@@ -1513,10 +1513,13 @@
       </div>`;
   }
 
+  // Lanes don't fit a phone screen, so narrow viewports always get the list view.
+  const narrowViewport = matchMedia("(max-width: 700px)");
+  const boardAllowed = () => !narrowViewport.matches && (state.filter === "mine" || state.filter === "review");
+
   function effectiveView() {
-    const boardAllowed = state.filter === "mine" || state.filter === "review";
     const selectedView = state.filter === "review" ? state.reviewView : state.view;
-    return boardAllowed && selectedView === "board" ? "board" : "list";
+    return boardAllowed() && selectedView === "board" ? "board" : "list";
   }
 
   // ---------- merged history paging ----------
@@ -1790,8 +1793,7 @@
     const view = effectiveView();
     const reviewBoard = state.filter === "review" && view === "board";
     const dataset = state.filter === "review" ? reviewSet : state.prs;
-    const boardAllowed = state.filter === "mine" || state.filter === "review";
-    document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
+    document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed());
     $("#view-list").classList.toggle("active", view === "list");
     $("#view-board").classList.toggle("active", view === "board");
     $("#sort-select").value = state.sort;
@@ -2360,6 +2362,8 @@
       if (reviewView && view === "board") load();
     });
   }
+
+  narrowViewport.addEventListener("change", render);
 
   document.querySelectorAll(".tab").forEach((tab) =>
     tab.addEventListener("click", () => {
