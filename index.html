@@ -406,6 +406,12 @@
     color: var(--fg); padding: 0 0.125rem;
   }
   .lane-dot { display: none; }
+  /* Collapsible lanes (narrow screens only; the header gets role="button" there). */
+  .lane-header[role="button"] { cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; border-radius: 0.25rem; }
+  .lane-header[role="button"]:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 20%, transparent); }
+  .lane-chevron { display: inline-flex; fill: var(--fg-muted); transition: transform .15s; }
+  .lane.collapsed .lane-chevron { transform: rotate(-90deg); }
+  .lane.collapsed > :not(.lane-header) { display: none; }
   .lane-count { margin-left: auto; color: var(--fg-muted); font: 500 0.6875rem var(--sans); }
   .lane-empty { display: flex; flex-direction: column; align-items: center; gap: 0.375rem; color: var(--fg-faint); font-size: 0.75rem; text-align: center; padding: 1.75rem 0.75rem; }
   .lane-empty svg { fill: var(--muted-bar); }
@@ -1515,6 +1521,18 @@
       </div>`;
   }
 
+  // On a phone the lanes stack, so each can be collapsed to keep the next one in reach.
+  const narrowViewport = matchMedia("(max-width: 700px)");
+  const LANE_CHEVRON = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M12.78 5.22a.749.749 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.06 0L3.22 6.28a.749.749 0 1 1 1.06-1.06L8 8.94l3.72-3.72a.749.749 0 0 1 1.06 0Z"/></svg>';
+  const collapsedLanes = new Set((() => {
+    try { return JSON.parse(localStorage.getItem("ghpr.collapsedLanes") || "[]"); } catch { return []; }
+  })());
+  function toggleLane(key) {
+    if (!collapsedLanes.delete(key)) collapsedLanes.add(key);
+    try { localStorage.setItem("ghpr.collapsedLanes", JSON.stringify([...collapsedLanes])); } catch { /* storage unavailable */ }
+    render();
+  }
+
   function effectiveView() {
     const boardAllowed = state.filter === "mine" || state.filter === "review";
     const selectedView = state.filter === "review" ? state.reviewView : state.view;
@@ -1853,9 +1871,15 @@
         const laneAction = (!reviewBoard && i === 0 && state.companion)
           ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
           : "";
+        const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
+        const collapsible = narrowViewport.matches;
+        const collapsed = collapsible && collapsedLanes.has(laneKey);
+        const header = collapsible
+          ? `<div class="lane-header" role="button" tabindex="0" aria-expanded="${!collapsed}" data-lane="${esc(laneKey)}"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span><span class="lane-chevron">${LANE_CHEVRON}</span></div>`
+          : `<div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>`;
         return `
-        <div class="lane">
-          <div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>
+        <div class="lane${collapsed ? " collapsed" : ""}">
+          ${header}
           ${laneHtml || (reviewBoard && i === 1 && !state.reviewHistoryLoaded
             ? '<div class="lane-empty">Loading…</div>'
             : `<div class="lane-empty">${EMPTY_ICON}<span>${laneEmptyText(name, reviewBoard)}</span></div>`)}
@@ -2212,6 +2236,8 @@
 
   listBody.addEventListener("click", async (e) => {
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
+    const laneHeader = e.target.closest(".lane-header[data-lane]");
+    if (laneHeader) { toggleLane(laneHeader.dataset.lane); return; }
     if (handleMergedClick(e)) return;
 
     const openBtn = e.target.closest("button.wt-open");
@@ -2362,6 +2388,15 @@
       if (reviewView && view === "board") load();
     });
   }
+
+  listBody.addEventListener("keydown", (e) => {
+    const laneHeader = e.target.closest(".lane-header[data-lane]");
+    if (!laneHeader || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    toggleLane(laneHeader.dataset.lane);
+    listBody.querySelector(`.lane-header[data-lane="${CSS.escape(laneHeader.dataset.lane)}"]`)?.focus();
+  });
+  narrowViewport.addEventListener("change", render);
 
   document.querySelectorAll(".tab").forEach((tab) =>
     tab.addEventListener("click", () => {
