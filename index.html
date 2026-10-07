@@ -265,6 +265,15 @@
     background: var(--bg-inset); padding: 0.05em 0.35em; border-radius: 0.3em;
   }
   .pr-num { font-family: var(--mono); font-size: 0.6875rem; color: var(--teal); }
+  .label-pill {
+    display: inline-block;
+    font: 500 0.6875rem var(--sans);
+    border-radius: 0.25rem;
+    padding: 0.0625rem 0.375rem;
+    margin-left: 0.375rem;
+    vertical-align: 0.0625rem;
+    white-space: nowrap;
+  }
   .draft-pill {
     font: 500 0.6875rem var(--sans); color: var(--fg-muted);
     border: 1px solid var(--border); border-radius: 0.25rem; padding: 0 0.375rem; margin-left: 0.5rem;
@@ -827,10 +836,18 @@
     return "just now";
   }
 
+  // GitHub label colors are arbitrary; pick dark or light text by background luminance.
+  function labelColors(hex) {
+    const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    return `color: ${luma > 160 ? "var(--fg)" : "var(--surface)"}; background: #${hex}`;
+  }
+
   // ---------- GitHub API ----------
   const PR_FIELDS = `
     id number title url isDraft createdAt updatedAt mergedAt headRefName baseRefName
     autoMergeRequest { enabledAt }
+    labels(first: 10) { nodes { name color } }
     viewerCanEnableAutoMerge viewerCanDisableAutoMerge
     repository { nameWithOwner }
     author { login avatarUrl }
@@ -1579,7 +1596,12 @@
     const comments = pr.comments.totalCount
       ? `<span class="comments" title="${pr.comments.totalCount} comments">${ICONS.comment}${pr.comments.totalCount}</span>`
       : "";
-    const draft = reviewMode && pr.isDraft ? '<span class="draft-pill">Draft</span>' : "";
+    const draft = !pr.isDraft ? ""
+      : reviewMode ? '<span class="draft-pill">Draft</span>'
+      : `<button type="button" class="draft-pill draft-toggle" data-pr="${esc(pr.id)}" title="Draft. Click to mark it ready for review.">Mark ready</button>`;
+    const labels = (pr.labels?.nodes || [])
+      .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
+      .join("");
     const badge = reviewMode
       ? viewerReviewBadge(pr)
       : pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
@@ -1589,7 +1611,7 @@
     const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
     return `
       <div class="card ${pr.isDraft ? "draft" : ""}">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}</div>
+        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}${labels}</div>
         <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
@@ -2144,12 +2166,14 @@
 
     const draftBtn = e.target.closest("button.draft-toggle");
     if (draftBtn) {
+      // Marking ready notifies reviewers, so a stray tap shouldn't do it.
+      const draftPr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
+      if (!confirm(`Mark ${draftPr ? `#${draftPr.number} ` : ""}ready for review? Requested reviewers will be notified.`)) return;
       draftBtn.disabled = true;
       draftBtn.textContent = "…";
       try {
         await markReadyForReview(draftBtn.dataset.pr);
-        const pr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
-        if (pr) pr.isDraft = false;
+        if (draftPr) draftPr.isDraft = false;
         saveDashboardCache();
         render();
       } catch (err) {
