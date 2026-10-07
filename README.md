@@ -20,12 +20,6 @@ See drafts, waiting work, approvals, and recent merges by stage.
 
 ![Shipyard board view](docs/board-view.png)
 
-### List view
-
-Prioritize PRs with reviewer, review, and CI status visible together.
-
-![Shipyard list view](docs/list-view.png)
-
 ### Review board
 
 Track the PRs you owe a review, split into what's still waiting on you and what you've already reviewed, with counts and pending-review indicators.
@@ -60,7 +54,7 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 ## Features
 
 - **Action-focused views:** My PRs and Reviews, with priority, updated, and created sorting.
-- **List and board layouts:** reviewer state, new commits since your review, drafts, approvals, and ready-to-merge work at a glance.
+- **Board layout:** reviewer state, new commits since your review, drafts, approvals, and ready-to-merge work at a glance, with lanes that stack and collapse on a phone.
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
