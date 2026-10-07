@@ -509,6 +509,8 @@
   .dot.off { background: var(--muted-bar); }
 
   @media (max-width: 700px) {
+    /* Lanes stack in workflow order so each keeps its header and count on a phone. */
+    .board, .board.two-lane { grid-template-columns: minmax(0, 1fr); }
     .pr-side { flex-direction: column; align-items: flex-end; gap: 0.375rem; }
     /* Too narrow for tabs + status + toggle on one line; give the status its own. */
     #github-status { order: 1; width: 100%; justify-content: flex-end; margin: 0 0 0.5rem; }
@@ -1513,13 +1515,10 @@
       </div>`;
   }
 
-  // Lanes don't fit a phone screen, so narrow viewports always get the list view.
-  const narrowViewport = matchMedia("(max-width: 700px)");
-  const boardAllowed = () => !narrowViewport.matches && (state.filter === "mine" || state.filter === "review");
-
   function effectiveView() {
+    const boardAllowed = state.filter === "mine" || state.filter === "review";
     const selectedView = state.filter === "review" ? state.reviewView : state.view;
-    return boardAllowed() && selectedView === "board" ? "board" : "list";
+    return boardAllowed && selectedView === "board" ? "board" : "list";
   }
 
   // ---------- merged history paging ----------
@@ -1793,7 +1792,8 @@
     const view = effectiveView();
     const reviewBoard = state.filter === "review" && view === "board";
     const dataset = state.filter === "review" ? reviewSet : state.prs;
-    document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed());
+    const boardAllowed = state.filter === "mine" || state.filter === "review";
+    document.querySelector(".view-toggle").classList.toggle("hidden", !boardAllowed);
     $("#view-list").classList.toggle("active", view === "list");
     $("#view-board").classList.toggle("active", view === "board");
     $("#sort-select").value = state.sort;
@@ -2362,8 +2362,6 @@
       if (reviewView && view === "board") load();
     });
   }
-
-  narrowViewport.addEventListener("change", render);
 
   document.querySelectorAll(".tab").forEach((tab) =>
     tab.addEventListener("click", () => {
