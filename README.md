@@ -12,7 +12,7 @@ Shipyard is a focused dashboard for staying on top of GitHub pull requests. It b
 
 ## Quick start
 
-**In your browser:** open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a [GitHub token](#github-token), then add a repository, organization, or username to your views. Nothing needs to be installed.
+**In your browser:** open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a [GitHub token](#github-token) (saved only in your browser's local storage), then add a repository, organization, or username to your views. Nothing needs to be installed.
 
 On Android, open the menu in Chrome and choose **Install app** (or **Add to Home screen**) to run Shipyard as a standalone app. Safari on iOS offers the same through **Share → Add to Home Screen**.
 
@@ -49,16 +49,24 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 
 ## Local mode
 
-Local mode runs `shipyard.py`, an optional companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git and Python 3, plus whichever app you configure.
+Local mode runs `shipyard.py`, an optional companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git and Python 3.
 
 ```bash
 git clone https://github.com/bradymholt/shipyard.git
 cd shipyard
 python3 shipyard.py ~/dev
-open http://localhost:4321
 ```
 
-Replace `~/dev` with a folder that directly contains your Git clones, then open the URL printed by the command. You can pass more than one folder or use `--port` to choose another port.
+Then open http://localhost:4321. Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
+
+On macOS, you can keep it running in the background instead. Copy the example config, set `roots` to your folders, and install it as a login agent:
+
+```bash
+cp shipyard.config.example.json shipyard.config.json
+./shipyard-launchd.py install
+```
+
+See [Run at login (macOS)](#run-at-login-macos) for details.
 
 The companion matches GitHub PR branches to clones found under your configured folders. It binds to localhost and accepts branch actions only from the dashboard it serves.
 
