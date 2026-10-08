@@ -10,7 +10,13 @@
 
 Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Use it directly from GitHub Pages, or run it locally to connect PRs to local branches and open them in your preferred app or IDE.
 
-[Try Shipyard in your browser](https://bradymholt.github.io/shipyard/)
+## Quick start
+
+**In your browser:** open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a [GitHub token](#github-token), then add a repository, organization, or username to your views. Nothing needs to be installed.
+
+On Android, open the menu in Chrome and choose **Install app** (or **Add to Home screen**) to run Shipyard as a standalone app. Safari on iOS offers the same through **Share → Add to Home Screen**.
+
+**Locally:** run Shipyard on your machine to match PRs to your local clones, open them in your preferred app or IDE, and start branches or worktrees. See [Local mode](#local-mode) for setup.
 
 ## Screenshots
 
@@ -25,27 +31,6 @@ See drafts, waiting work, approvals, and recent merges by stage.
 Track the PRs you owe a review, split into what's still waiting on you and what you've already reviewed, with counts and pending-review indicators.
 
 ![Shipyard review board](docs/review-board.png)
-
-## Quick start
-
-### Hosted mode
-
-Open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a GitHub token, then add a repository, organization, or username to your views. Nothing needs to be installed.
-
-On Android, open the menu in Chrome and choose **Install app** (or **Add to Home screen**) to run Shipyard as a standalone app. Safari on iOS offers the same through **Share → Add to Home Screen**.
-
-### Local mode
-
-Local mode runs an optional companion process that opens checkouts in your preferred app or IDE and adds branch/worktree actions. It requires Git and Python 3, plus whichever app you configure.
-
-```bash
-git clone https://github.com/bradymholt/shipyard.git
-cd shipyard
-python3 shipyard.py ~/dev
-open http://localhost:4321
-```
-
-Replace `~/dev` with a folder that directly contains your Git clones, then open the URL printed by the command. You can pass more than one folder or use `--port` to choose another port.
 
 ## GitHub token
 
@@ -62,9 +47,20 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
 - **Optional local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
 
-## Local companion
+## Local mode
 
-Local mode starts `shipyard.py`, a small companion process that serves the dashboard and matches GitHub PR branches to clones found under your configured folders. It binds to localhost and accepts branch actions only from the dashboard it serves.
+Local mode runs `shipyard.py`, an optional companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git and Python 3, plus whichever app you configure.
+
+```bash
+git clone https://github.com/bradymholt/shipyard.git
+cd shipyard
+python3 shipyard.py ~/dev
+open http://localhost:4321
+```
+
+Replace `~/dev` with a folder that directly contains your Git clones, then open the URL printed by the command. You can pass more than one folder or use `--port` to choose another port.
+
+The companion matches GitHub PR branches to clones found under your configured folders. It binds to localhost and accepts branch actions only from the dashboard it serves.
 
 Worktree discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees. Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes existing worktrees. New worktrees are created under `<repo>/.claude/worktrees/`.
 
