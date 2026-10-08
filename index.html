@@ -284,9 +284,6 @@
     border: 1px solid var(--border); border-radius: 0.25rem; padding: 0 0.375rem; margin-left: 0.5rem;
     vertical-align: 0.0625rem;
   }
-  button.draft-pill { background: none; cursor: pointer; }
-  button.draft-pill:hover { color: var(--fg); border-color: var(--fg-muted); }
-  button.draft-pill:disabled { opacity: .5; cursor: default; }
 
   .review-badge {
     display: inline-flex; align-items: center; gap: 0.25rem;
@@ -1607,9 +1604,10 @@
     const comments = pr.comments.totalCount
       ? `<span class="comments" title="${pr.comments.totalCount} comments">${ICONS.comment}${pr.comments.totalCount}</span>`
       : "";
-    const draft = !pr.isDraft ? ""
-      : reviewMode ? '<span class="draft-pill">Draft</span>'
-      : `<button type="button" class="draft-pill draft-toggle" data-pr="${esc(pr.id)}" title="Draft. Click to mark it ready for review.">Mark ready</button>`;
+    const draft = pr.isDraft && reviewMode ? '<span class="draft-pill">Draft</span>' : "";
+    const markReady = pr.isDraft && !reviewMode
+      ? `<button type="button" class="am-toggle off draft-toggle" data-pr="${esc(pr.id)}" title="Draft. Click to mark it ready for review.">Mark ready</button>`
+      : "";
     const labels = (pr.labels?.nodes || [])
       .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
       .join("");
@@ -1632,6 +1630,7 @@
           ${reviewUpdate}
           ${pendingReview}
           ${basedOn}
+          ${markReady}
           ${showAutoMerge ? autoMergeChip(pr) : ""}
           ${worktreeLinks(pr)}
         </div>
