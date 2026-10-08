@@ -1655,7 +1655,7 @@
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
     const workingCount = state.prs.filter((pr) =>
-      pr.author?.login === state.viewer && laneOf(pr) === 0
+      pr.author?.login === state.viewer && !pr.isDraft && laneOf(pr) === 0
     ).length;
     const workingCountEl = $("#count-mine");
     workingCountEl.textContent = workingCount || "";
