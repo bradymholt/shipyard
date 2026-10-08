@@ -32,6 +32,8 @@ Track the PRs you owe a review, split into what's still waiting on you and what 
 
 Open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a GitHub token, then add a repository, organization, or username to your views. Nothing needs to be installed.
 
+On Android, open the menu in Chrome and choose **Install app** (or **Add to Home screen**) to run Shipyard as a standalone app. Safari on iOS offers the same through **Share → Add to Home Screen**.
+
 ### Local mode
 
 Local mode runs an optional companion process that opens checkouts in your preferred app or IDE and adds branch/worktree actions. It requires Git and Python 3, plus whichever app you configure.

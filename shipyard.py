@@ -701,7 +701,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
     session_token = ""
-    STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png"}
+    STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png",
+                    "/manifest.webmanifest", "/icons/icon-192.png",
+                    "/icons/icon-512.png", "/icons/icon-maskable-512.png",
+                    "/icons/apple-touch-icon.png"}
+    # Older Pythons don't know this extension; Chrome expects the manifest MIME type.
+    extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
+                      ".webmanifest": "application/manifest+json"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
