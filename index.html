@@ -1369,6 +1369,28 @@
     return `<a class="wt-link wt-agent" href="${esc(url)}" title="${esc(title)}">${icon}</a>`;
   }
 
+  function openCheckoutButton(wt) {
+    const target = launchTarget(wt);
+    const mod = wt.main ? " current" : " worktree";  // green for main clone, purple for a worktree
+    const appName = state.launcher.name || "configured app";
+    const title = wt.main
+      ? `This branch is checked out in your main repo — open it in ${appName}`
+      : `This branch is checked out in a worktree — open it in ${appName}`;
+    return state.launcher.mode === "command"
+      ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${esc(title)}">${LAUNCH_ICON}</button>`
+      : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${LAUNCH_ICON}</a>`;
+  }
+
+  // A merged PR's branch may still be checked out locally, with a session worth
+  // returning to for follow-up ideas left in review. Offer only what already exists:
+  // no checking out or moving a branch that's done.
+  function mergedWorktreeLinks(pr) {
+    if (!state.companion) return "";
+    const wt = worktreeFor(pr);
+    if (!wt) return "";
+    return `<div class="card-icons"><span class="wt-links">${openCheckoutButton(wt)}${agentButton(wt)}</span></div>`;
+  }
+
   function worktreeLinks(pr) {
     // A single "Open" control; where it opens (and how it
     // looks) depends on where the branch is checked out. It runs through the
@@ -1382,15 +1404,8 @@
     // Already checked out somewhere → open that checkout directly. Green marks the
     // one that's the main repo's current branch.
     if (wt) {
-      const target = launchTarget(wt);
-      const mod = wt.main ? " current" : " worktree";  // green for main clone, purple for a worktree
       const appName = state.launcher.name || "configured app";
-      const title = wt.main
-        ? `This branch is checked out in your main repo — open it in ${appName}`
-        : `This branch is checked out in a worktree — open it in ${appName}`;
-      const openBtn = state.launcher.mode === "command"
-        ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${esc(title)}">${LAUNCH_ICON}</button>`
-        : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${LAUNCH_ICON}</a>`;
+      const openBtn = openCheckoutButton(wt);
       // A linked worktree can be relocated into the main clone; the main clone can't.
       // The move removes this worktree and switches the main clone to the branch, so
       // either side being dirty blocks it — name which one so the reason is clear.
@@ -1458,6 +1473,7 @@
       <div class="card merged">
         <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
         <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)}</div>
+        ${mergedWorktreeLinks(pr)}
       </div>`;
   }
 
