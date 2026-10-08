@@ -561,7 +561,7 @@
       <div class="nt-field">Views
         <ul id="views-list" class="views-list"></ul>
         <div class="add-view-row">
-          <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username">
+          <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username — comma-separate to combine">
           <button type="button" id="add-repo-btn" class="primary">Add</button>
         </div>
       </div>
@@ -1034,10 +1034,15 @@
     return target;
   }
 
-  // Search qualifier scoping a query to the current target (a repo, org, or user).
-  async function scopePrefix(target) {
-    if (target.includes("/")) return `repo:${target}`;
-    return `${await ownerQualifier(target)}:${target}`;
+  // A view is one or more comma-separated targets (repos, orgs, or users).
+  const viewTargets = (view) => view.split(",").map((t) => t.trim()).filter(Boolean);
+
+  // Search qualifiers scoping a query to the current view; GitHub ORs repeated
+  // repo:/org:/user: qualifiers.
+  async function scopePrefix(view) {
+    const parts = await Promise.all(viewTargets(view).map(async (target) =>
+      target.includes("/") ? `repo:${target}` : `${await ownerQualifier(target)}:${target}`));
+    return parts.join(" ");
   }
 
   async function searchPRs(q, max = MAX_PRS, query = OWNER_QUERY, after = null) {
@@ -1756,12 +1761,13 @@
       </div>`;
     }).join("") + "</div>";
     if (!count && !recentMerged.length) html = "";
-    const target = getCurrentRepo();
-    const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
-      : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
-      : ownerType(target) === "user" ? `https://github.com/${esc(target)}?tab=repositories`
-      : `https://github.com/${esc(target)}`;
-    const targetLink = `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
+    const targetLink = viewTargets(getCurrentRepo()).map((target) => {
+      const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
+        : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
+        : ownerType(target) === "user" ? `https://github.com/${esc(target)}?tab=repositories`
+        : `https://github.com/${esc(target)}`;
+      return `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
+    }).join(", ");
 
     // While the current view's PRs are still being fetched, show the spinner (or
     // an error) rather than the empty "No pull requests match." message.
@@ -1932,10 +1938,9 @@
       if (w.repo) activity.set(w.repo, Math.max(activity.get(w.repo) || 0, w.activity || 0));
     }
     const seenAt = (r) => activity.get(r) || 0;
-    const view = getCurrentRepo();
-    const available = (view.includes("/")
-      ? localRepos.filter((r) => r === view)
-      : localRepos.filter((r) => r.split("/")[0] === view)
+    const targets = viewTargets(getCurrentRepo());
+    const available = localRepos.filter((r) =>
+      targets.some((t) => t.includes("/") ? r === t : r.split("/")[0] === t)
     ).sort((a, b) => seenAt(b) - seenAt(a) || a.localeCompare(b));
     return available.map((r, i) =>
       `<option value="${esc(r)}"${i === 0 ? " selected" : ""}>${esc(r)}</option>`).join("");
@@ -2041,8 +2046,13 @@
   });
 
   $("#add-repo-btn").addEventListener("click", () => {
-    const v = $("#add-repo-input").value.trim().replace(/^https:\/\/github\.com\//, "").replace(/\/$/, "");
-    if (!/^[\w.-]+(\/[\w.-]+)?$/.test(v)) { alert("Enter owner/repo, an org, or a username"); return; }
+    const targets = viewTargets($("#add-repo-input").value)
+      .map((t) => t.replace(/^https:\/\/github\.com\//, "").replace(/\/$/, ""));
+    if (!targets.length || !targets.every((t) => /^[\w.-]+(\/[\w.-]+)?$/.test(t))) {
+      alert("Enter owner/repo, an org, or a username (comma-separate several to combine them)");
+      return;
+    }
+    const v = targets.join(", ");
     const repos = getRepos();
     if (!repos.includes(v)) { repos.push(v); setRepos(repos); }
     localStorage.setItem(LS.REPO, v);
