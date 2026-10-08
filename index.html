@@ -70,23 +70,25 @@
   header { background: var(--navy); padding: 0.875rem 0; }
   .header-inner {
     max-width: 71.25rem; margin: 0 auto; padding: 0 1.25rem;
-    display: flex; align-items: center; gap: 0.875rem; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 0.875rem;
   }
-  .flags { display: inline-flex; gap: 0.125rem; }
+  .flags { display: inline-flex; gap: 0.125rem; flex: none; }
   .flags span { width: 0.625rem; height: 0.875rem; display: block; }
   .flags span:nth-child(1) { background: #c9a24b; }
   .flags span:nth-child(2) { background: #d64545; }
   .flags span:nth-child(3) { background: #2e9e63; }
-  .wordmark { font: 900 1.1875rem var(--display); color: #f4f7f9; letter-spacing: .07em; }
+  .wordmark { font: 900 1.1875rem var(--display); color: #f4f7f9; letter-spacing: .07em; flex: none; }
   .spacer { flex: 1; }
 
   header select#repo-select {
     background: var(--navy-2); border: 1px solid var(--navy-border);
     color: #e8eef4; border-radius: 0.5rem; padding: 0.375rem 0.75rem; font-size: 0.8125rem; cursor: pointer;
+    /* Shrinks (and truncates) instead of pushing the settings button onto its own line. */
+    min-width: 0; max-width: 100%; text-overflow: ellipsis;
   }
   header select#repo-select:focus { box-shadow: none; border-color: var(--navy-border); }
   header .icon-btn {
-    background: none; border: 1px solid var(--navy-border); border-radius: 0.5rem;
+    flex: none; background: none; border: 1px solid var(--navy-border); border-radius: 0.5rem;
     padding: 0.4375rem; display: inline-flex; align-items: center; cursor: pointer;
   }
   header .icon-btn:hover { background: var(--navy-2); }
@@ -481,6 +483,7 @@
     /* Lanes stack in workflow order so each keeps its header and count on a phone. */
     .board, .board.two-lane { grid-template-columns: minmax(0, 1fr); }
     /* Too narrow for tabs + status on one line; give the status its own. */
+    .header-inner { gap: 0.625rem; }
     #github-status { order: 1; width: 100%; justify-content: flex-end; margin: 0 0 0.5rem; }
   }
 </style>
