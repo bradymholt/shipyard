@@ -702,7 +702,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     config = DEFAULT_CONFIG
     session_token = ""
     STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png",
-                    "/manifest.webmanifest", "/sw.js", "/icons/icon-192.png",
+                    "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
                     "/icons/apple-touch-icon.png"}
     # Older Pythons don't know this extension; Chrome expects the manifest MIME type.

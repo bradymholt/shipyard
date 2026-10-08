@@ -2260,11 +2260,6 @@
   });
 
   window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees };
-
-  // Service worker makes the dashboard installable (e.g. "Add to Home screen" on Android).
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
 })();
 </script>
 </body>
