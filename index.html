@@ -629,7 +629,7 @@
   const state = {
     prs: [],              // targeted set: my PRs plus open PRs awaiting my review
     merged: [],           // my recently merged PRs, shown as context on the My PRs tab
-    reviewedPrs: [],      // open PRs I reviewed, loaded lazily for the review board
+    reviewedPrs: [],      // open PRs I reviewed
     reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
     mergedCursor: null,        // how far back each merged feed has been walked
     reviewedMergedCursor: null,
@@ -1797,15 +1797,10 @@
     return `<div class="error-box">${esc(state.loadError + hint)}</div>`;
   }
 
-  function reviewHistoryActive() {
-    return state.filter === "review";
-  }
-
   async function load(force = false) {
     if (state.loading) return;
     const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
-    const needReviewHistory = reviewHistoryActive() &&
-      (force || !state.reviewHistoryLoaded || !state.reviewHistoryFresh);
+    const needReviewHistory = force || !state.reviewHistoryLoaded || !state.reviewHistoryFresh;
     if (!needTargeted && !needReviewHistory) { render(); return; }
     state.loading = true;
     state.loadError = null;
@@ -1855,7 +1850,6 @@
       render();
     } finally {
       state.loading = false;
-      if (reviewHistoryActive() && !state.reviewHistoryLoaded && !state.loadError) load();
     }
   }
 
