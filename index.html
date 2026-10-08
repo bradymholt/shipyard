@@ -1654,14 +1654,16 @@
         : '<span class="dot off"></span>Companion not running';
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
-    const workingCount = state.prs.filter((pr) =>
-      pr.author?.login === state.viewer && !pr.isDraft && laneOf(pr) === 0
-    ).length;
-    const workingCountEl = $("#count-mine");
-    workingCountEl.textContent = workingCount || "";
-    workingCountEl.classList.toggle("hidden", workingCount === 0);
-    workingCountEl.title = workingCount
-      ? `${workingCount} pull request${workingCount === 1 ? "" : "s"} in Working`
+    const mineCount = state.prs.filter((pr) => {
+      if (pr.author?.login !== state.viewer || pr.isDraft) return false;
+      const lane = laneOf(pr);
+      return lane === 0 || (lane === 2 && !pr.autoMergeRequest);
+    }).length;
+    const mineCountEl = $("#count-mine");
+    mineCountEl.textContent = mineCount || "";
+    mineCountEl.classList.toggle("hidden", mineCount === 0);
+    mineCountEl.title = mineCount
+      ? `${mineCount} pull request${mineCount === 1 ? "" : "s"} ${mineCount === 1 ? "needs" : "need"} your attention`
       : "";
     const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
       [prKey(pr), pr]
@@ -1673,7 +1675,7 @@
     reviewCountEl.title = reviewCount
       ? `${reviewCount} pull request${reviewCount === 1 ? "" : "s"} ${reviewCount === 1 ? "needs" : "need"} your review`
       : "";
-    const attention = workingCount + reviewCount;
+    const attention = mineCount + reviewCount;
     document.title = attention ? `Shipyard (${attention})` : "Shipyard";
     const reviewBoard = state.filter === "review";
     const dataset = reviewBoard ? reviewSet : state.prs;
