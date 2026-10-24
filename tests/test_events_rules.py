@@ -40,6 +40,8 @@ class DeriveMine(unittest.TestCase):
         events = derive(prev, cur)
         self.assertEqual(names(events), ["changes_requested"])
         self.assertEqual(events[0]["data"]["reviewers"], ["rev", "jm"])
+        # same commit, new set of reviews: a distinct dedupe key, so it isn't swallowed
+        self.assertNotEqual(events[0]["head"], derive(None, prev)[1]["head"])
 
     def test_push_after_changes_requested_proposes_re_request(self):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", commit="aaa")])

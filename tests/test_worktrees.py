@@ -62,6 +62,17 @@ class ReviewWorktree(GitCase):
         self.assertFalse(again["ok"])
 
 
+    def test_refuses_to_move_or_remove_a_review_worktree_with_its_own_commits(self):
+        out = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
+        Path(out["path"], "app.py").write_text("tried something\n")
+        git(out["path"], "commit", "-qam", "experiment")
+        again = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
+        self.assertFalse(again["ok"])
+        self.assertIn("commits of its own", again["error"])
+        gone = worktrees.cleanup_worktree(self.repo, None, self.roots, path=out["path"])
+        self.assertFalse(gone["ok"])
+
+
 class Cleanup(GitCase):
     def make_worktree(self, branch):
         out = worktrees.new_task_worktree(self.repo, branch, self.roots)
@@ -126,6 +137,14 @@ class ApplyFix(GitCase):
         self.assertEqual(git(path, "status", "--porcelain"), "")
         self.assertIn("new.txt", git(path, "show", "--stat", "HEAD"))
         self.assertEqual(git(self.clone, "ls-remote", "origin", "me/fix").split()[0], git(path, "rev-parse", "HEAD"))
+
+    def test_refuses_a_checkout_on_another_branch(self):
+        from shipyard import actions
+        path = worktrees.new_task_worktree(self.repo, "me/fix3", self.roots)["path"]
+        head = git(path, "rev-parse", "HEAD")
+        git(path, "switch", "-qc", "other")
+        with self.assertRaisesRegex(actions.ActionError, "isn't on me/fix3"):
+            actions.apply_fix(None, {"head": head, "branch": "me/fix3"}, {"diff": "x"}, {"worktree": {"path": path}})
 
     def test_refuses_when_checkout_moved_or_diff_does_not_apply(self):
         from shipyard import actions

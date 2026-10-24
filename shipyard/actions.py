@@ -8,6 +8,7 @@ import os
 import tempfile
 
 from . import worktrees
+from .github import GitHubError
 
 # Trust flag behind each action type; actions without one are always manual.
 TRUST_FLAG = {
@@ -59,21 +60,34 @@ def undo_rerequest_review(gh, snap, payload, ctx):
     return "withdrew the review request"
 
 
+def _method_not_allowed(error):
+    # GitHub: "Merge method squash merging is not allowed on this repository"
+    text = str(error).lower()
+    return "merge method" in text and "not allowed" in text
+
+
+def _with_merge_method(run):
+    """Try merge methods in order, moving on only when the repo disallows one; any
+    other failure (branch protection, a network error) stops there."""
+    for method in MERGE_METHODS:
+        try:
+            run(method)
+            return method
+        except Exception as e:
+            if not _method_not_allowed(e):
+                raise ActionError(str(e)) from e
+    raise ActionError("The repository allows none of squash, merge, or rebase.")
+
+
 def _auto_merge(gh, snap, enable):
     if not enable:
         gh.graphql("mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) "
                    "{ clientMutationId } }", {"id": snap["id"]})
         return
-    last = None
-    for method in MERGE_METHODS:
-        try:
-            gh.graphql("mutation($id: ID!, $m: PullRequestMergeMethod!) { enablePullRequestAutoMerge("
-                       "input: {pullRequestId: $id, mergeMethod: $m}) { clientMutationId } }",
-                       {"id": snap["id"], "m": method})
-            return
-        except Exception as e:  # the repo may not allow this method; try the next
-            last = e
-    raise ActionError(str(last))
+    _with_merge_method(lambda m: gh.graphql(
+        "mutation($id: ID!, $m: PullRequestMergeMethod!, $head: GitObjectID) { enablePullRequestAutoMerge("
+        "input: {pullRequestId: $id, mergeMethod: $m, expectedHeadOid: $head}) { clientMutationId } }",
+        {"id": snap["id"], "m": m, "head": snap.get("head")}))
 
 
 def enable_auto_merge(gh, snap, payload, ctx):
@@ -87,16 +101,12 @@ def undo_enable_auto_merge(gh, snap, payload, ctx):
 
 
 def merge(gh, snap, payload, ctx):
-    last = None
-    for method in MERGE_METHODS:
-        try:
-            gh.graphql("mutation($id: ID!, $m: PullRequestMergeMethod!) { mergePullRequest("
-                       "input: {pullRequestId: $id, mergeMethod: $m}) { clientMutationId } }",
-                       {"id": snap["id"], "m": method})
-            return f"merged ({method.lower()})"
-        except Exception as e:
-            last = e
-    raise ActionError(str(last))
+    # expectedHeadOid: commits pushed after you looked are not merged with it.
+    method = _with_merge_method(lambda m: gh.graphql(
+        "mutation($id: ID!, $m: PullRequestMergeMethod!, $head: GitObjectID) { mergePullRequest("
+        "input: {pullRequestId: $id, mergeMethod: $m, expectedHeadOid: $head}) { clientMutationId } }",
+        {"id": snap["id"], "m": m, "head": snap.get("head")}))
+    return f"merged ({method.lower()})"
 
 
 def mark_ready(gh, snap, payload, ctx):
@@ -137,8 +147,8 @@ def _review(gh, snap, event, body, comments=()):
         review["comments"] = inline
     try:
         gh.rest("POST", f"{_pulls(snap)}/reviews", review)
-    except Exception:
-        if not inline:
+    except GitHubError as e:
+        if not inline or e.status != 422:
             raise
         # A line outside the diff rejects the whole review; fold the comments into the body.
         folded = "\n".join(f"- `{c['path']}:{c['line']}` {c['body']}" for c in inline)
@@ -179,6 +189,8 @@ def apply_fix(gh, snap, payload, ctx):
     path = checkout["path"]
     if worktrees.has_tracked_changes(path):
         raise ActionError("The checkout has uncommitted changes. Commit or stash them first.")
+    if worktrees.try_git(path, "symbolic-ref", "--short", "HEAD").strip() != snap["branch"]:
+        raise ActionError(f"The checkout isn't on {snap['branch']}.")
     if worktrees.try_git(path, "rev-parse", "HEAD").strip() != snap.get("head"):
         raise ActionError("The checkout isn't at the PR's head; pull first so the fix applies to what reviewers see.")
     with tempfile.NamedTemporaryFile("w", suffix=".diff", delete=False) as fh:

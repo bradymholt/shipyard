@@ -20,6 +20,15 @@ from .state import State, now_iso
 
 POLL_SECONDS = 60
 PASS_WORKERS = 2
+# Which passes may propose an action the companion presses itself, and on whose PRs.
+# Anything else stays a button, even when its trust flag is on.
+AUTO_POLICY = {
+    "rerun_checks": {"sources": {"ci_failed"}, "mine": True},
+    "apply_fix": {"sources": {"ci_failed"}, "mine": True},
+    "rerequest_review": {"sources": {"rule"}, "mine": True},
+    "enable_auto_merge": {"sources": {"changes_requested", "ci_failed"}, "mine": True},
+    "approve": {"sources": {"re_review"}, "mine": False},
+}
 TRUST_OFFER_AFTER = 3  # manual clicks on one action type before the card offers "do this automatically"
 LIVE_CACHE_SECONDS = 15
 
@@ -99,7 +108,7 @@ class Companion:
 
     # ---------- polling
     def poll_once(self):
-        viewer, snaps, _ = self.poller.poll(self.db.open_node_ids())
+        viewer, snaps, listed = self.poller.poll(self.db.open_node_ids())
         self.viewer = viewer
         try:
             found = worktrees.discover(self.roots, None)
@@ -107,9 +116,13 @@ class Companion:
         except Exception as e:
             print(f"Warning: worktree discovery failed: {e}")
         for snap in snaps:
+            if snap["state"] == "OPEN" and snap["id"] not in listed:
+                snap["dropped"] = True  # still open, but no longer yours to act on
+                for card in self.db.cards(snap["key"], ("open",)):
+                    self.db.update_card(card["id"], status="done")
             self.ingest(snap)
         for snap in self.db.prs():
-            if snap.get("state") == "OPEN":
+            if snap.get("state") == "OPEN" and not snap.get("dropped"):
                 self.resolve_stale_cards(snap)
                 if snap["mine"] and snap["key"] not in self.pin_tried:
                     self.ensure_pin(snap)
@@ -124,7 +137,10 @@ class Companion:
             # Activity holds Shipyard's own actions; the page reads GitHub's timeline itself.
             if not self.db.record_event(snap["key"], event):
                 continue
+            if snap.get("dropped"):
+                continue
             for reaction in rules.reactions(event, snap, self.config["rules"]):
+                reaction.setdefault("head", event.get("head"))
                 try:
                     self.react(reaction, snap)
                 except Exception as e:
@@ -140,8 +156,8 @@ class Companion:
                 card_id = self.db.add_card(key, {
                     "kind": "proposal", "action": reaction["action"], "title": reaction["title"],
                     "summary": reaction["reason"], "payload": reaction["payload"], "head": snap["head"]})
-                self.maybe_auto(card_id, snap, reaction["action"], reaction["payload"], "high",
-                                reaction["reason"])
+                self.maybe_auto(card_id, reaction["action"], reaction["payload"], "high",
+                                reaction["reason"], source="rule")
         elif do == "close_cards":
             for card in self.db.cards(key, ("open",)):
                 if not reaction.get("kinds") or card.get("pass") in reaction["kinds"]:
@@ -155,7 +171,7 @@ class Companion:
         elif do == "cleanup_review_worktree":
             self.auto_cleanup_review(snap)
         elif do == "pass":
-            self.offer_or_queue(snap, reaction["pass"], reaction["mode"])
+            self.offer_or_queue(snap, reaction["pass"], reaction["mode"], reaction.get("head"))
 
     def checkout_for(self, snap):
         """Where a PR's code lives locally: its branch's checkout, or the review worktree."""
@@ -193,7 +209,7 @@ class Companion:
                 self.db.update_card(card["id"], status="done")
 
     # ---------- passes
-    def offer_or_queue(self, snap, name, mode):
+    def offer_or_queue(self, snap, name, mode, head=None):
         key = snap["key"]
         old = [c for c in self.db.cards(key, ("open",))
                if c.get("pass") == name and c.get("kind") in ("offer", "pass", "raw", "error")]
@@ -202,37 +218,36 @@ class Companion:
                                          "head": snap["head"]})
         else:
             # Already ran for this head (one pass per PR, event, head): keep its card.
-            new = self.queue_pass(snap, name)
+            new = self.queue_pass(snap, name, head=head)
         if new:
             for card in old:
                 self.db.update_card(card["id"], status="done")
         return new
 
-    def queue_pass(self, snap, name, question=None, retry=False):
+    def queue_pass(self, snap, name, question=None, retry=False, head=None):
+        """Queue a pass with its "running" card; None when it already ran for this head.
+        `head` is the dedupe key: the PR's head SHA, or a finer one from the event."""
         key = snap["key"]
-        pass_id = self.db.queue_pass(key, name, None if name == "ask" else snap["head"],
-                                     passes.PASS_MODES[name], question)
-        if pass_id is None:
-            existing = next((p for p in self.db.passes(key)
-                             if p["name"] == name and p["head"] == snap["head"]), None)
-            if not existing or not retry or existing["status"] not in ("failed", "skipped", "done"):
-                return None
-            pass_id = existing["id"]
-            self.db.update_pass(pass_id, status="queued", error=None)
+        head = None if name == "ask" else head or snap["head"]
         card_id = self.db.add_card(key, {"kind": "running", "pass": name, "title": passes.TITLES[name],
                                          "head": snap["head"], "question": question})
-        self.db.update_pass(pass_id, card_id=card_id)
+        pass_id = self.db.queue_pass(key, name, head, passes.PASS_MODES[name], card_id, question)
+        if pass_id is None:
+            existing = next((p for p in self.db.passes(key) if p["name"] == name and p["head"] == head), None)
+            if not existing or not retry or existing["status"] not in ("failed", "skipped", "done"):
+                self.db.delete_card(card_id)
+                return None
+            self.db.update_pass(existing["id"], status="queued", error=None, card_id=card_id)
         self.drain_queue()
         self.publish()
         return card_id
 
     def drain_queue(self):
         for row in self.db.queued_passes():
+            if not row.get("card_id") or not self.db.claim_pass(row["id"]):
+                continue  # another thread claimed it first
             with self.run_lock:
-                if row["id"] in self.running:
-                    continue
                 self.running.add(row["id"])
-            self.db.update_pass(row["id"], status="running")
             self.pool.submit(self.run_pass_safely, row["id"])
 
     def run_pass_safely(self, pass_id):
@@ -271,19 +286,20 @@ class Companion:
         mode = passes.PASS_MODES[name]
         new_session = None
         pin_after = False
-        if name == "pre_review":
+        if not snap["mine"]:
+            # Someone else's PR is always read at its current head, in the review
+            # worktree (made here when a re-review predates the companion).
             made = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots)
             if not made["ok"]:
                 return self.fail_pass(row, made["error"])
+            pin = self.db.pin(snap["key"])
+            self.db.set_pin(snap["key"], made["path"], pin["session_id"] if pin else None,
+                            pin["how"] if pin else "review")
+        if name == "pre_review":
             cwd, session = made["path"], None
             pin_after = True
         else:
             cwd = self.checkout_for(snap)
-            if not cwd and not snap["mine"]:
-                # Someone else's PR without a review worktree yet (a re-review of a PR
-                # first reviewed before the companion ran): make one at the PR's head.
-                self.react({"do": "review_worktree"}, snap)
-                cwd = self.checkout_for(snap)
             if not cwd:
                 cwd = worktrees.find_clone(snap["repo"], self.roots)
             pin = self.db.pin(snap["key"])
@@ -306,7 +322,10 @@ class Companion:
 
         prompt = passes.render(name, passes.inputs(name, snap, self.github, row.get("question")))
         try:
-            result = adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session)
+            # The PR's own code may carry agent settings (hooks, permissions); on someone
+            # else's PR, only yours apply.
+            result = adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
+                                 untrusted=not snap["mine"])
         except AgentError as e:
             return self.fail_pass(row, str(e))
         answer = passes.clean_answer(result["answer"])
@@ -326,25 +345,39 @@ class Companion:
                                    total=answer.get("total"), mode=mode, session_id=produced)
         if kind == "pass" and card:
             for proposal in answer["proposals"]:
-                if self.maybe_auto(card["id"], snap, proposal["action"], proposal["payload"],
-                                   proposal["confidence"], proposal["reason"]):
+                if self.maybe_auto(card["id"], proposal["action"], proposal["payload"],
+                                   proposal["confidence"], proposal["reason"], source=name):
                     break
 
     # ---------- trust ladder
-    def maybe_auto(self, card_id, snap, action, payload, confidence, reason):
+    def maybe_auto(self, card_id, action, payload, confidence, reason, source):
         """Press the button for a trusted action type when confidence clears its bar.
-        Returns True when it acted; the card moves to Handled with the reason."""
+        Returns True when it acted; the card moves to Handled with the reason.
+
+        Only on a card that is still open, for a PR still open at the head the card was
+        made for, from a pass allowed to propose that action on that PR (AUTO_POLICY)."""
         flag = actions.TRUST_FLAG.get(action)
         rule = self.config["auto"].get(flag) if flag else None
-        if not rule or flag in HARD_LOCKED:
+        policy = AUTO_POLICY.get(action)
+        if not rule or flag in HARD_LOCKED or not policy or source not in policy["sources"]:
             return False
         if CONFIDENCE.get(confidence, 0) < CONFIDENCE[rule["min_confidence"]]:
             return False
+        card = self.db.card(card_id)
+        snap = self.db.pr(card["key"]) if card else None
+        if (not snap or snap.get("state") != "OPEN" or snap.get("dropped") or
+                snap["mine"] != policy["mine"] or card.get("head") != snap.get("head")):
+            return False
         if self.db.auto_runs(snap["key"], action) >= rule["max_per_pr"]:
+            return False
+        if action == "approve":
+            payload = {}  # an automatic approval carries no words you haven't read
+        if not self.db.claim_card(card_id):
             return False
         try:
             result = actions.run(self.github, action, snap, payload, self.action_context(snap))
         except Exception as e:
+            self.db.update_card(card_id, status="open")
             self.db.log(snap["key"], f"tried to {action.replace('_', ' ')} automatically: {e}")
             return False
         self.db.count_auto_run(snap["key"], action)
@@ -394,8 +427,8 @@ class Companion:
 
     def card_action(self, card_id, index, payload_override):
         card = self.db.card(card_id)
-        if not card:
-            raise LookupError("That card is gone.")
+        if not card or card["status"] != "open":
+            raise LookupError("That card is gone or already handled.")
         if card.get("kind") == "proposal":
             action, payload = card["action"], dict(card.get("payload") or {})
         else:
@@ -404,7 +437,13 @@ class Companion:
                 raise LookupError("That proposal is gone.")
             action, payload = proposals[index]["action"], dict(proposals[index].get("payload") or {})
         payload.update(payload_override or {})
-        return self.do_action(card["key"], action, payload, card_id)
+        if not self.db.claim_card(card_id):  # a second press while the first is running
+            raise LookupError("That card is already being handled.")
+        try:
+            return self.do_action(card["key"], action, payload, card_id)
+        except Exception:
+            self.db.update_card(card_id, status="open")
+            raise
 
     def undo(self, card_id):
         card = self.db.card(card_id)

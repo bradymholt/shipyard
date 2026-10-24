@@ -6,7 +6,7 @@ Head now: {head}  Your last review was on: {reviewed_commit} ({review_state})
 Your earlier review threads:
 {threads}
 
-Check each of your threads against the new commits (git diff {reviewed_commit}..HEAD where that commit exists, else `gh pr diff {number}`). Say for each whether it is addressed. Then decide whether the PR is ready to approve.
+Check each of your threads against the code as it is now (this checkout is at the PR's head; `gh pr diff {number}` shows the whole change, `gh pr view {number} --json commits` the commits since). Say for each whether it is addressed. Then decide whether the PR is ready to approve.
 
 Answer with one JSON object and nothing else:
 {{"summary": "N of M threads addressed; what is left",

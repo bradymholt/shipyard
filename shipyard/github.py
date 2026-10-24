@@ -40,10 +40,14 @@ class GitHub:
             self._token = self._token_source()
         return self._token
 
-    def request(self, method, url, body=None, accept="application/vnd.github+json", raw=False):
+    def request(self, method, url, body=None, accept="application/vnd.github+json", raw=False,
+                retry=None):
+        """Reads retry on 5xx and network errors. Writes never do: a timeout after GitHub
+        already applied one would post the reply, the review, or the merge twice."""
         data = json.dumps(body).encode() if body is not None else None
+        retry = method == "GET" if retry is None else retry
         last = None
-        for attempt in range(4):
+        for attempt in range(4 if retry else 1):
             if attempt:
                 time.sleep(0.5 * 2 ** (attempt - 1))
             req = urllib.request.Request(url, data=data, method=method, headers={
@@ -74,7 +78,9 @@ class GitHub:
         raise last
 
     def graphql(self, query, variables=None):
-        out = self.request("POST", f"{API}/graphql", {"query": query, "variables": variables or {}})
+        mutation = query.lstrip().startswith("mutation")
+        out = self.request("POST", f"{API}/graphql", {"query": query, "variables": variables or {}},
+                           retry=not mutation)
         if out.get("errors") and not any((out.get("data") or {}).values()):
             raise GitHubError("; ".join(e.get("message", "") for e in out["errors"]))
         return out["data"]

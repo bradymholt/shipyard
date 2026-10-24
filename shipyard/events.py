@@ -16,8 +16,10 @@ def _review_ids(snap, state):
 def derive(prev, cur):
     events = []
 
-    def add(name, **data):
-        events.append({"name": name, "head": cur.get("head"), "data": data})
+    def add(name, key=None, **data):
+        # The head SHA is the dedupe key; `key` refines it when the same head can earn
+        # the event again (a second reviewer requesting changes on the same commit).
+        events.append({"name": name, "head": f"{cur.get('head')}{key or ''}", "data": data})
 
     first = prev is None
     if cur["state"] == "MERGED":
@@ -37,7 +39,8 @@ def derive(prev, cur):
             set() if first else _review_ids(prev, "CHANGES_REQUESTED"))
         if changes and (first or prev.get("decision") != "CHANGES_REQUESTED" or new_change_reviews):
             requesters = [r["author"] for r in cur["reviews"] if r["state"] == "CHANGES_REQUESTED"]
-            add("changes_requested", reviewers=requesters)
+            ids = sorted(str(i) for i in _review_ids(cur, "CHANGES_REQUESTED") if i is not None)
+            add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=requesters)
         if (not first and prev.get("head") != cur.get("head") and
                 prev.get("decision") == "CHANGES_REQUESTED"):
             pending = set(cur.get("requested") or [])

@@ -53,6 +53,7 @@ class FakeAgent:
         self.live = False
         self.answers = {}
         self.discarded = []
+        self.before_answer = None
 
     def available(self):
         return True
@@ -76,8 +77,11 @@ class FakeAgent:
         self.discarded.append(sid)
         return True
 
-    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None):
-        self.runs.append({"cwd": cwd, "prompt": prompt, "mode": mode, "session": session_id})
+    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False):
+        self.runs.append({"cwd": cwd, "prompt": prompt, "mode": mode, "session": session_id,
+                          "untrusted": untrusted})
+        if self.before_answer:
+            self.before_answer()
         produced = new_session_id or {"fork": "fork-1", "fresh": "fresh-1"}.get(mode, session_id)
         answer = next((a for marker, a in self.answers.items() if marker in prompt),
                       {"summary": "ok", "proposals": []})
@@ -208,6 +212,38 @@ class CiFailed(CompanionCase):
         self.assertEqual(pr["handled"][0]["handled"]["reason"], "looked flaky")
         self.assertFalse(pr["handled"][0]["handled"]["undoable"])
 
+    def test_no_auto_action_when_the_card_closed_while_the_pass_ran(self):
+        self.comp.set_trust("rerun_checks", True)
+        node = self.red()
+        self.gh.put(node, "author:@me")
+
+        def ci_recovers():  # CI goes green and the card closes before the agent answers
+            for card in self.comp.db.cards("o/r#1", ("open",)):
+                self.comp.db.update_card(card["id"], status="done")
+        self.agent.before_answer = ci_recovers
+        self.poll()
+        self.assertFalse(any("rerun" in c[1] for c in self.gh.calls if c[0] == "POST"))
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["handled"], [])
+
+    def test_no_auto_action_when_the_head_moved(self):
+        self.comp.set_trust("rerun_checks", True)
+        self.gh.put(self.red(), "author:@me")
+
+        def pushed():
+            snap = self.comp.db.pr("o/r#1")
+            self.comp.db.save_pr({**snap, "head": "newer"})
+        self.agent.before_answer = pushed
+        self.poll()
+        self.assertFalse(any("rerun" in c[1] for c in self.gh.calls if c[0] == "POST"))
+
+    def test_a_card_acts_once(self):
+        self.gh.put(self.red(), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.comp.card_action(card["id"], 0, None)
+        with self.assertRaises(LookupError):
+            self.comp.card_action(card["id"], 0, None)
+        self.assertEqual(len([c for c in self.gh.calls if "rerun" in c[1]]), 1)
+
     def test_max_per_pr_caps_automatic_reruns(self):
         self.comp.set_trust("rerun_checks", True)
         for head in ("a1", "a2", "a3"):
@@ -251,6 +287,7 @@ class Reviews(CompanionCase):
         pr = self.poll()["o/r#5"]
         run = self.agent.runs[0]
         self.assertEqual((run["mode"], run["cwd"]), ("fresh", self.checkout))
+        self.assertTrue(run["untrusted"])  # their checkout's agent settings don't load
         self.assertEqual(self.comp.db.pin("o/r#5")["how"], "shipyard")
         self.assertEqual(self.agent.discarded, [])  # the pinned review session stays
         card = pr["cards"][0]
@@ -269,6 +306,35 @@ class Reviews(CompanionCase):
         worktrees.review_worktree.assert_called()
         self.assertEqual(self.agent.runs[0]["cwd"], self.checkout)
         self.assertEqual(pr["cards"][0]["kind"], "pass")
+
+
+    def test_trusted_approve_only_from_re_review_and_without_agent_text(self):
+        self.comp.set_trust("approve_rereview", True)
+        self.agent.answers["first-pass code review"] = {"summary": "ok", "proposals": [
+            {"action": "approve", "confidence": "high", "reason": "fine", "payload": {"body": "LGTM!!"}}]}
+        self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
+        self.poll()
+        self.assertFalse(any(c[1].endswith("/reviews") for c in self.gh.calls))  # a first review stays manual
+        self.agent.answers = {"re-review": {"summary": "all addressed", "proposals": [
+            {"action": "approve", "confidence": "high", "reason": "threads fixed", "payload": {"body": "agent words"}}]}}
+        review = {"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-19T00:00:00Z",
+                  "commit": {"oid": "old"}}
+        self.gh.put(pr_node(number=7, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
+        self.poll()
+        posted = [c for c in self.gh.calls if c[1] == "/repos/o/r/pulls/7/reviews"]
+        self.assertEqual(len(posted), 1)
+        self.assertEqual(posted[0][2]["event"], "APPROVE")
+        self.assertNotIn("body", posted[0][2])
+
+    def test_trusted_actions_never_fire_on_someone_elses_pr(self):
+        self.comp.set_trust("rerun_checks", True)
+        self.agent.answers["re-review"] = {"summary": "flaky", "proposals": [
+            {"action": "rerun_checks", "confidence": "high", "reason": "flaky"}]}
+        review = {"databaseId": 9, "state": "COMMENTED", "submittedAt": "2026-10-19T00:00:00Z", "commit": {"oid": "old"}}
+        self.gh.put(pr_node(number=8, author="bob", requested=[VIEWER], my_review=review, ci="FAILURE",
+                            contexts=[check_run("rspec", "FAILURE")]), "review-requested:@me")
+        self.poll()
+        self.assertFalse(any("rerun" in c[1] for c in self.gh.calls))
 
 
 class Proposals(CompanionCase):
@@ -297,6 +363,17 @@ class Proposals(CompanionCase):
         self.assertTrue(handled["handled"]["undoable"])
         self.comp.undo(handled["id"])
         self.assertEqual(self.gh.calls[-1][0], "DELETE")
+
+
+class Dropped(CompanionCase):
+    def test_pr_that_leaves_every_list_is_read_once_then_left(self):
+        node = pr_node(number=5, author="alice", requested=[VIEWER])
+        self.gh.put(node, "review-requested:@me")
+        self.assertEqual(len(self.poll()["o/r#5"]["cards"]), 1)
+        node["reviewRequests"]["nodes"] = []
+        self.gh.put(node)  # request withdrawn: in no list, still open
+        self.assertEqual(self.poll()["o/r#5"]["cards"], [])
+        self.assertNotIn(node["id"], self.comp.db.open_node_ids())
 
 
 class PageRequests(CompanionCase):

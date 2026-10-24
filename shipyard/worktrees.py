@@ -505,10 +505,15 @@ def cleanup_worktree(repo, branch, roots, merged_head=None, path=None):
         path = here["path"]
     if not is_managed(clone, path):
         return {"ok": False, "error": "Shipyard only cleans up worktrees under .claude/worktrees/."}
+    review = re.fullmatch(r"review-(\d+)", os.path.basename(path))
+    if review and has_review_commits(clone, path, review.group(1)):
+        return {"ok": False, "error": "The review worktree has commits of its own; move them to a branch first."}
     error = mutate_git(clone, "worktree", "remove", path, timeout=60)
     if error:
         return {"ok": False, "error": "Couldn't remove the worktree — it has uncommitted or "
                 f"untracked files. Commit, stash, or delete them first.\n{error}"}
+    if review:
+        mutate_git(clone, "update-ref", "-d", review_ref(review.group(1)), timeout=30)
     deleted = False
     if branch:
         try:
@@ -523,24 +528,44 @@ def cleanup_worktree(repo, branch, roots, merged_head=None, path=None):
     return {"ok": True, "removed": path, "branchDeleted": deleted}
 
 
+def review_ref(number):
+    return f"refs/shipyard/review/{int(number)}"
+
+
+def has_review_commits(clone, path, number):
+    """Commits made in a review worktree that aren't part of the PR as last fetched.
+    A detached checkout would leave them reachable only through the reflog."""
+    known = try_git(clone, "rev-parse", "--verify", "--quiet", review_ref(number)).strip()
+    here = try_git(path, "rev-parse", "HEAD").strip()
+    if not known or not here or here == known:
+        return False
+    return run_git(clone, "merge-base", "--is-ancestor", here, known).returncode != 0
+
+
 def review_worktree(repo, number, head, roots):
     """A detached worktree at a PR's head, for reviewing someone else's PR:
     <clone>/.claude/worktrees/review-<number>. Reused (and moved to the new head) when
-    it already exists; refuses to move one with local edits."""
+    it already exists; refuses to move one with local edits or commits of its own."""
     clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
     path = os.path.join(managed_worktree_dir(clone), f"review-{int(number)}")
-    error = mutate_git(clone, "fetch", "origin", f"pull/{int(number)}/head", timeout=120)
-    if error:
-        return {"ok": False, "error": f"Couldn't fetch the PR: {error}"}
-    target = head or try_git(clone, "rev-parse", "FETCH_HEAD").strip()
     if os.path.isdir(path):
         try:
             if has_tracked_changes(path):
                 return {"ok": False, "error": f"The review worktree {path} has local edits."}
         except GitError as e:
             return {"ok": False, "error": str(e)}
+        if has_review_commits(clone, path, number):
+            return {"ok": False, "error": f"The review worktree {path} has commits of its own; "
+                    "move them to a branch first."}
+    error = mutate_git(clone, "fetch", "origin", f"+pull/{int(number)}/head:{review_ref(number)}", timeout=120)
+    if error:
+        return {"ok": False, "error": f"Couldn't fetch the PR: {error}"}
+    target = head or try_git(clone, "rev-parse", review_ref(number)).strip()
+    if os.path.isdir(path):
+        if try_git(path, "rev-parse", "HEAD").strip() == target:
+            return {"ok": True, "path": path}
         error = mutate_git(path, "checkout", "--detach", target, timeout=60)
     else:
         error = mutate_git(clone, "worktree", "add", "--detach", path, target, timeout=120)

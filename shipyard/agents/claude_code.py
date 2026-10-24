@@ -6,13 +6,13 @@ from pathlib import Path
 
 from . import PASS_TIMEOUT, Adapter, AgentError, parse_json_answer
 
-# Passes only read: files, git history, and the PR on GitHub. Only the interactive
-# session you open yourself edits files.
+# Passes only read: files and the PR on GitHub. Only the interactive session you open
+# yourself edits files. git log/diff/show are left out because --output writes a file;
+# `gh pr diff` and `gh pr view` cover what a pass needs.
 READ_ONLY_TOOLS = [
     "Read", "Grep", "Glob", "Task",
-    "Bash(git log:*)", "Bash(git diff:*)", "Bash(git show:*)", "Bash(git status:*)",
-    "Bash(git blame:*)", "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr checks:*)",
-    "Bash(gh run view:*)",
+    "Bash(git status:*)", "Bash(git blame:*)",
+    "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr checks:*)", "Bash(gh run view:*)",
 ]
 WRITE_TOOLS = ["Edit", "Write", "NotebookEdit", "MultiEdit"]
 # Set when the companion itself was started from inside a Claude Code session; passed
@@ -53,10 +53,14 @@ class ClaudeCode(Adapter):
                 out.append(content)
         return out
 
-    def command(self, prompt, schema, mode, session_id, new_session_id):
+    def command(self, prompt, schema, mode, session_id, new_session_id, untrusted=False):
         argv = ["claude", "-p", prompt, "--output-format", "json",
                 "--json-schema", json.dumps(schema),
                 "--allowedTools", *READ_ONLY_TOOLS, "--disallowedTools", *WRITE_TOOLS]
+        if untrusted:
+            # Someone else's PR may ship .claude/settings.json hooks or allow rules;
+            # load only your user settings.
+            argv += ["--setting-sources", "user"]
         if mode in ("resume", "fork"):
             argv += ["--resume", session_id]
             if mode == "fork":
@@ -65,8 +69,8 @@ class ClaudeCode(Adapter):
             argv += ["--session-id", new_session_id]
         return argv
 
-    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None):
-        argv = self.command(prompt, schema, mode, session_id, new_session_id)
+    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False):
+        argv = self.command(prompt, schema, mode, session_id, new_session_id, untrusted)
         try:
             env = {k: v for k, v in os.environ.items() if k not in PARENT_SESSION_VARS}
             r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=env,

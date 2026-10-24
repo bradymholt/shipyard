@@ -73,7 +73,8 @@ class Codex(Adapter):
             return ["codex", "exec", *opts, "resume", session_id, prompt]
         return ["codex", "exec", *opts, prompt]
 
-    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None):
+    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False):
+        # The read-only sandbox has no hooks or network, so untrusted code changes nothing here.
         if mode == "fork":
             mode = "fresh"
         with tempfile.TemporaryDirectory() as tmp:

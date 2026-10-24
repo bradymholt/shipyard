@@ -40,9 +40,17 @@ class State:
         self.lock = threading.RLock()
         with self.lock:
             self.db.executescript(SCHEMA)
-            # A restart (a config save reloads the companion) cuts running passes short;
-            # put them back in the queue rather than leaving them stuck.
-            self.db.execute("UPDATE passes SET status = 'queued' WHERE status = 'running'")
+            # A restart (under launchd, a config save reloads the companion) cuts running
+            # passes short. Re-running one could add a second turn to your session, so
+            # mark it failed; its card offers Try again.
+            self.db.execute("UPDATE passes SET status = 'failed', error = 'interrupted by a restart' "
+                            "WHERE status IN ('running', 'queued')")
+            for row in self.db.execute("SELECT card_id FROM passes WHERE error = 'interrupted by a restart' "
+                                       "AND card_id IS NOT NULL").fetchall():
+                self.db.execute("UPDATE cards SET data = json_set(data, '$.kind', 'error', '$.error', "
+                                "'Interrupted by a restart.') WHERE id = ? AND status = 'open' "
+                                "AND json_extract(data, '$.kind') = 'running'", (row[0],))
+            self.db.execute("UPDATE cards SET status = 'open' WHERE status = 'acting'")
             self.db.commit()
 
     def close(self):
@@ -74,14 +82,20 @@ class State:
                    (snap["key"], snap["id"], json.dumps(snap), time.time()))
 
     def open_node_ids(self):
-        return {json.loads(r["snapshot"])["id"] for r in self._rows("SELECT snapshot FROM prs")
-                if json.loads(r["snapshot"]).get("state") == "OPEN"}
+        """Open PRs still on one of your lists; a PR that dropped off every list (say a
+        review request was withdrawn) is read once more, then left alone."""
+        out = set()
+        for r in self._rows("SELECT snapshot FROM prs"):
+            snap = json.loads(r["snapshot"])
+            if snap.get("state") == "OPEN" and not snap.get("dropped"):
+                out.add(snap["id"])
+        return out
 
     def forget_old_prs(self, days=14):
-        """Closed PRs stay a while for Recently Merged cleanup, then go."""
+        """Closed or dropped PRs stay a while for Recently Merged cleanup, then go."""
         cutoff = time.time() - days * 86400
-        self._exec("DELETE FROM prs WHERE seen < ? AND json_extract(snapshot, '$.state') != 'OPEN'",
-                   (cutoff,))
+        self._exec("DELETE FROM prs WHERE seen < ? AND (json_extract(snapshot, '$.state') != 'OPEN' "
+                   "OR json_extract(snapshot, '$.dropped'))", (cutoff,))
 
     # ---- events
     def record_event(self, key, event):
@@ -121,6 +135,15 @@ class State:
                          (key, status, json.dumps(data), t, t))
         return cur.lastrowid
 
+    def delete_card(self, card_id):
+        self._exec("DELETE FROM cards WHERE id = ?", (card_id,))
+
+    def claim_card(self, card_id):
+        """Atomically move an open card to 'acting' so one press acts once."""
+        cur = self._exec("UPDATE cards SET status = 'acting', updated = ? WHERE id = ? AND status = 'open'",
+                         (now_iso(), card_id))
+        return cur.rowcount == 1
+
     def card(self, card_id):
         rows = self._rows("SELECT * FROM cards WHERE id = ?", (card_id,))
         return self._card(rows[0]) if rows else None
@@ -151,15 +174,21 @@ class State:
         return [self._card(r) for r in self._rows(sql + " ORDER BY id", args)]
 
     # ---- passes
-    def queue_pass(self, key, name, head, mode, question=None):
-        """The new pass id, or None when this pass already ran for this head."""
+    def queue_pass(self, key, name, head, mode, card_id, question=None):
+        """The new pass id, or None when this pass already ran for this head. The card
+        is attached in the same insert, so a worker never sees a pass without one."""
         try:
-            cur = self._exec("INSERT INTO passes (key, name, head, status, mode, question, created) "
-                             "VALUES (?, ?, ?, 'queued', ?, ?, ?)",
-                             (key, name, head or "", mode, question, now_iso()))
+            cur = self._exec("INSERT INTO passes (key, name, head, status, mode, card_id, question, created) "
+                             "VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)",
+                             (key, name, head or "", mode, card_id, question, now_iso()))
             return cur.lastrowid
         except sqlite3.IntegrityError:
             return None
+
+    def claim_pass(self, pass_id):
+        """Atomically move a queued pass to running; False when another thread got it."""
+        cur = self._exec("UPDATE passes SET status = 'running' WHERE id = ? AND status = 'queued'", (pass_id,))
+        return cur.rowcount == 1
 
     def pass_(self, pass_id):
         rows = self._rows("SELECT * FROM passes WHERE id = ?", (pass_id,))

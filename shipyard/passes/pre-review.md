@@ -5,7 +5,7 @@ Base: {base}  Head: {head}
 Description:
 {body}
 
-Read the change (git diff origin/{base}...HEAD, or `gh pr diff {number}`). Use sub-agents for large diffs. Look for correctness bugs, missing tests, risky edge cases, and anything that contradicts the description. Skip style nits unless they hide a bug.
+Read the change with `gh pr diff {number}`, and the files around it with Read. Use sub-agents for large diffs. Look for correctness bugs, missing tests, risky edge cases, and anything that contradicts the description. Skip style nits unless they hide a bug.
 
 Answer with one JSON object and nothing else:
 {{"summary": "3-5 sentences: what the PR does, how solid it is, the main concerns",

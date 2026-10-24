@@ -95,6 +95,11 @@ class ClaudeSessions(HomeCase):
         self.assertNotIn("Edit", argv[argv.index("--allowedTools"):argv.index("--disallowedTools")])
         fresh = ClaudeCode().command("hi", {}, "fresh", None, "new-id")
         self.assertEqual(fresh[fresh.index("--session-id") + 1], "new-id")
+        self.assertNotIn("--setting-sources", fresh)
+        theirs = ClaudeCode().command("hi", {}, "fresh", None, "x", untrusted=True)
+        self.assertEqual(theirs[theirs.index("--setting-sources") + 1], "user")
+        # git commands that can write files with --output aren't allowed at all
+        self.assertFalse(any(t.startswith(("Bash(git diff", "Bash(git log", "Bash(git show")) for t in theirs))
 
     def test_run_parses_structured_output(self):
         self.fake_cli("claude", """
