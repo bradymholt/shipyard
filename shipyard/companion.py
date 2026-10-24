@@ -33,12 +33,20 @@ TRUST_OFFER_AFTER = 3  # manual clicks on one action type before the card offers
 LIVE_CACHE_SECONDS = 15
 
 PASS_ACTIVITY = {
-    "changes_requested": "asked the PR session for a plan",
-    "ci_failed": "asked a fork of the PR session why CI failed",
-    "pre_review": "ran a pre-review in a review worktree",
-    "re_review": "asked the review session to re-check its threads",
-    "ask": "asked the PR session a question",
+    "changes_requested": "asked for a plan",
+    "ci_failed": "asked why CI failed",
+    "pre_review": "ran a pre-review",
+    "re_review": "asked for a re-check of the review threads",
+    "ask": "asked a question",
 }
+
+
+def session_used(mode, pinned_after):
+    if mode == "fork":
+        return "in a fork of the pinned session"
+    if mode == "resume":
+        return "in the pinned session"
+    return "in a new session, now pinned" if pinned_after else "in a new throwaway session"
 
 
 class Companion:
@@ -338,7 +346,7 @@ class Companion:
                             summary=answer["summary"][:500])
         if pin_after and produced:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
-        self.db.log(snap["key"], PASS_ACTIVITY.get(name, f"ran {name}"))
+        self.db.log(snap["key"], f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced)}')
         kind = "answer" if name == "ask" else "pass"
         card = self.db.update_card(row["card_id"], kind=kind, summary=answer["summary"],
                                    proposals=answer["proposals"], addressed=answer.get("addressed"),

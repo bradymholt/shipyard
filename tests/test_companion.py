@@ -155,7 +155,7 @@ class ChangesRequested(CompanionCase):
         card = pr["cards"][0]
         self.assertEqual(card["kind"], "pass")
         self.assertEqual([p["action"] for p in card["proposals"]], ["continue", "post_reply"])
-        self.assertIn("asked the PR session for a plan", [a["text"] for a in pr["activity"]])
+        self.assertIn("asked for a plan in the pinned session", [a["text"] for a in pr["activity"]])
 
         # the same state polled again runs nothing new
         self.poll()
@@ -405,7 +405,9 @@ class PageRequests(CompanionCase):
         self.idle()
         self.assertEqual(self.agent.runs[-1]["mode"], "fork")
         self.assertIn("what did we decide about caching?", self.agent.runs[-1]["prompt"])
-        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"][0]["kind"], "answer")
+        pr = self.comp.page_state()["prs"]["o/r#1"]
+        self.assertEqual(pr["cards"][0]["kind"], "answer")
+        self.assertIn("asked a question in a fork of the pinned session", [a["text"] for a in pr["activity"]])
         with self.assertRaises(ValueError):
             self.comp.ask("o/r#1", "   ")
 
