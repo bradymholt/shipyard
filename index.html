@@ -2691,7 +2691,7 @@
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(card, p, i)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
       <p>${esc(card.summary || "")}</p>${proposals}
-      <div class="nc-actions">${continueButton(pr)}${viewLog}${onlyAsk}</div>${trustToggles(card)}</div>`;
+      ${card.pass === "ask" ? "" : `<div class="nc-actions">${continueButton(pr)}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
   }
 
   // With no card from the companion, the chip still implies the buttons that fit it.
