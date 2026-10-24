@@ -13,14 +13,13 @@ from .github import GitHubError
 # Trust flag behind each action type; actions without one are always manual.
 TRUST_FLAG = {
     "rerun_checks": "rerun_checks",
-    "rerequest_review": "rerequest_review",
     "enable_auto_merge": "enable_auto_merge",
     "approve": "approve_rereview",
     "post_reply": "post_reply",
     "apply_fix": "apply_fix",
 }
 # What Undo does for an automatic action, where there is a sensible inverse.
-UNDOABLE = {"rerequest_review", "enable_auto_merge"}
+UNDOABLE = {"enable_auto_merge"}
 MERGE_METHODS = ("SQUASH", "MERGE", "REBASE")
 
 
@@ -53,11 +52,6 @@ def rerequest_review(gh, snap, payload, ctx):
         raise ActionError("No reviewers to re-request.")
     gh.rest("POST", f"{_pulls(snap)}/requested_reviewers", _reviewer_lists(reviewers))
     return f"re-requested review from {', '.join(reviewers)}"
-
-
-def undo_rerequest_review(gh, snap, payload, ctx):
-    gh.rest("DELETE", f"{_pulls(snap)}/requested_reviewers", _reviewer_lists(payload.get("reviewers") or []))
-    return "withdrew the review request"
 
 
 def _method_not_allowed(error):
@@ -221,7 +215,7 @@ RUN = {
     "post_reply": post_reply, "nudge": nudge, "approve": approve,
     "comment_unresolved": comment_unresolved, "submit_review": submit_review, "apply_fix": apply_fix,
 }
-UNDO = {"rerequest_review": undo_rerequest_review, "enable_auto_merge": undo_enable_auto_merge}
+UNDO = {"enable_auto_merge": undo_enable_auto_merge}
 
 
 def run(gh, action, snap, payload, ctx=None):

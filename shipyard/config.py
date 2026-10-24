@@ -79,7 +79,6 @@ PASS_MODES = ("auto", "ask", False)
 # agent's proposal needs before the companion presses the button itself.
 AUTO_DEFAULTS = {
     "rerun_checks": False,
-    "rerequest_review": False,
     "enable_auto_merge": False,
     "approve_rereview": False,
     "post_reply": False,

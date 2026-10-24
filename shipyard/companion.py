@@ -25,7 +25,6 @@ PASS_WORKERS = 2
 AUTO_POLICY = {
     "rerun_checks": {"sources": {"ci_failed"}, "mine": True},
     "apply_fix": {"sources": {"ci_failed"}, "mine": True},
-    "rerequest_review": {"sources": {"rule"}, "mine": True},
     "enable_auto_merge": {"sources": {"changes_requested", "ci_failed"}, "mine": True},
     "approve": {"sources": {"re_review"}, "mine": False},
 }
