@@ -1480,7 +1480,7 @@
     const checkout = sessionTarget(pr, wt);
     if (!agent || !checkout) return "";
     const icon = AGENT_ICONS[agent.sessions] || DEFAULT_AGENT_ICON;
-    const title = companionPr(pr)
+    const title = state.orchestrator
       ? `Open the PR session in ${agent.name} (last active ${timeAgo(checkout.session.updated * 1000)})`
       : `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
     if (agent.mode === "command") {
@@ -2571,11 +2571,11 @@
     return `<a class="${cls}" ${data} href="${esc(url)}" title="Open the PR session in ${esc(agent.name)}">${inner}</a>`;
   }
 
-  // The session every link for a PR opens: the pinned one when the companion follows the
-  // PR (none if nothing is pinned), else the checkout's latest.
+  // The session every link for a PR opens: the pinned one when the companion pins sessions
+  // (none if nothing is pinned), else the checkout's latest.
   function sessionTarget(pr, wt = worktreeFor(pr)) {
     const cp = companionPr(pr);
-    if (cp) return cp.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
+    if (cp || state.orchestrator) return cp?.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
     return wt?.session ? { path: wt.path, session: wt.session } : null;
   }
 
