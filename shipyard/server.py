@@ -191,7 +191,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "snooze": lambda c: c.snooze(arg("key"), body.get("hours")),
             "pin": lambda c: c.repin(arg("key"), arg("session")),
             "ask": lambda c: c.ask(arg("key"), body.get("question")),
-            "run-pass": lambda c: c.run_pass_now(arg("key"), arg("pass")),
+            "run-pass": lambda c: c.run_pass_now(arg("key"), arg("pass"), arg("node") or None),
             "card-action": lambda c: c.card_action(card_id(), int(arg("index") or 0), body.get("payload")),
             "dismiss": lambda c: c.dismiss(card_id()),
             "undo": lambda c: c.undo(card_id()),

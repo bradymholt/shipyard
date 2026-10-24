@@ -2798,7 +2798,11 @@
     if (!state.orchestrator || !state.agent) return "";
     const key = prKey(pr);
     const cp = companionPr(pr);
-    if (!cp) return "";
+    const fresh = `<button type="button" class="nc-quiet" data-run-pass="new_session" data-node="${esc(pr.id)}" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
+    if (!cp) {
+      return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
+        <div class="sb-empty">No ${esc(agentName())} session for this PR.</div><div class="nc-actions">${fresh}</div></div></div>`;
+    }
     const s = cp.session;
     let picker = "";
     if (sessionChoices?.key === key) {
@@ -2809,7 +2813,6 @@
         : `<div class="sb-empty">No ${esc(agentName())} sessions in this checkout.</div>`;
     }
     const repin = cp.path ? `<button type="button" class="nc-quiet" data-repin="${esc(key)}">Re-pin</button>` : "";
-    const fresh = `<button type="button" class="nc-quiet" data-run-pass="new_session" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
     let body;
     if (!s) {
       body = `<div class="sb-empty">${cp.path ? `No ${esc(agentName())} session pinned yet.` : "No local checkout for this PR."}</div>
@@ -2959,7 +2962,8 @@
       return;
     }
     if ((btn = t("[data-run-pass]"))) {
-      return busy(btn, () => companionCall(`companion/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}`), `Couldn't ask ${agentName()}`);
+      const node = btn.dataset.node ? `&node=${encodeURIComponent(btn.dataset.node)}` : "";
+      return busy(btn, () => companionCall(`companion/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}${node}`), `Couldn't ask ${agentName()}`);
     }
     if ((btn = t("[data-dismiss]"))) return busy(btn, () => companionCall(`companion/dismiss?card=${btn.dataset.dismiss}`));
     if ((btn = t("[data-undo]"))) return busy(btn, () => companionCall(`companion/undo?card=${btn.dataset.undo}`), "Couldn't undo");

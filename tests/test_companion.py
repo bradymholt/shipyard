@@ -421,6 +421,14 @@ class PageRequests(CompanionCase):
         self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "fresh-1")
         self.assertEqual(self.agent.discarded, [])
 
+    def test_new_session_reads_a_merged_pr_it_never_saw(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.gh.put(pr_node(number=9, state="MERGED"))
+        self.comp.run_pass_now("o/r#9", "new_session", "PR_o/r_9")
+        self.idle()
+        self.assertEqual(self.comp.db.pin("o/r#9")["session_id"], "fresh-1")
+
     def test_post_reply_cannot_be_trusted(self):
         with self.assertRaises(ValueError):
             self.comp.set_trust("post_reply", True)

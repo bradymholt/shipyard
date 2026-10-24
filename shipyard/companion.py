@@ -499,7 +499,11 @@ class Companion:
                 self.db.update_card(card["id"], status="done")
         return {"ok": True, "card": self.queue_pass(snap, "ask", question)}
 
-    def run_pass_now(self, key, name):
+    def run_pass_now(self, key, name, node_id=None):
+        if name == "new_session" and node_id and self.viewer and not self.db.pr(key):
+            # Merged before the companion saw it: read it once so there is something to pin to.
+            for found in self.poller.details([node_id], self.viewer):
+                self.db.save_pr(found)
         snap = self.snapshot_or_error(key)
         if name not in passes.TITLES or name == "ask":
             raise ValueError(f"Unknown pass: {name}")
