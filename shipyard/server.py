@@ -30,7 +30,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       ".webmanifest": "application/manifest+json"}
     BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-main",
                       "/move-to-worktree", "/open-default-main", "/open-app", "/open-agent"}
-    COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/ask", "/companion/run-pass",
+    COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
                          "/companion/trust", "/companion/rule", "/companion/pr-action",
                          "/companion/cleanup"}
@@ -190,6 +190,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         calls = {
             "snooze": lambda c: c.snooze(arg("key"), body.get("hours")),
             "pin": lambda c: c.repin(arg("key"), arg("session")),
+            "unpin": lambda c: c.unpin(arg("key")),
             "ask": lambda c: c.ask(arg("key"), body.get("question")),
             "run-pass": lambda c: c.run_pass_now(arg("key"), arg("pass"), arg("node") or None),
             "card-action": lambda c: c.card_action(card_id(), int(arg("index") or 0), body.get("payload")),

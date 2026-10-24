@@ -387,6 +387,9 @@ class PageRequests(CompanionCase):
         self.assertIsNone(self.comp.page_state()["prs"]["o/r#1"]["chip"])
         self.comp.repin("o/r#1", "s-other")
         self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "s-other")
+        self.comp.unpin("o/r#1")
+        self.poll()
+        self.assertIsNone(self.comp.db.pin("o/r#1")["session_id"])  # the poll doesn't pin its guess again
         with self.assertRaises(LookupError):
             self.comp.repin("o/r#1", "not-in-this-checkout")
 

@@ -199,7 +199,7 @@ class Companion:
         if not adapter or not wt:
             return None
         current = self.db.pin(key)
-        if current and current.get("session_id") and not force:
+        if current and (current.get("session_id") or current.get("how") == "unpinned") and not force:
             return current
         # A main clone holds sessions about many PRs, so its newest one says nothing about this PR.
         found = adapter.find_pr_session(wt["path"], snap["branch"], snap["url"], latest=not wt.get("main"))
@@ -536,6 +536,15 @@ class Companion:
             raise LookupError("That session isn't in this PR's checkout.")
         self.db.set_pin(key, path, session_id, "manual")
         self.db.log(key, "re-pinned the PR session")
+        self.publish()
+        return {"ok": True}
+
+    def unpin(self, key):
+        self.snapshot_or_error(key)
+        pin = self.db.pin(key)
+        # Kept as a row so the poll doesn't pin its same guess again.
+        self.db.set_pin(key, pin["path"] if pin else None, None, "unpinned")
+        self.db.log(key, "unpinned the PR session")
         self.publish()
         return {"ok": True}
 

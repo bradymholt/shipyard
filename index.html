@@ -2798,10 +2798,10 @@
     if (!state.orchestrator || !state.agent) return "";
     const key = prKey(pr);
     const cp = companionPr(pr);
-    const fresh = `<button type="button" class="nc-quiet" data-run-pass="new_session" data-node="${esc(pr.id)}" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
+    const newSession = (cls) => `<button type="button" class="${cls}" data-run-pass="new_session" data-node="${esc(pr.id)}" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
     if (!cp) {
       return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
-        <div class="sb-empty">No ${esc(agentName())} session for this PR.</div><div class="nc-actions">${fresh}</div></div></div>`;
+        <div class="sb-empty">No ${esc(agentName())} session for this PR.</div><div class="nc-actions">${newSession("")}</div></div></div>`;
     }
     const s = cp.session;
     let picker = "";
@@ -2815,8 +2815,8 @@
     const repin = cp.path ? `<button type="button" class="nc-quiet" data-repin="${esc(key)}">Re-pin</button>` : "";
     let body;
     if (!s) {
-      body = `<div class="sb-empty">${cp.path ? `No ${esc(agentName())} session pinned yet.` : "No local checkout for this PR."}</div>
-        <div class="nc-actions">${repin}${fresh}</div>`;
+      body = `<div class="sb-empty">${cp.path ? `No ${esc(agentName())} session pinned.` : "No local checkout for this PR."}</div>
+        <div class="nc-actions">${newSession("")}${repin}</div>`;
     } else {
       const yours = Math.max(0, s.turns - (s.shipyardTurns || 0));
       const ex = cp.exchange;
@@ -2825,7 +2825,8 @@
         <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${esc(timeAgo(s.updated * 1000))}`}
           · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
         ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${esc(timeAgo(ex.at))}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
-        <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}${fresh}</div>`;
+        <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}
+          <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
     }
     return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${body}${picker}</div></div>`;
   }
@@ -2989,6 +2990,7 @@
       });
     }
     if (t("[data-repin-cancel]")) { sessionChoices = null; return renderSidebar(); }
+    if ((btn = t("[data-unpin]"))) return busy(btn, () => companionCall(`companion/unpin?key=${encodeURIComponent(btn.dataset.unpin)}`));
     if ((btn = t("[data-pin]"))) {
       const session = fieldValue(`pin-${btn.dataset.pin}`);
       return busy(btn, async () => {
