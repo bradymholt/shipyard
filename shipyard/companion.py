@@ -427,6 +427,10 @@ class Companion:
         if self.db.auto_runs(snap["key"], action) >= rule["max_per_pr"]:
             return False
         if action == "approve":
+            held = self.rereview_too_big(snap, rule["max_lines"])
+            if held:
+                self.db.log(snap["key"], f"left the approval for you: {held}")
+                return False
             payload = {}  # an automatic approval carries no words you haven't read
         if not self.db.claim_card(card_id):
             return False
@@ -443,6 +447,26 @@ class Companion:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
+
+    def rereview_too_big(self, snap, max_lines):
+        """Why the change since your last review is too big to approve automatically, or None."""
+        reviewed = (snap.get("my_review") or {}).get("commit")
+        if not reviewed or not snap.get("head"):
+            return "couldn't tell which commit you last reviewed"
+        try:
+            compare = self.github.rest("GET", f"/repos/{snap['repo']}/compare/{reviewed}...{snap['head']}")
+        except Exception as e:
+            return f"couldn't size the change since your review ({e})"
+        files = compare.get("files") if isinstance(compare, dict) else None
+        if files is None or len(files) >= 300:
+            return "couldn't size the change since your review"
+        added = [f["filename"] for f in files if f.get("status") == "added"]
+        if added:
+            return f"it adds {', '.join(added[:3])}"
+        lines = sum(f.get("additions", 0) + f.get("deletions", 0) for f in files)
+        if lines > max_lines:
+            return f"{lines} lines changed since your review (limit {max_lines})"
+        return None
 
     def action_context(self, snap):
         wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
