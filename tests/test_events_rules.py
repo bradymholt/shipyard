@@ -43,6 +43,14 @@ class DeriveMine(unittest.TestCase):
         # same commit, new set of reviews: a distinct dedupe key, so it isn't swallowed
         self.assertNotEqual(events[0]["head"], derive(None, prev)[1]["head"])
 
+    def test_a_comment_review_while_changes_are_requested_fires_again(self):
+        prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", id=1)])
+        cur = snap(decision="CHANGES_REQUESTED", reviews=[review("COMMENTED", id=2)])
+        events = derive(prev, cur)
+        self.assertEqual(names(events), ["changes_requested"])
+        self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
+        self.assertNotEqual(events[0]["head"], derive(None, prev)[1]["head"])
+
     def test_push_after_changes_requested_proposes_re_request(self):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", commit="aaa")])
         cur = snap(head="bbb", decision="CHANGES_REQUESTED",

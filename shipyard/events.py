@@ -9,8 +9,22 @@ caller dedupes by (PR, event, head SHA), so a re-poll never fires the same event
 FAILING = {"FAILURE", "ERROR"}
 
 
-def _review_ids(snap, state):
-    return {r["id"] for r in snap.get("reviews") or [] if r.get("state") == state}
+FEEDBACK = {"CHANGES_REQUESTED", "COMMENTED"}
+
+
+def _feedback_ids(snap):
+    return {r["id"] for r in snap.get("reviews") or [] if r.get("state") in FEEDBACK}
+
+
+def requesters(snap):
+    """Who a changes-requested PR is waiting to hear back from. GitHub keeps the decision
+    until that reviewer approves, but a later comment-only review replaces theirs in
+    latestReviews; then it's whoever hasn't approved."""
+    reviews = snap.get("reviews") or []
+    asked = [r["author"] for r in reviews if r.get("state") == "CHANGES_REQUESTED"]
+    if asked or snap.get("decision") != "CHANGES_REQUESTED":
+        return asked
+    return [r["author"] for r in reviews if r.get("state") in FEEDBACK]
 
 
 def derive(prev, cur):
@@ -35,17 +49,15 @@ def derive(prev, cur):
         if first:
             add("pr_opened")
         changes = cur.get("decision") == "CHANGES_REQUESTED"
-        new_change_reviews = _review_ids(cur, "CHANGES_REQUESTED") - (
-            set() if first else _review_ids(prev, "CHANGES_REQUESTED"))
-        if changes and (first or prev.get("decision") != "CHANGES_REQUESTED" or new_change_reviews):
-            requesters = [r["author"] for r in cur["reviews"] if r["state"] == "CHANGES_REQUESTED"]
-            ids = sorted(str(i) for i in _review_ids(cur, "CHANGES_REQUESTED") if i is not None)
-            add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=requesters)
+        # A reviewer's comment-only review (each inline reply makes one) is new feedback too.
+        new_feedback = _feedback_ids(cur) - (set() if first else _feedback_ids(prev))
+        if changes and (first or prev.get("decision") != "CHANGES_REQUESTED" or new_feedback):
+            ids = sorted(str(i) for i in _feedback_ids(cur) if i is not None)
+            add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=requesters(cur))
         if (not first and prev.get("head") != cur.get("head") and
                 prev.get("decision") == "CHANGES_REQUESTED"):
             pending = set(cur.get("requested") or [])
-            reviewers = [r["author"] for r in cur["reviews"]
-                         if r["state"] == "CHANGES_REQUESTED" and r["author"] not in pending]
+            reviewers = [r for r in requesters(cur) if r not in pending]
             if reviewers:
                 add("pushed_after_changes_requested", reviewers=reviewers)
         failing = cur.get("ci") in FAILING
