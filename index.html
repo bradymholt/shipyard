@@ -2654,6 +2654,16 @@
 
   function proposalHtml(pr, card, p, i) {
     if (p.action === "continue") return p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : "";
+    if (p.action === "finish_on_github") {
+      const verdict = { COMMENT: "Comment", APPROVE: "Approve", REQUEST_CHANGES: "Request changes" }[p.payload?.event] || "Comment";
+      const drafted = p.payload?.error ? esc(p.payload.error) : "Drafted as a pending review on GitHub.";
+      return `
+      <div class="nc-proposal">
+        <div class="nc-reason"><strong>${verdict}</strong> · ${esc(p.confidence)} confidence — ${esc(p.reason || "")}</div>
+        <p class="nc-reason">${drafted}</p>
+        <div class="nc-actions"><a class="btn-link" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a></div>
+      </div>`;
+    }
     const field = `c${card.id}-${i}`;
     const label = ACTION_LABELS[p.action] || p.action;
     let body = "";

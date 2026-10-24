@@ -206,8 +206,8 @@ try {
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
-  await page.waitForSelector('#sidebar button.nc-run[data-action="submit_review"]');
-  check((await sb.locator(".nc-inline").textContent()).includes("search/tokenize.py:12"), "pre-review shows its inline comments before submitting");
+  await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
+  check((await sb.locator('a.btn-link:has-text("Finish review on GitHub")').getAttribute("href")).endsWith("/files"), "pre-review drafts on GitHub and links to the diff");
   await page.waitForTimeout(400);
   if (shots) await page.screenshot({ path: `${shots}/sidebar-review.png` });
   await page.keyboard.press("Escape");

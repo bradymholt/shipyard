@@ -116,6 +116,8 @@ def snapshot(node, viewer):
                             "submitted": r.get("submittedAt"), "body": (r.get("body") or "")[:2000],
                             "commit": (r.get("commit") or {}).get("oid")})
     mine = node.get("viewerLatestReview")
+    if mine and mine.get("state") == "PENDING":
+        mine = None
     threads = []
     for t in (node.get("reviewThreads") or {}).get("nodes") or []:
         threads.append({

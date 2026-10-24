@@ -135,7 +135,9 @@ def nudge(gh, snap, payload, ctx):
 
 
 def _review(gh, snap, event, body, comments=()):
-    review = {"event": event, "commit_id": snap.get("head")}
+    review = {"commit_id": snap.get("head")}
+    if event:
+        review["event"] = event
     if body:
         review["body"] = body
     inline = [{"path": c["path"], "line": int(c["line"]), "side": "RIGHT", "body": c["body"]}
@@ -145,6 +147,8 @@ def _review(gh, snap, event, body, comments=()):
     try:
         gh.rest("POST", f"{_pulls(snap)}/reviews", review)
     except GitHubError as e:
+        if "one pending review" in str(e):
+            raise ActionError("You already have a pending review on this PR; finish it on GitHub.") from e
         if not inline or e.status != 422:
             raise
         # A line outside the diff rejects the whole review; fold the comments into the body.
@@ -209,11 +213,18 @@ def apply_fix(gh, snap, payload, ctx):
     return "applied the fix and pushed"
 
 
+def draft_review(gh, snap, payload, ctx):
+    """Leave the review pending on GitHub, visible only to you until you submit it there."""
+    _review(gh, snap, None, (payload.get("body") or "").strip(), payload.get("comments") or [])
+    return "drafted a pending review on GitHub"
+
+
 RUN = {
     "rerun_checks": rerun_checks, "rerequest_review": rerequest_review,
     "enable_auto_merge": enable_auto_merge, "merge": merge, "mark_ready": mark_ready,
     "post_reply": post_reply, "nudge": nudge, "approve": approve,
     "comment_unresolved": comment_unresolved, "submit_review": submit_review, "apply_fix": apply_fix,
+    "draft_review": draft_review,
 }
 UNDO = {"enable_auto_merge": undo_enable_auto_merge}
 
