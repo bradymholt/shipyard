@@ -2621,7 +2621,7 @@
   }
 
   function proposalHtml(card, p, i) {
-    if (p.action === "continue") return "";
+    if (p.action === "continue") return p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : "";
     const field = `c${card.id}-${i}`;
     const label = ACTION_LABELS[p.action] || p.action;
     let body = "";
@@ -2666,6 +2666,9 @@
       ? `<button type="button" class="nc-quiet" data-only-ask="${esc(card.pass)}" title="Stop running this pass on its own; offer it here instead">Only run when I ask</button>` : "";
     const viewLog = card.pass === "ci_failed" && failingChecks(pr)[0]?.url
       ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "";
+    // Whether a re-run makes sense can hinge on what only you know (say, you freed a quota).
+    const rerun = card.pass === "ci_failed" && !(card.proposals || []).some((p) => p.action === "rerun_checks")
+      ? `<button type="button" class="nc-run" data-pr-action="rerun_checks">${esc(ACTION_LABELS.rerun_checks)}</button>` : "";
     if (card.kind === "running") {
       return `<div class="${cls}"><div class="nc-head"><span class="plan-dot running"></span>${title}</div>
         <p class="nc-reason">${esc(agentName())} is reading the PR${card.question ? `: “${esc(card.question)}”` : ""}…</p></div>`;
@@ -2691,7 +2694,7 @@
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(card, p, i)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
       <p>${esc(card.summary || "")}</p>${proposals}
-      ${card.pass === "ask" ? "" : `<div class="nc-actions">${continueButton(pr)}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
+      ${card.pass === "ask" ? "" : `<div class="nc-actions">${continueButton(pr)}${rerun}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
   }
 
   // With no card from the companion, the chip still implies the buttons that fit it.
