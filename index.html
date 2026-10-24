@@ -512,7 +512,7 @@
     transform: translateX(100%); transition: transform .18s ease-out; visibility: hidden;
   }
   body.sidebar-open #sidebar { transform: none; visibility: visible; }
-  @media (min-width: 1300px) { body.sidebar-open .container, body.sidebar-open .toolbar { margin-right: 400px; } }
+  @media (min-width: 1300px) { body.sidebar-open .container, body.sidebar-open .toolbar, body.sidebar-open .header-inner { margin-right: 400px; } }
   @media (max-width: 900px) {
     /* Too narrow to sit beside the board: stack below it instead. */
     #sidebar { position: static; width: auto; transform: none; transition: none; box-shadow: none;
