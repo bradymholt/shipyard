@@ -975,9 +975,10 @@
       }
     }
     latestReviews(first: 10) {
-      nodes { state author { login avatarUrl } }
+      nodes { state author { login avatarUrl } commit { oid } }
     }
-    commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 30) { nodes {
+    reviewThreads(first: 30) { nodes { isResolved comments(last: 1) { nodes { author { login } } } } }
+    commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
       __typename
       ... on CheckRun { name conclusion detailsUrl }
       ... on StatusContext { context state targetUrl }
@@ -2425,6 +2426,9 @@
   // The Reviews tab's copy of a PR carries viewerLatestReview; the targeted copy doesn't.
   const reviewedCopy = (pr) => state.reviewedPrs.find((r) => prKey(r) === prKey(pr)) || pr;
 
+  const changesRequestedBy = (pr) => (pr.latestReviews?.nodes || []).filter((r) => r.state === "CHANGES_REQUESTED" && r.author);
+  const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
+
   function githubChip(pr, reviewMode) {
     if (pr.mergedAt) return null;
     if (reviewMode) {
@@ -2440,10 +2444,17 @@
       return null;
     }
     if (pr.author?.login !== state.viewer) return null;
-    if (pr.reviewDecision === "CHANGES_REQUESTED" && ruleOn("address_feedback")) {
-      const who = new Set((pr.latestReviews?.nodes || [])
-        .filter((r) => r.state === "CHANGES_REQUESTED").map((r) => r.author?.login));
-      return { kind: "address_feedback", label: `Address feedback${who.size ? ` · ${who.size}` : ""}`, tone: "red" };
+    const waitingOn = changesRequestedBy(pr).filter((r) => !reviewRequested(pr, r.author?.login));
+    if (pr.reviewDecision === "CHANGES_REQUESTED" && waitingOn.length) {
+      const reviewers = waitingOn.map((r) => r.author.login);
+      const pushed = waitingOn.every((r) => r.commit?.oid && r.commit.oid !== pr.commits?.nodes?.[0]?.commit?.oid);
+      const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved);
+      const replied = open.length > 0 && open.every((t) => t.comments?.nodes?.[0]?.author?.login === state.viewer);
+      if ((pushed || replied) && ruleOn("rerequest_review"))
+        return { kind: "rerequest_review", label: `Re-request review · ${reviewers.length}`, tone: "gold", reviewers,
+          title: pushed ? "You pushed since the review" : "You replied last on every open thread" };
+      if (ruleOn("address_feedback"))
+        return { kind: "address_feedback", label: `Address feedback · ${reviewers.length}`, tone: "red", reviewers };
     }
     if (ciFailing(pr) && ruleOn("fix_ci")) {
       const failing = failingChecks(pr);
@@ -2714,13 +2725,20 @@
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">Keep</button>
           <button type="button" data-dismiss="${card.id}">Don't</button></div>${trustToggles(card)}</div>`;
     }
+    const rerequest = card.pass === "changes_requested" ? rerequestButton(githubChip(pr)?.reviewers, card.id) : "";
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(card, p, i)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
       <p>${esc(card.summary || "")}</p>${proposals}
-      ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
+      ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
+  }
+
+  function rerequestButton(reviewers, cardId) {
+    if (!reviewers?.length) return "";
+    const done = cardId ? ` data-done-card="${cardId}"` : "";
+    return `<button type="button" class="nc-run" data-pr-action="rerequest_review" data-reviewers="${esc(reviewers.join(","))}"${done}>Re-request review</button>`;
   }
 
   // With no card from the companion, the chip still implies the buttons that fit it.
@@ -2729,6 +2747,7 @@
     const key = prKey(pr);
     const field = `d-${key}-${chip.kind}`;
     const run = (action, label, cls = "") => `<button type="button" class="nc-run ${cls}" data-pr-action="${esc(action)}" data-field="${esc(field)}">${esc(label)}</button>`;
+    const rerequest = rerequestButton(chip.reviewers);
     const off = `<button type="button" class="nc-quiet" data-chip-off="${esc(chip.kind)}" title="Hide this chip on every card">Turn off this chip</button>`;
     let body = "";
     let actionsHtml = "";
@@ -2740,11 +2759,15 @@
       const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
       body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
       actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
+    } else if (chip.kind === "rerequest_review") {
+      body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
+      actionsHtml = rerequest + continueButton(pr);
     } else if (PASS_FOR_CHIP[chip.kind]) {
       body = { address_feedback: "Changes were requested.", fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
         review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
       actionsHtml = `<button type="button" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
-        + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "");
+        + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "")
+        + (chip.kind === "address_feedback" ? rerequest : "");
     } else {
       return "";
     }
@@ -3013,6 +3036,7 @@
       const payload = {};
       if (field && TEXT_ACTIONS.has(action)) payload.body = fieldValue(field) || "";
       if (action === "submit_review") payload.event = fieldValue(`${field}-event`) || "COMMENT";
+      if (btn.dataset.reviewers) payload.reviewers = btn.dataset.reviewers.split(",");
       const confirmText = {
         merge: `Merge #${pr?.number} now?`,
         apply_fix: "Apply this diff in your checkout, commit it, and push to the PR's branch?",
