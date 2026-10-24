@@ -85,6 +85,13 @@ class ClaudeSessions(HomeCase):
                                                        {"type": "assistant", "message": {}}])
         self.assertEqual(ClaudeCode().user_messages(text), ["one", "two"])
 
+    def test_title_is_the_last_custom_title(self):
+        text = "".join(json.dumps(r) + "\n" for r in [
+            user("first message"), {"type": "custom-title", "customTitle": "Old name"},
+            {"type": "ai-title", "aiTitle": "Generated name"}, {"type": "custom-title", "customTitle": "Desktop name"}])
+        self.assertEqual(ClaudeCode().title(text), "Desktop name")
+        self.assertIsNone(ClaudeCode().title(json.dumps(user("no title yet"))))
+
     def test_user_messages_keep_text_after_a_system_reminder(self):
         record = {"type": "user", "message": {"role": "user", "content": [
             {"type": "text", "text": "<system-reminder>\nYou are in a worktree\n</system-reminder>\n\n"},

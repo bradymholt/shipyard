@@ -7,6 +7,7 @@ of the companion (rules, passes, the page) never knows which CLI is behind it:
     list_sessions(path)        every session in a checkout, newest first
     find_pr_session(...)       the session that opened a PR, for pinning
     user_messages(text)        the messages typed into a session, for its title and turns
+    title(text)                the session's title in the agent's app, if recorded
     is_live(path, id)          whether the session is being written to right now
     discard(path, id)          delete a throwaway session Shipyard made for a question
     run(...)                   one headless turn: fresh, resume, or fork
@@ -135,6 +136,10 @@ class Adapter:
     def user_messages(self, text):
         """The text of each message a person (or Shipyard) typed, oldest first."""
         raise NotImplementedError
+
+    def title(self, text):
+        """The session's title as the agent's own app shows it, when the transcript has one."""
+        return None
 
     def find_pr_session(self, path, branch, pr_url):
         """The session that opened a PR: the newest one whose transcript ran `gh pr create`

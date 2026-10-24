@@ -567,8 +567,9 @@ class Companion:
             return None
         cached = self.info_cache.get((path, session_id))
         if not cached or cached[0] != mtime:  # transcripts are re-read only after a write
-            messages = adapter.user_messages(read_text(f))
-            title = next((m for m in messages if m.strip()), "")
+            text = read_text(f)
+            messages = adapter.user_messages(text)
+            title = adapter.title(text) or next((m for m in messages if m.strip()), "")
             cached = (mtime, {"id": session_id, "title": " ".join(title.split())[:120],
                               "turns": len(messages), "updated": int(mtime)})
             self.info_cache[(path, session_id)] = cached

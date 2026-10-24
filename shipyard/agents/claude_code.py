@@ -55,6 +55,21 @@ class ClaudeCode(Adapter):
                 out.append(content)
         return out
 
+    def title(self, text):
+        # Desktop records each title (auto or renamed) as a "custom-title" line; the last one is current.
+        found = None
+        if '"custom-title"' in text:
+            for line in text.splitlines():
+                if '"custom-title"' not in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if record.get("type") == "custom-title" and record.get("customTitle"):
+                    found = record["customTitle"]
+        return found
+
     def command(self, prompt, schema, mode, session_id, new_session_id, untrusted=False):
         argv = ["claude", "-p", prompt, "--output-format", "json",
                 "--json-schema", json.dumps(schema),
