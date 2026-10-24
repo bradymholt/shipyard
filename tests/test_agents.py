@@ -85,6 +85,12 @@ class ClaudeSessions(HomeCase):
                                                        {"type": "assistant", "message": {}}])
         self.assertEqual(ClaudeCode().user_messages(text), ["one", "two"])
 
+    def test_user_messages_keep_text_after_a_system_reminder(self):
+        record = {"type": "user", "message": {"role": "user", "content": [
+            {"type": "text", "text": "<system-reminder>\nYou are in a worktree\n</system-reminder>\n\n"},
+            {"type": "text", "text": "what does this table do?"}]}}
+        self.assertEqual(ClaudeCode().user_messages(json.dumps(record)), ["what does this table do?"])
+
     def test_liveness_from_recent_writes(self):
         write_jsonl(self.project() / "s.jsonl", [user("hi")])
         claude = ClaudeCode()

@@ -48,8 +48,10 @@ class ClaudeCode(Adapter):
             if isinstance(content, list):  # tool results ride in "user" records too
                 if any(isinstance(c, dict) and c.get("type") == "tool_result" for c in content):
                     continue
-                content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
-            if isinstance(content, str) and not content.startswith("<"):
+                # Desktop sends a <system-reminder> part ahead of the text you typed.
+                content = " ".join(c.get("text", "") for c in content if isinstance(c, dict)
+                                   and not c.get("text", "").lstrip().startswith("<")).strip()
+            if isinstance(content, str) and content and not content.startswith("<"):
                 out.append(content)
         return out
 
