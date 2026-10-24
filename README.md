@@ -153,13 +153,12 @@ What each rule does is code; when it fires, and whether it fires at all, is conf
     "passes": { "changes_requested": "auto", "ci_failed": "auto", "pre_review": "auto", "re_review": "ask" }
   },
   "auto": {
-    "rerun_checks":      { "when": "confidence >= high", "max_per_pr": 2 },
-    "cleanup_review_wt": true
+    "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 }
   }
 }
 ```
 
-Set a rule to `false` to drop its chip and pass (`address_feedback`, `fix_ci`, `merge`, `review`, `re_review`, `nudge`, `rerequest_review`, `cleanup_worktree`). A pass set to `"ask"` waits for **Ask** in the sidebar instead of running on its own.
+Set a rule to `false` to drop its chip and pass (`address_feedback`, `fix_ci`, `merge`, `review`, `re_review`, `nudge`, `rerequest_review`). A pass set to `"ask"` waits for **Ask** in the sidebar instead of running on its own.
 
 `auto` is the trust ladder. Every action type starts manual. Once you've pressed the same kind of button a few times, its card offers "Do this automatically when … is confident", which writes the entry for you; Handled cards offer Undo where there is one, and "Stop doing this automatically". Trustable: `rerun_checks`, `cleanup_review_wt`, `rerequest_review`, `enable_auto_merge`, `approve_rereview`, `apply_fix`. `post_reply` is locked, and submitting a review is never automatic: both put words in front of a colleague under your name. An automatic action only fires on its own kind of pass (re-running checks from a CI pass on your PR, approving from a re-review of someone else's), only while the card's PR is still open at the same head, and an automatic approval never carries text. Under `launchd`, saving the config restarts the companion; a pass cut short shows **Try again** rather than running twice.
 

@@ -63,61 +63,13 @@ class ReviewWorktree(GitCase):
         self.assertFalse(again["ok"])
 
 
-    def test_refuses_to_move_or_remove_a_review_worktree_with_its_own_commits(self):
+    def test_refuses_to_move_a_review_worktree_with_its_own_commits(self):
         out = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
         Path(out["path"], "app.py").write_text("tried something\n")
         git(out["path"], "commit", "-qam", "experiment")
         again = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
         self.assertFalse(again["ok"])
         self.assertIn("commits of its own", again["error"])
-        gone = worktrees.cleanup_worktree(self.repo, None, self.roots, path=out["path"])
-        self.assertFalse(gone["ok"])
-
-
-class Cleanup(GitCase):
-    def make_worktree(self, branch):
-        out = worktrees.new_task_worktree(self.repo, branch, self.roots)
-        self.assertTrue(out["ok"], out)
-        return out["path"]
-
-    def test_removes_clean_worktree_and_squash_merged_branch(self):
-        path = self.make_worktree("me/feature")
-        Path(path, "app.py").write_text("print(3)\n")
-        git(path, "commit", "-qam", "feature")
-        head = git(path, "rev-parse", "HEAD")
-        # unmerged by Git's reckoning (a squash merge), but its tip is what GitHub merged
-        out = worktrees.cleanup_worktree(self.repo, "me/feature", self.roots, merged_head=head)
-        self.assertTrue(out["ok"], out)
-        self.assertTrue(out["branchDeleted"])
-        self.assertFalse(os.path.exists(path))
-
-    def test_keeps_branch_with_commits_github_never_saw(self):
-        path = self.make_worktree("me/other")
-        Path(path, "app.py").write_text("print(4)\n")
-        git(path, "commit", "-qam", "local only")
-        out = worktrees.cleanup_worktree(self.repo, "me/other", self.roots, merged_head="0" * 40)
-        self.assertTrue(out["ok"], out)
-        self.assertFalse(out["branchDeleted"])
-        self.assertIn("me/other", git(self.clone, "branch", "--list", "me/other"))
-
-    def test_refuses_dirty_or_untracked_worktree(self):
-        path = self.make_worktree("me/dirty")
-        Path(path, "notes.txt").write_text("unsaved idea\n")
-        out = worktrees.cleanup_worktree(self.repo, "me/dirty", self.roots)
-        self.assertFalse(out["ok"])
-        self.assertTrue(os.path.exists(path))
-
-    def test_refuses_main_clone_and_paths_outside_claude_worktrees(self):
-        out = worktrees.cleanup_worktree(self.repo, "main", self.roots)
-        self.assertFalse(out["ok"])
-        out = worktrees.cleanup_worktree(self.repo, None, self.roots, path=str(self.clone))
-        self.assertFalse(out["ok"])
-
-    def test_review_worktree_cleanup_by_path(self):
-        made = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
-        out = worktrees.cleanup_worktree(self.repo, None, self.roots, path=made["path"])
-        self.assertTrue(out["ok"], out)
-        self.assertFalse(os.path.exists(made["path"]))
 
 
 if __name__ == "__main__":

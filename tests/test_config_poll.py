@@ -27,9 +27,9 @@ class Config(unittest.TestCase):
 
     def test_auto_validation(self):
         auto = validate_auto({"rerun_checks": {"when": "confidence >= medium", "max_per_pr": 3},
-                              "cleanup_review_wt": True})
+                              "rerequest_review": True})
         self.assertEqual(auto["rerun_checks"], {"min_confidence": "medium", "max_per_pr": 3})
-        self.assertEqual(auto["cleanup_review_wt"]["min_confidence"], "high")
+        self.assertEqual(auto["rerequest_review"]["min_confidence"], "high")
         for bad in ({"post_reply": True}, {"rerun_checks": {"when": "sometimes"}},
                     {"rerun_checks": {"max_per_pr": 0}}, {"merge_everything": True}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):

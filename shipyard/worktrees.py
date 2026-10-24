@@ -477,57 +477,6 @@ def managed_worktree_dir(clone):
     return os.path.join(clone, ".claude", "worktrees")
 
 
-def is_managed(clone, path):
-    try:
-        root = os.path.realpath(managed_worktree_dir(clone))
-        return os.path.commonpath((os.path.realpath(path), root)) == root
-    except ValueError:
-        return False
-
-
-def cleanup_worktree(repo, branch, roots, merged_head=None, path=None):
-    """Remove a merged PR's worktree under .claude/worktrees/ and prune its local branch.
-
-    `git worktree remove` without --force refuses a worktree with modified or untracked
-    files, so nothing uncommitted is lost. The branch is deleted only when Git agrees
-    it is merged, or its tip is the head GitHub merged (a squash merge leaves the
-    branch looking unmerged). Session files are left alone."""
-    clone = find_clone(repo, roots)
-    if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    if not path:
-        here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
-        if not here:
-            return {"ok": False, "error": f"Branch {branch} isn't checked out in a worktree."}
-        if here["main"]:
-            return {"ok": False, "error": "That branch is your main clone's checkout; Shipyard only "
-                    "cleans up worktrees under .claude/worktrees/."}
-        path = here["path"]
-    if not is_managed(clone, path):
-        return {"ok": False, "error": "Shipyard only cleans up worktrees under .claude/worktrees/."}
-    review = re.fullmatch(r"review-(\d+)", os.path.basename(path))
-    if review and has_review_commits(clone, path, review.group(1)):
-        return {"ok": False, "error": "The review worktree has commits of its own; move them to a branch first."}
-    error = mutate_git(clone, "worktree", "remove", path, timeout=60)
-    if error:
-        return {"ok": False, "error": "Couldn't remove the worktree — it has uncommitted or "
-                f"untracked files. Commit, stash, or delete them first.\n{error}"}
-    if review:
-        mutate_git(clone, "update-ref", "-d", review_ref(review.group(1)), timeout=30)
-    deleted = False
-    if branch:
-        try:
-            exists = git_ref_exists(clone, f"refs/heads/{branch}")
-        except GitError:
-            exists = False
-        if exists:
-            if not mutate_git(clone, "branch", "-d", branch, timeout=30):
-                deleted = True
-            elif merged_head and try_git(clone, "rev-parse", f"refs/heads/{branch}").strip() == merged_head:
-                deleted = not mutate_git(clone, "branch", "-D", branch, timeout=30)
-    return {"ok": True, "removed": path, "branchDeleted": deleted}
-
-
 def review_ref(number):
     return f"refs/shipyard/review/{int(number)}"
 

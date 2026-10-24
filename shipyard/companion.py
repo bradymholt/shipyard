@@ -177,8 +177,6 @@ class Companion:
                 pin = self.db.pin(key)
                 self.db.set_pin(key, result["path"], pin["session_id"] if pin else None,
                                 pin["how"] if pin else "review")
-        elif do == "cleanup_review_worktree":
-            self.auto_cleanup_review(snap)
         elif do == "pass":
             self.offer_or_queue(snap, reaction["pass"], reaction["mode"], reaction.get("head"))
 
@@ -405,17 +403,6 @@ class Companion:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
-
-    def auto_cleanup_review(self, snap):
-        if snap["mine"] or not self.config["auto"].get("cleanup_review_wt"):
-            return
-        pin = self.db.pin(snap["key"])
-        path = pin.get("path") if pin else None
-        if not path or not os.path.basename(path).startswith("review-") or not os.path.isdir(path):
-            return
-        result = worktrees.cleanup_worktree(snap["repo"], None, self.roots, path=path)
-        if result["ok"]:
-            self.db.log(snap["key"], "cleaned up the review worktree")
 
     def action_context(self, snap):
         wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")

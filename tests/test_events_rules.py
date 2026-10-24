@@ -153,9 +153,9 @@ class Reactions(unittest.TestCase):
         self.assertEqual(rules.reactions(self.ev("pushed_after_changes_requested", reviewers=["jm"]),
                                          snap(), validate_rules({"rerequest_review": False})), [])
 
-    def test_merged_closes_cards_and_cleans_review_worktree(self):
+    def test_merged_closes_cards(self):
         out = rules.reactions(self.ev("merged"), snap(state="MERGED"), RULES)
-        self.assertEqual([o["do"] for o in out], ["close_cards", "cleanup_review_worktree"])
+        self.assertEqual([o["do"] for o in out], ["close_cards"])
 
 
 class StaleCards(unittest.TestCase):

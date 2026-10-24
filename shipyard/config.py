@@ -61,7 +61,6 @@ RULE_DEFAULTS = {
     "re_review": True,
     "nudge": {"after_hours": 24},
     "rerequest_review": True,
-    "cleanup_worktree": True,
     "passes": {
         "changes_requested": "auto",
         "ci_failed": "auto",
@@ -76,7 +75,6 @@ PASS_MODES = ("auto", "ask", False)
 # agent's proposal needs before the companion presses the button itself.
 AUTO_DEFAULTS = {
     "rerun_checks": False,
-    "cleanup_review_wt": False,
     "rerequest_review": False,
     "enable_auto_merge": False,
     "approve_rereview": False,

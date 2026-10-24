@@ -90,8 +90,6 @@ def reactions(event, snap, rules):
                     "payload": {"reviewers": reviewers}})
     elif name in ("merged", "closed"):
         out.append({"do": "close_cards"})
-        if rules.get("cleanup_worktree"):
-            out.append({"do": "cleanup_review_worktree"})
     elif name == "ci_recovered":
         out.append({"do": "close_cards", "kinds": ["ci_failed"]})
     if name == "review_requested_of_me":
