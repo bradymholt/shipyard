@@ -113,8 +113,6 @@ def main():
     mock.patch("shipyard.companion.update_config",
                side_effect=lambda section, name, value: validate_config({section: {name: value}}
                                                                         if "." not in name else {})).start()
-    mock.patch("shipyard.companion.worktrees.cleanup_worktree",
-               return_value={"ok": True, "removed": str(merged_wt), "branchDeleted": True}).start()
 
     comp = Companion(validate_config({}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
     comp.poll_once()

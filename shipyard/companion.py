@@ -563,20 +563,6 @@ class Companion:
         self.publish()
         return {"ok": True}
 
-    def cleanup(self, repo, branch, head=None, key=None):
-        snap = self.db.pr(key) if key else None
-        path = None
-        if snap and not snap["mine"]:
-            pin = self.db.pin(key)
-            path = pin.get("path") if pin else None
-            branch = None
-        result = worktrees.cleanup_worktree(repo, branch, self.roots,
-                                            merged_head=(snap or {}).get("head") or head, path=path)
-        if result["ok"] and key:
-            self.db.log(key, "cleaned up the worktree" + (" and its branch" if result.get("branchDeleted") else ""))
-        self.publish()
-        return result
-
     # ---------- the page's view
     def is_live(self, path, session_id):
         now = time.time()
@@ -639,12 +625,6 @@ class Companion:
             done = [p for p in self.db.passes(key) if p["status"] == "done"]
             exchange = done[-1] if done else None
             path = pin.get("path") if pin else None
-            cleanup = None
-            if snap.get("state") != "OPEN":
-                wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}") if snap["mine"] else None
-                candidate = wt["path"] if wt and not wt.get("main") else path
-                if candidate and os.path.isdir(candidate) and "/.claude/worktrees/" in candidate:
-                    cleanup = candidate
             prs[key] = {
                 "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
@@ -658,7 +638,6 @@ class Companion:
                 "exchange": ({"pass": exchange["name"], "at": exchange["finished"],
                               "summary": exchange["summary"], "mode": exchange["mode"]} if exchange else None),
                 "activity": self.db.activity(key),
-                "cleanup": cleanup,
             }
         adapter = self.adapter
         return {

@@ -132,7 +132,7 @@ try {
   check(await page.locator('.card[data-key="o/r#104"] .next-chip').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 30h"), "companion memory chip → Nudge · 30h");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
-  check(await page.locator('.card[data-key="o/r#99"] .cleanup-btn').count() === 1, "Clean up worktree on a merged card");
+  check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
   check((await page.locator("#companion-status").textContent()).includes("watching your PRs"), "footer shows the companion watching");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 

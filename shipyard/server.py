@@ -32,8 +32,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       "/move-to-worktree", "/open-default-main", "/open-app", "/open-agent"}
     COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
-                         "/companion/trust", "/companion/rule", "/companion/pr-action",
-                         "/companion/cleanup"}
+                         "/companion/trust", "/companion/rule", "/companion/pr-action"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -199,8 +198,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "trust": lambda c: c.set_trust(arg("flag"), arg("on") == "1"),
             "rule": lambda c: c.set_rule(arg("name"), body.get("value")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {}),
-            "cleanup": lambda c: c.cleanup(arg("repo"), arg("branch") or None, arg("head") or None,
-                                           arg("key") or None),
         }
         return self._companion_call(calls[name])
 
