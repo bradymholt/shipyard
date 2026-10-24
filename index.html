@@ -2714,11 +2714,12 @@
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">Keep</button>
           <button type="button" data-dismiss="${card.id}">Don't</button></div>${trustToggles(card)}</div>`;
     }
+    const openFork = card.fork ? sessionLink(card.fork.path, card.fork.session, "Open the fork", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(card, p, i)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
       <p>${esc(card.summary || "")}</p>${proposals}
-      ${card.pass === "ask" ? "" : `<div class="nc-actions">${continueButton(pr)}${rerun}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
+      ${card.pass === "ask" ? "" : `<div class="nc-actions">${openFork}${continueButton(pr)}${rerun}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
   }
 
   // With no card from the companion, the chip still implies the buttons that fit it.
