@@ -167,6 +167,7 @@ try {
   await page.waitForTimeout(400);  // let the slide-in finish
   if (shots) await page.screenshot({ path: `${shots}/sidebar-feedback.png` });
 
+  check((await sb.locator(".nc-proposal a.nc-thread").getAttribute("href"))?.endsWith("/pull/101#discussion_r501"), "drafted reply links to its review thread");
   const reply = sb.locator(".nc-proposal textarea");
   check((await reply.inputValue()).startsWith("GitHub doesn't retry"), "drafted reply is shown in full before posting");
   await reply.fill("Edited: dropping to 3 retries with jitter.");

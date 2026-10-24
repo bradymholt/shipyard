@@ -2664,7 +2664,7 @@
     return `<textarea rows="${rows}" data-field="${esc(field)}">${esc(value)}</textarea>`;
   }
 
-  function proposalHtml(card, p, i) {
+  function proposalHtml(pr, card, p, i) {
     if (p.action === "continue") return p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : "";
     const field = `c${card.id}-${i}`;
     const label = ACTION_LABELS[p.action] || p.action;
@@ -2686,7 +2686,8 @@
         ? `<pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
         : `<button type="button" data-show-diff="${field}">Show diff</button>`;
     }
-    const where = p.action === "post_reply" && p.payload?.comment_id ? " · replies on the review thread" : "";
+    const where = p.action === "post_reply" && p.payload?.comment_id
+      ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
     return `
       <div class="nc-proposal">
         <div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${esc(p.reason || "")}</div>
@@ -2738,7 +2739,7 @@
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
-    const proposals = (card.proposals || []).map((p, i) => proposalHtml(card, p, i)).join("");
+    const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
       <p>${esc(card.summary || "")}</p>${proposals}
       ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
