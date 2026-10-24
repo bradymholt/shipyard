@@ -146,9 +146,14 @@ class ChangesRequested(CompanionCase):
                           {"action": "delete_repo", "confidence": "high", "reason": "nope"}]}
         self.gh.put(pr_node(decision="CHANGES_REQUESTED",
                             reviews=[{"state": "CHANGES_REQUESTED", "author": "rev"}],
-                            threads=[{"body": "why per-process?"}]), "author:@me")
+                            threads=[{"body": "why per-process?", "path": "cache.py", "line": 7,
+                                      "hunk": "@@ -1,9 +1,9 @@\n" + "\n".join(f" line {n}" for n in range(1, 9))}]),
+                    "author:@me")
         prs = self.poll()
         pr = prs["o/r#1"]
+        self.assertEqual(pr["cards"][0]["proposals"][1]["context"],
+                         {"path": "cache.py", "line": 7, "outdated": False,
+                          "hunk": "\n".join(f" line {n}" for n in range(3, 9))})  # the last 6 lines
         self.assertEqual(self.agent.runs[0]["mode"], "resume")
         self.assertEqual(self.agent.runs[0]["session"], "s-open")
         self.assertIn("comment_id=500", self.agent.runs[0]["prompt"])

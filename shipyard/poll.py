@@ -35,7 +35,7 @@ DETAIL_FIELDS = """
   latestReviews(first: 20) { nodes { databaseId state submittedAt body author { login } commit { oid } } }
   reviewThreads(first: 50) { nodes {
     id isResolved isOutdated path line
-    comments(first: 20) { nodes { databaseId body createdAt author { login } } }
+    comments(first: 20) { nodes { databaseId body createdAt diffHunk author { login } } }
   } }
   commits(last: 1) { nodes { commit {
     oid committedDate
@@ -61,6 +61,13 @@ query($ids: [ID!]!) {{
 
 FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
 DETAIL_BATCH = 10
+HUNK_LINES = 6
+
+
+def hunk_tail(hunk):
+    """The last few lines of a review comment's diff hunk, which ends at the commented line."""
+    lines = [l for l in (hunk or "").splitlines() if not l.startswith("@@")]
+    return "\n".join(lines[-HUNK_LINES:]) or None
 
 
 def signature(node):
@@ -114,6 +121,7 @@ def snapshot(node, viewer):
         threads.append({
             "id": t.get("id"), "resolved": bool(t.get("isResolved")), "outdated": bool(t.get("isOutdated")),
             "path": t.get("path"), "line": t.get("line"),
+            "hunk": hunk_tail(((t.get("comments") or {}).get("nodes") or [{}])[0].get("diffHunk")),
             "comments": [{"id": c.get("databaseId"), "author": (c.get("author") or {}).get("login"),
                           "body": (c.get("body") or "")[:2000], "created": c.get("createdAt")}
                          for c in (t.get("comments") or {}).get("nodes") or []],

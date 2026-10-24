@@ -41,6 +41,17 @@ PASS_ACTIVITY = {
 }
 
 
+def reply_context(snap, comment_id):
+    """Where a reply lands: the file, line and code of the thread holding that comment."""
+    if not comment_id:
+        return None
+    for t in snap.get("threads") or []:
+        if any(str(c.get("id")) == str(comment_id) for c in t.get("comments") or []):
+            return {"path": t.get("path"), "line": t.get("line"), "hunk": t.get("hunk"),
+                    "outdated": t.get("outdated")} if t.get("hunk") else None
+    return None
+
+
 def session_used(mode, pinned_after, kept=False):
     if kept:
         return "in a fork of your open session, kept" if mode == "fork" else "in a new session, kept (yours was open)"
@@ -357,6 +368,10 @@ class Companion:
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
                     f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
         kind = "answer" if name == "ask" else "pass"
+        for proposal in answer["proposals"]:
+            context = reply_context(snap, (proposal.get("payload") or {}).get("comment_id"))
+            if proposal["action"] == "post_reply" and context:
+                proposal["context"] = context
         card = self.db.update_card(row["card_id"], kind=kind, summary=answer["summary"],
                                    proposals=answer["proposals"], addressed=answer.get("addressed"),
                                    total=answer.get("total"), mode=mode, session_id=produced,

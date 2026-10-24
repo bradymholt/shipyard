@@ -168,6 +168,8 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-feedback.png` });
 
   check((await sb.locator(".nc-proposal a.nc-thread").getAttribute("href"))?.endsWith("/pull/101#discussion_r501"), "drafted reply links to its review thread");
+  check((await sb.locator(".nc-proposal .nc-snippet").textContent())?.includes("+    retries = 5"), "drafted reply shows the code it answers");
+  check(await sb.locator(".nc-proposal a.nc-thread").evaluate((a) => getComputedStyle(a).textDecorationLine) === "underline", "thread link looks like a link");
   const reply = sb.locator(".nc-proposal textarea");
   check((await reply.inputValue()).startsWith("GitHub doesn't retry"), "drafted reply is shown in full before posting");
   await reply.fill("Edited: dropping to 3 retries with jitter.");
