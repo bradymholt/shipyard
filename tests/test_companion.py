@@ -411,6 +411,16 @@ class PageRequests(CompanionCase):
         with self.assertRaises(ValueError):
             self.comp.ask("o/r#1", "   ")
 
+    def test_new_session_starts_fresh_and_replaces_the_pin(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "s-open")
+        self.comp.run_pass_now("o/r#1", "new_session")
+        self.idle()
+        self.assertEqual(self.agent.runs[-1]["mode"], "fresh")
+        self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "fresh-1")
+        self.assertEqual(self.agent.discarded, [])
+
     def test_post_reply_cannot_be_trusted(self):
         with self.assertRaises(ValueError):
             self.comp.set_trust("post_reply", True)

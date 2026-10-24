@@ -2515,7 +2515,7 @@
   // Actions that put words in front of someone show the full text, editable, before they post.
   const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review", "nudge", "approve"]);
   const PASS_FOR_CHIP = { address_feedback: "changes_requested", fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
-  const PASS_LABELS = { changes_requested: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer" };
+  const PASS_LABELS = { changes_requested: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
   const TRUST_LABELS = {
     rerun_checks: "re-run checks when it looks flaky", rerequest_review: "re-request review after you push",
     enable_auto_merge: "enable auto-merge", approve_rereview: "approve a re-review", apply_fix: "apply small fixes",
@@ -2809,10 +2809,11 @@
         : `<div class="sb-empty">No ${esc(agentName())} sessions in this checkout.</div>`;
     }
     const repin = cp.path ? `<button type="button" class="nc-quiet" data-repin="${esc(key)}">Re-pin</button>` : "";
+    const fresh = `<button type="button" class="nc-quiet" data-run-pass="new_session" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
     let body;
     if (!s) {
       body = `<div class="sb-empty">${cp.path ? `No ${esc(agentName())} session pinned yet.` : "No local checkout for this PR."}</div>
-        <div class="nc-actions">${repin}</div>`;
+        <div class="nc-actions">${repin}${fresh}</div>`;
     } else {
       const yours = Math.max(0, s.turns - (s.shipyardTurns || 0));
       const ex = cp.exchange;
@@ -2821,7 +2822,7 @@
         <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${esc(timeAgo(s.updated * 1000))}`}
           · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
         ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${esc(timeAgo(ex.at))}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
-        <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}</div>`;
+        <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}${fresh}</div>`;
     }
     return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${body}${picker}</div></div>`;
   }

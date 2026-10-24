@@ -8,6 +8,8 @@ How a pass runs:
   - your PR, a plan you will continue (changes_requested): a resume of the pinned
     session, so the plan is in the conversation when you open it.
   - someone else's PR (pre_review): a fresh session in a review worktree, pinned.
+  - any PR, on request (new_session): a fresh session to keep talking in, pinned; it is
+    told where the earlier pinned session's transcript is.
     re_review resumes that session.
 A resume never touches a session that is live; the card carries the raw event instead.
 """
@@ -20,10 +22,11 @@ TEMPLATE_FILES = {
     "pre_review": "pre-review.md",
     "re_review": "re-review.md",
     "ask": "ask.md",
+    "new_session": "new-session.md",
 }
 # fork: question; resume: plan to continue; fresh: new pinned session.
 PASS_MODES = {"changes_requested": "resume", "ci_failed": "fork", "pre_review": "fresh",
-              "re_review": "resume", "ask": "fork"}
+              "re_review": "resume", "ask": "fork", "new_session": "fresh"}
 ACTIONS = ["continue", "post_reply", "apply_fix", "rerun_checks", "rerequest_review", "approve",
            "comment_unresolved", "submit_review", "enable_auto_merge", "merge", "mark_ready", "nudge"]
 
@@ -50,7 +53,7 @@ ANSWER_SCHEMA = {
     },
 }
 TITLES = {"changes_requested": "Address feedback", "ci_failed": "Fix CI",
-          "pre_review": "Pre-review", "re_review": "Re-review", "ask": "Answer"}
+          "pre_review": "Pre-review", "re_review": "Re-review", "ask": "Answer", "new_session": "New session"}
 
 
 class SafeDict(dict):
@@ -119,6 +122,9 @@ def inputs(name, snap, github=None, question=None):
         values["threads"] = my_threads_text(snap)
     elif name == "ask":
         values["question"] = question or ""
+    elif name == "new_session":
+        values["state"] = (snap.get("state") or "").lower()
+        values["earlier"] = question or "(none found)"
     return values
 
 

@@ -292,6 +292,7 @@ class Companion:
                                   raw=passes.raw_event_text(name, snap))
 
         mode = passes.PASS_MODES[name]
+        question = row.get("question")
         new_session = None
         pin_after = False
         if not snap["mine"]:
@@ -315,8 +316,12 @@ class Companion:
                 return self.fail_pass(row, f"No local clone of {snap['repo']} under your roots.",
                                       raw=passes.raw_event_text(name, snap))
             session = pin["session_id"] if pin else None
+            if name == "new_session":
+                old = adapter.session_file(pin["path"], session) if session else None
+                question = str(old) if old else None
+                session, pin_after = None, True
             if not session:
-                pin_after = mode == "resume"
+                pin_after = pin_after or mode == "resume"
                 mode = "fresh"
         if mode == "fork" and not adapter.can_fork:
             mode = "fresh"
@@ -328,7 +333,7 @@ class Companion:
         if mode == "fresh" and adapter.key == "claude-code":
             new_session = str(uuid.uuid4())
 
-        prompt = passes.render(name, passes.inputs(name, snap, self.github, row.get("question")))
+        prompt = passes.render(name, passes.inputs(name, snap, self.github, question))
         try:
             # The PR's own code may carry agent settings (hooks, permissions); on someone
             # else's PR, only yours apply.
@@ -346,7 +351,8 @@ class Companion:
                             summary=answer["summary"][:500])
         if pin_after and produced:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
-        self.db.log(snap["key"], f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced)}')
+        self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
+                    f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced)}')
         kind = "answer" if name == "ask" else "pass"
         card = self.db.update_card(row["card_id"], kind=kind, summary=answer["summary"],
                                    proposals=answer["proposals"], addressed=answer.get("addressed"),
