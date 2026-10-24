@@ -137,9 +137,11 @@ class Reactions(unittest.TestCase):
     def ev(self, name, **data):
         return {"name": name, "head": "aaa", "data": data}
 
-    def test_changes_requested_runs_a_pass(self):
-        out = rules.reactions(self.ev("changes_requested"), snap(), RULES)
-        self.assertEqual(out, [{"do": "pass", "pass": "changes_requested", "mode": "auto"}])
+    def test_changes_requested_runs_a_pass_only_when_turned_on(self):
+        self.assertEqual(rules.reactions(self.ev("changes_requested"), snap(), RULES), [])
+        on = validate_rules({"passes": {"changes_requested": "auto"}})
+        self.assertEqual(rules.reactions(self.ev("changes_requested"), snap(), on),
+                         [{"do": "pass", "pass": "changes_requested", "mode": "auto"}])
 
     def test_pass_mode_ask_and_off(self):
         ask = validate_rules({"passes": {"ci_failed": "ask"}})

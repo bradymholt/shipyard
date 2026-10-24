@@ -121,12 +121,13 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
     "sessions": "claude-code",
     "mode": "url",
     "url": "claude://resume?session={session}",
-    "command": ["open", "claude://resume?session={session}"]
+    "command": ["open", "claude://resume?session={session}"],
+    "prompt_url": "claude://code/new?folder={path}&q={prompt}"
   }
 }
 ```
 
-`sessions` picks where to look for transcripts: `claude-code` reads `~/.claude/projects/`, and `codex` reads `~/.codex/sessions/`. The companion matches sessions to checkouts by working directory and uses the most recently written one. `mode` works as it does for the launcher; `{session}` is the session id and `{path}` the checkout path. Set `"agent": null` to hide the icon.
+`sessions` picks where to look for transcripts: `claude-code` reads `~/.claude/projects/`, and `codex` reads `~/.codex/sessions/`. The companion matches sessions to checkouts by working directory and uses the most recently written one. `mode` works as it does for the launcher; `{session}` is the session id and `{path}` the checkout path. Set `"agent": null` to hide the icon. `prompt_url` opens a new session with `{prompt}` typed in, for the **Respond** button on Address feedback; it defaults to `null` for Codex, where that button resumes the session instead.
 
 `branchPrefix` optionally prefills new branch names.
 
@@ -135,7 +136,7 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
 Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**. Hosted, you get the next steps that come straight from GitHub data and the Header and Activity sections. With the companion running you also get:
 
 - **Memory next steps:** `Nudge · 1d` when a reviewer has sat on it past a threshold, and snoozed cards that dim in place.
-- **Passes:** when something happens to a PR (changes requested, CI failed, your review requested or re-requested), the companion asks your coding agent about it and turns the answer into a Next card: a short judgment and the buttons that fit it. On your PRs it asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. For someone else's PR it runs a pre-review in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`). It never adds a turn to a session that is open right now; the card gives you the event to paste instead.
+- **Passes:** when something happens to a PR (CI failed, your review requested or re-requested, and changes requested if you turn that pass on), the companion asks your coding agent about it and turns the answer into a Next card: a short judgment and the buttons that fit it. On your PRs it asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. For someone else's PR it runs a pre-review in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`). It never adds a turn to a session that is open right now; the card gives you the event to paste instead.
 - **Buttons:** Continue in your agent, Re-run failed jobs, Post reply, Submit as review, Re-request review, Merge, and so on. Anything that posts under your name shows the full, editable text first, and Apply fix shows the diff first. An **Ask** field puts one question to the PR's session (as a fork).
 - **PR session:** the pinned session (the one whose transcript ran `gh pr create` for the PR), whether it's active, turns yours vs Shipyard's, the last exchange, and Re-pin.
 
@@ -150,7 +151,8 @@ What each rule does is code; when it fires, and whether it fires at all, is conf
   "rules": {
     "nudge":       { "after_hours": 24 },
     "merge":       true,
-    "passes": { "changes_requested": "auto", "ci_failed": "auto", "pre_review": "auto", "re_review": "ask" }
+    "address_feedback": { "prompt": "/pr-review-respond {url}" },
+    "passes": { "changes_requested": false, "ci_failed": "auto", "pre_review": "auto", "re_review": "ask" }
   },
   "auto": {
     "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 }
@@ -158,7 +160,7 @@ What each rule does is code; when it fires, and whether it fires at all, is conf
 }
 ```
 
-Set a rule to `false` to drop its next step and pass (`address_feedback`, `fix_ci`, `merge`, `review`, `re_review`, `nudge`, `rerequest_review`). A pass set to `"ask"` waits for **Ask** in the sidebar instead of running on its own.
+Set a rule to `false` to drop its next step and pass (`address_feedback`, `fix_ci`, `merge`, `review`, `re_review`, `nudge`, `rerequest_review`). A pass set to `"ask"` waits for **Ask** in the sidebar instead of running on its own. Address feedback runs no pass by default: its card's **Respond** button opens a session with the rule's `prompt` (`{url}`, `{repo}`, `{number}`; default `Address the review feedback on {url}`), so a skill of yours can take it from there. Set `"changes_requested": "auto"` to have the agent draft a plan and replies on the card as well.
 
 `auto` is the trust ladder. Every action type starts manual. Once you've pressed the same kind of button a few times, its card offers "Do this automatically when … is confident", which writes the entry for you; Handled cards offer Undo where there is one, and "Stop doing this automatically". Trustable: `rerun_checks`, `cleanup_review_wt`, `rerequest_review`, `enable_auto_merge`, `approve_rereview`, `apply_fix`. `post_reply` is locked, and submitting a review is never automatic: both put words in front of a colleague under your name. An automatic action only fires on its own kind of pass (re-running checks from a CI pass on your PR, approving from a re-review of someone else's), only while the card's PR is still open at the same head, and an automatic approval never carries text. Under `launchd`, saving the config restarts the companion; a pass cut short shows **Try again** rather than running twice.
 

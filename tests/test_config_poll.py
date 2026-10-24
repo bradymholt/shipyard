@@ -20,7 +20,9 @@ class Config(unittest.TestCase):
         self.assertIs(validate_rules({"nudge": False})["nudge"], False)
         self.assertEqual(validate_rules({"nudge": True})["nudge"], {"after_hours": 24})
         self.assertEqual(validate_rules({"passes": {"pre_review": "ask"}})["passes"]["pre_review"], "ask")
-        for bad in ({"nudge": {"after_days": 1}}, {"nudge": {"after_hours": 0}}, {"merge": "yes"},
+        self.assertEqual(validate_rules({"address_feedback": {"prompt": "/respond {url}"}})["address_feedback"],
+                         {"prompt": "/respond {url}"})
+        for bad in ({"address_feedback": {"prompt": ""}}, {"nudge": {"after_days": 1}}, {"nudge": {"after_hours": 0}}, {"merge": "yes"},
                     {"passes": {"pre_review": "sometimes"}}, {"passes": {"lint": "auto"}}, {"unknown": 1}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 validate_rules(bad)
@@ -39,6 +41,12 @@ class Config(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_config({"agent": {"sessions": "copilot"}})
         self.assertIsNone(validate_config({"agent": None})["agent"])
+
+    def test_prompt_url_defaults_to_claude_code_only(self):
+        self.assertIn("{prompt}", validate_config({})["agent"]["prompt_url"])
+        self.assertIsNone(validate_config({"agent": {"sessions": "codex"}})["agent"]["prompt_url"])
+        with self.assertRaises(ValueError):
+            validate_config({"agent": {"prompt_url": "claude://code/new"}})
 
     def test_update_config_keeps_other_settings_and_refuses_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:

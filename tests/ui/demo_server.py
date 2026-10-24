@@ -119,7 +119,7 @@ def main():
                side_effect=lambda section, name, value: validate_config({section: {name: value}}
                                                                         if "." not in name else {})).start()
 
-    comp = Companion(validate_config({}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
+    comp = Companion(validate_config({"rules": {"passes": {"changes_requested": "auto"}}}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
     comp.poll_once()
     Handler.roots = [str(tmp / "dev")]
     Handler.config = comp.config

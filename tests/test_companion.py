@@ -137,6 +137,11 @@ class CompanionCase(unittest.TestCase):
 
 
 class ChangesRequested(CompanionCase):
+    def setUp(self):
+        super().setUp()
+        self.raw = {"rules": {"passes": {"changes_requested": "auto"}}}
+        self.comp.config = validate_config(self.raw)
+
     def test_pass_resumes_pinned_session_and_card_posts_the_edited_reply(self):
         self.agent.answers["reviewer requested changes"] = {
             "summary": "Rev wants a guard and asks why.",
