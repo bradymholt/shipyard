@@ -11,7 +11,8 @@ How a pass runs:
   - any PR, on request (new_session): a fresh session to keep talking in, pinned; it is
     told where the earlier pinned session's transcript is.
     re_review resumes that session.
-A resume never touches a session that is live; the card carries the raw event instead.
+A resume never adds a turn to a session that is live: it runs in a fork of it (or a fresh
+session, for agents that can't fork), which is kept and linked from the card.
 """
 from pathlib import Path
 
@@ -129,7 +130,7 @@ def inputs(name, snap, github=None, question=None):
 
 
 def raw_event_text(name, snap):
-    """What to paste into the session yourself when it is open and Shipyard stays out."""
+    """What to paste into a session yourself when Shipyard can't run the pass."""
     head = f"{snap['repo']}#{snap['number']} {snap['url']}"
     if name == "changes_requested":
         return f"Changes were requested on {head}. Feedback:\n{feedback_text(snap)}"

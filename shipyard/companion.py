@@ -41,9 +41,9 @@ PASS_ACTIVITY = {
 }
 
 
-def session_used(mode, pinned_after, kept_fork=False):
-    if kept_fork:
-        return "in a fork of your open session, kept"
+def session_used(mode, pinned_after, kept=False):
+    if kept:
+        return "in a fork of your open session, kept" if mode == "fork" else "in a new session, kept (yours was open)"
     if mode == "fork":
         return "in a fork of the pinned session"
     if mode == "resume":
@@ -327,13 +327,9 @@ class Companion:
         if mode == "fork" and not adapter.can_fork:
             mode = "fresh"
             pin_after = False
-        kept_fork = False
+        kept = False
         if mode == "resume" and adapter.is_live(cwd, session):
-            if not adapter.can_fork:
-                return self.fail_pass(row, f"Your session is open in {agent['name']}, so Shipyard didn't add a "
-                                      "turn to it. Paste this in yourself:", status="skipped",
-                                      raw=passes.raw_event_text(name, snap))
-            mode, kept_fork = "fork", True
+            mode, kept = "fork" if adapter.can_fork else "fresh", True
         if mode == "fresh" and adapter.key == "claude-code":
             new_session = str(uuid.uuid4())
 
@@ -345,12 +341,12 @@ class Companion:
             result = adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
                                  untrusted=not snap["mine"],
                                  name=f'{snap["title"]} (#{snap["number"]})' if pin_after else
-                                 f'{passes.TITLES[name]}: {snap["title"]} (#{snap["number"]})' if kept_fork else None)
+                                 f'{passes.TITLES[name]}: {snap["title"]} (#{snap["number"]})' if kept else None)
         except AgentError as e:
             return self.fail_pass(row, str(e))
         answer = passes.clean_answer(result["answer"])
         produced = result.get("session_id")
-        throwaway = (mode == "fork" and not kept_fork) or (mode == "fresh" and not pin_after)
+        throwaway = not kept and (mode == "fork" or (mode == "fresh" and not pin_after))
         if throwaway and produced and produced != session:
             adapter.discard(cwd, produced)  # the answer is on the card; the transcript isn't needed
         self.db.update_pass(row["id"], status="done", mode=mode,
@@ -359,12 +355,12 @@ class Companion:
         if pin_after and produced:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
-                    f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept_fork)}')
+                    f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
         kind = "answer" if name == "ask" else "pass"
         card = self.db.update_card(row["card_id"], kind=kind, summary=answer["summary"],
                                    proposals=answer["proposals"], addressed=answer.get("addressed"),
                                    total=answer.get("total"), mode=mode, session_id=produced,
-                                   fork_path=cwd if kept_fork else None,
+                                   kept_path=cwd if kept else None,
                                    status="done" if name == "new_session" else None)
         if kind == "pass" and card:
             for proposal in answer["proposals"]:
@@ -590,7 +586,8 @@ class Companion:
         view = {k: card.get(k) for k in ("id", "status", "kind", "pass", "action", "title", "summary",
                                          "proposals", "payload", "raw", "error", "handled", "created",
                                          "question", "addressed", "total", "result")}
-        view["fork"] = {"path": card["fork_path"], "session": card.get("session_id")} if card.get("fork_path") else None
+        view["kept"] = ({"path": card["kept_path"], "session": card.get("session_id"), "fork": card.get("mode") == "fork"}
+                        if card.get("kept_path") else None)
         offers = []
         for p in (card.get("proposals") or []) + ([{"action": card["action"], "payload": card.get("payload")}]
                                                    if card.get("action") else []):

@@ -175,7 +175,16 @@ class ChangesRequested(CompanionCase):
         self.assertEqual(self.agent.runs[0]["mode"], "fork")
         self.assertEqual(self.agent.discarded, [])
         self.assertEqual(card["kind"], "pass")
-        self.assertEqual(card["fork"], {"path": self.checkout, "session": "fork-1"})
+        self.assertEqual(card["kept"], {"path": self.checkout, "session": "fork-1", "fork": True})
+
+    def test_live_session_without_fork_gets_a_kept_fresh_session(self):
+        self.agent.live, self.agent.can_fork = True, False
+        self.gh.put(pr_node(decision="CHANGES_REQUESTED",
+                            reviews=[{"state": "CHANGES_REQUESTED", "author": "rev"}]), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.assertEqual(self.agent.runs[0]["mode"], "fresh")
+        self.assertEqual(self.agent.discarded, [])
+        self.assertEqual(card["kept"]["fork"], False)
 
     def test_card_goes_away_once_feedback_is_addressed(self):
         node = pr_node(decision="CHANGES_REQUESTED", reviews=[{"state": "CHANGES_REQUESTED", "author": "rev"}])
