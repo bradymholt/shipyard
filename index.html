@@ -549,7 +549,7 @@
   .nc-inline code { font: 500 0.6875rem var(--mono); color: var(--teal); }
   .snooze-menu { display: inline-flex; gap: 0.25rem; align-items: center; }
   .snooze-menu select { padding: 0.1875rem 0.5rem; font-size: 0.75rem; }
-  .sb-ask { display: flex; gap: 0.375rem; margin-top: 0.25rem; }
+  .sb-ask { display: flex; gap: 0.375rem; margin-top: 0.625rem; }
   .sb-ask + .next-card { margin-top: 0.5rem; }
   .sb-ask button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
   .sb-handled { font-size: 0.75rem; color: var(--fg-muted); border-left: 2px solid var(--green); padding: 0.125rem 0 0.125rem 0.5rem; margin-bottom: 0.375rem; }
@@ -2728,7 +2728,7 @@
     const key = prKey(pr);
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
-    // Your own asks show under the Ask field, and a new session under PR session.
+    // Your own asks and new sessions show under PR session.
     const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && open) {
@@ -2757,11 +2757,6 @@
         <button type="button" data-trust-off="${esc(h.flag || "")}" title="Back to asking first">Stop doing this automatically</button>
         <button type="button" data-dismiss="${c.id}">OK</button></div>`;
     }).join("");
-    if (cp && open) {
-      const q = drafts.get(`ask-${key}`) || "";
-      html += `<form class="sb-ask" data-ask="${esc(key)}"><input type="text" data-field="ask-${esc(key)}" value="${esc(q)}" placeholder="Ask ${esc(agentName())} about this PR" autocomplete="off"><button type="submit">Ask</button></form>`;
-      html += (cp.cards || []).filter((c) => c.pass === "ask").map((c) => companionCardHtml(pr, c, false)).join("");
-    }
     let snooze = "";
     if (cp && open) {
       const until = cp.snoozedUntil && new Date(cp.snoozedUntil) > new Date() ? cp.snoozedUntil : null;
@@ -2772,6 +2767,15 @@
       </select></span>`;
     }
     return `<div class="sb-section"><div class="sb-h">Next${snooze}</div>${html}</div>`;
+  }
+
+  // A question runs in a fork of the pinned session, so it lives in that session's section.
+  function askHtml(pr, cp) {
+    if (pr.mergedAt) return "";
+    const key = prKey(pr);
+    const q = drafts.get(`ask-${key}`) || "";
+    return `<form class="sb-ask" data-ask="${esc(key)}"><input type="text" data-field="ask-${esc(key)}" value="${esc(q)}" placeholder="Ask ${esc(agentName())} about this PR" autocomplete="off"><button type="submit">Ask</button></form>`
+      + (cp.cards || []).filter((c) => c.pass === "ask").map((c) => companionCardHtml(pr, c, false)).join("");
   }
 
   function sessionSection(pr) {
@@ -2787,7 +2791,7 @@
     const starting = (cp.cards || []).find((c) => c.pass === "new_session");
     if (starting?.kind === "running") {
       return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
-        <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div></div>`;
+        <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div>${askHtml(pr, cp)}</div>`;
     }
     const failed = ["error", "raw"].includes(starting?.kind) ? `<p class="nc-error">${esc(starting.error || "Couldn't start the session.")}</p>` : "";
     let picker = "";
@@ -2814,7 +2818,7 @@
         <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}
           <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
     }
-    return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div></div>`;
+    return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div>${askHtml(pr, cp)}</div>`;
   }
 
   function timelineEntries(d) {
