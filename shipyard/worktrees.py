@@ -363,39 +363,8 @@ def open_default_in_main(repo, roots):
     return open_in_main(repo, default_branch(clone), roots)
 
 
-def move_to_main(repo, branch, roots):
-    """Move a branch out of its linked worktree and into the main clone: remove the
-    worktree, then switch the main clone to the branch. Guarded on both ends — won't
-    switch a dirty main clone, and lets `git worktree remove` refuse a dirty worktree
-    (its uncommitted/untracked work would otherwise be lost) rather than forcing it."""
-    clone = find_clone(repo, roots)
-    if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    branch, error = validate_branch(branch)
-    if error:
-        return {"ok": False, "error": error}
-    here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
-    if not here:
-        return {"ok": False, "error": f"Branch {branch} isn't checked out in a worktree."}
-    if here["main"]:  # already the main clone's checkout — nothing to move
-        return {"ok": True, "path": here["path"], "workspace": here.get("workspace"), "moved": False}
-    try:
-        if has_tracked_changes(clone):
-            return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
-    except GitError as e:
-        return {"ok": False, "error": f"Could not verify the main clone's status: {e}"}
-    error = mutate_git(clone, "worktree", "remove", here["path"], timeout=60)
-    if error:
-        return {"ok": False, "error": "Couldn't remove the worktree — commit or stash its "
-                f"changes first, then retry.\n{error}"}
-    error = mutate_git(clone, "switch", branch, timeout=60)
-    if error and try_git(clone, "branch", "--show-current").strip() != branch:
-        return {"ok": False, "error": error}
-    return {"ok": True, "path": clone, "workspace": workspace_in(clone), "moved": True}
-
-
 def move_to_worktree(repo, branch, roots):
-    """Create a worktree for the branch and open it — the opposite of move_to_main.
+    """Create a worktree for the branch and open it.
     If the branch is currently the main clone's checkout, switch the main clone to the
     default branch first (guarded on uncommitted work) so the worktree can claim it."""
     clone = find_clone(repo, roots)
