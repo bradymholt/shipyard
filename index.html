@@ -3078,7 +3078,6 @@
       if (action === "submit_review") payload.event = fieldValue(`${field}-event`) || "COMMENT";
       if (btn.dataset.reviewers) payload.reviewers = btn.dataset.reviewers.split(",");
       const confirmText = {
-        merge: `Merge #${pr?.number} now?`,
         apply_fix: "Apply this diff in your checkout, commit it, and push to the PR's branch?",
         approve: `Approve #${pr?.number}?`,
       }[action];
