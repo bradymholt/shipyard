@@ -2752,8 +2752,8 @@
     if (card.kind === "proposal") {
       return `<div class="${cls}"><div class="nc-head">${esc(card.title)}${dismiss}</div>
         <p class="nc-reason">${esc(card.summary || "")}</p>
-        <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">Keep</button>
-          <button type="button" data-dismiss="${card.id}">Don't</button></div>${trustToggles(card)}</div>`;
+        <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
+          <button type="button" data-dismiss="${card.id}">Dismiss</button></div>${trustToggles(card)}</div>`;
     }
     const rerequest = card.pass === "changes_requested" ? respondButton(pr) + rerequestButton(githubChip(pr)?.reviewers, card.id) : "";
     const openKept = card.kept
