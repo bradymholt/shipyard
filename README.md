@@ -45,6 +45,8 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
+- **Next actions:** a chip on each card that has a next step (Address feedback, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's reviewers, files, and timeline.
+- **Shipping orchestrator (local):** the companion watches your PRs, asks your coding agent about the ones that changed, and shows its judgment as a card with the buttons that fit. You decide; it prepares.
 - **Optional local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
 
 ## Local mode
@@ -128,6 +130,41 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
 
 `branchPrefix` optionally prefills new branch names.
 
+### Next actions and the sidebar
+
+Click a card (or its chip) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, **Review** (reviewers, comment counts, files), and **Activity**. Hosted, you get the chips that come straight from GitHub data and the Header, Review, and Activity sections. With the companion running you also get:
+
+- **Memory chips:** `Nudge · 26h` when a reviewer has sat on it past a threshold, `Stale draft · 4d`, and snoozed cards that dim in place.
+- **Passes:** when something happens to a PR (changes requested, CI failed, your review requested or re-requested), the companion asks your coding agent about it and turns the answer into a Next card: a short judgment and the buttons that fit it. On your PRs it asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. For someone else's PR it runs a pre-review in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`). It never adds a turn to a session that is open right now; the card gives you the event to paste instead.
+- **Buttons:** Continue in your agent, Re-run checks, Post reply, Submit as review, Re-request review, Merge, and so on. Anything that posts under your name shows the full, editable text first, and Apply fix shows the diff first. An **Ask** field puts one question to the PR's session (as a fork).
+- **PR session:** the pinned session (the one whose transcript ran `gh pr create` for the PR), whether it's active, turns yours vs Shipyard's, the last exchange, and Re-pin.
+- **Clean up worktree** on merged cards whose worktree lives under `.claude/worktrees/`. It refuses a worktree with uncommitted or untracked files, and deletes the branch only when it is merged.
+
+The companion reads its GitHub token from `gh auth token` (install the [GitHub CLI](https://cli.github.com/) and run `gh auth login`); the page's token stays in the browser. Passes run your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) headlessly with read-only tools, on your existing subscription. State lives in `shipyard.db` next to the config. Run with `--no-orchestrator` to skip all of this and keep only the page and worktree links.
+
+#### Rule and trust settings
+
+What each rule does is code; when it fires, and whether it fires at all, is config:
+
+```json
+{
+  "rules": {
+    "nudge":       { "after_hours": 24 },
+    "stale_draft": { "after_days": 3 },
+    "merge":       true,
+    "passes": { "changes_requested": "auto", "ci_failed": "auto", "pre_review": "auto", "re_review": "ask" }
+  },
+  "auto": {
+    "rerun_checks":      { "when": "confidence >= high", "max_per_pr": 2 },
+    "cleanup_review_wt": true
+  }
+}
+```
+
+Set a rule to `false` to drop its chip and pass (`address_feedback`, `fix_ci`, `merge`, `review`, `re_review`, `nudge`, `stale_draft`, `rerequest_review`, `cleanup_worktree`). A pass set to `"ask"` waits for **Ask** in the sidebar instead of running on its own.
+
+`auto` is the trust ladder. Every action type starts manual. Once you've pressed the same kind of button a few times, its card offers "Do this automatically when … is confident", which writes the entry for you; Handled cards offer Undo where there is one, and "Stop doing this automatically". Trustable: `rerun_checks`, `cleanup_review_wt`, `rerequest_review`, `enable_auto_merge`, `approve_rereview`, `apply_fix`. `post_reply` is locked, and submitting a review is never automatic: both put words in front of a colleague under your name.
+
 ### Run at login (macOS)
 
 <details>
@@ -139,7 +176,7 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
 ./shipyard-launchd.py install
 ```
 
-That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the companion, and `local.shipyard-restart` watches `shipyard.py` and `shipyard.config.json` to reload it when you save. `install` then confirms the companion actually stayed running rather than crash-looping. Re-run it after moving the repo, upgrading Python, or creating your config.
+That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the companion, and `local.shipyard-restart` watches `shipyard.py`, the `shipyard/` package, and `shipyard.config.json` to reload it when you save. `install` then confirms the companion actually stayed running rather than crash-looping. Re-run it after moving the repo, upgrading Python, or creating your config.
 
 ```bash
 ./shipyard-launchd.py status     # state, pid, restart count, log sizes
@@ -157,6 +194,12 @@ If a plist in `~/Library/LaunchAgents` is a symlink, something else already owns
 ## Development
 
 There is no build step or dependency installation. Serve `index.html` with `python3 -m http.server`, or run `python3 shipyard.py ~/dev` to exercise local mode. Issues and pull requests are welcome.
+
+```bash
+python3 -m unittest discover tests     # companion: events, rules, passes, actions, git, server
+node tests/ui/smoke.mjs                # browser: chips and sidebar against fake data (needs Playwright)
+python3 tests/ui/demo_server.py 4399   # the companion over fake GitHub and agent data
+```
 
 ## License
 

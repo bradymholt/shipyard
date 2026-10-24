@@ -33,6 +33,7 @@ LABEL = "local.shipyard"
 WATCH_LABEL = "local.shipyard-restart"
 REPO = Path(__file__).resolve().parent
 COMPANION = REPO / "shipyard.py"
+PACKAGE = REPO / "shipyard"
 CONFIG = REPO / "shipyard.config.json"
 AGENT_DIR = Path.home() / "Library" / "LaunchAgents"
 PLIST = AGENT_DIR / f"{LABEL}.plist"
@@ -102,8 +103,9 @@ def service_plist(python: str) -> dict:
 
 def watch_plist() -> dict:
     # A missing WatchPaths entry can make launchd fire the job repeatedly, so
-    # only watch files that exist; re-run install after adding the config.
-    watched = [str(p) for p in (COMPANION, CONFIG) if p.exists()]
+    # only watch files that exist; re-run install after adding the config. The
+    # package directory changes when an editor saves one of its modules.
+    watched = [str(p) for p in (COMPANION, PACKAGE, CONFIG) if p.exists()]
     return {
         "Label": WATCH_LABEL,
         "ProgramArguments": ["/bin/sh", "-c", f"launchctl kickstart -k {target(LABEL)}"],
