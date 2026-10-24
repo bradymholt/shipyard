@@ -338,8 +338,10 @@ class Companion:
         try:
             # The PR's own code may carry agent settings (hooks, permissions); on someone
             # else's PR, only yours apply.
+            # A session Shipyard keeps gets a title, so it reads the same here and in the agent's app.
             result = adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
-                                 untrusted=not snap["mine"])
+                                 untrusted=not snap["mine"],
+                                 name=f'{snap["title"]} (#{snap["number"]})' if pin_after else None)
         except AgentError as e:
             return self.fail_pass(row, str(e))
         answer = passes.clean_answer(result["answer"])

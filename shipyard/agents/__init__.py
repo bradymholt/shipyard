@@ -192,9 +192,11 @@ class Adapter:
             pass
         return processes_in(self.process_name, path)
 
-    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False):
+    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False,
+            name=None):
         """One headless turn. mode is "fresh", "resume" or "fork"; untrusted is set for
-        someone else's PR, whose checkout may carry agent settings. Returns
+        someone else's PR, whose checkout may carry agent settings; name titles a session
+        Shipyard keeps, where the agent supports it. Returns
         {"session_id": id of the session that holds the turn, "answer": dict}."""
         raise NotImplementedError
 

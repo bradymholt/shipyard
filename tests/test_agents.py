@@ -119,6 +119,7 @@ class ClaudeSessions(HomeCase):
         self.assertIn("--json-schema", argv)
         self.assertNotIn("Edit", argv[argv.index("--allowedTools"):argv.index("--disallowedTools")])
         fresh = ClaudeCode().command("hi", {}, "fresh", None, "new-id")
+        self.assertEqual(ClaudeCode().command("hi", {}, "fresh", None, "x", name="Fix it (#7)")[-2:], ["--name", "Fix it (#7)"])
         self.assertEqual(fresh[fresh.index("--session-id") + 1], "new-id")
         self.assertNotIn("--setting-sources", fresh)
         theirs = ClaudeCode().command("hi", {}, "fresh", None, "x", untrusted=True)

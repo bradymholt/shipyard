@@ -70,7 +70,7 @@ class ClaudeCode(Adapter):
                     found = record["customTitle"]
         return found
 
-    def command(self, prompt, schema, mode, session_id, new_session_id, untrusted=False):
+    def command(self, prompt, schema, mode, session_id, new_session_id, untrusted=False, name=None):
         argv = ["claude", "-p", prompt, "--output-format", "json",
                 "--json-schema", json.dumps(schema),
                 "--allowedTools", *READ_ONLY_TOOLS, "--disallowedTools", *WRITE_TOOLS]
@@ -84,10 +84,13 @@ class ClaudeCode(Adapter):
                 argv.append("--fork-session")
         elif new_session_id:
             argv += ["--session-id", new_session_id]
+        if name:
+            argv += ["--name", name]
         return argv
 
-    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False):
-        argv = self.command(prompt, schema, mode, session_id, new_session_id, untrusted)
+    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False,
+            name=None):
+        argv = self.command(prompt, schema, mode, session_id, new_session_id, untrusted, name)
         try:
             env = {k: v for k, v in os.environ.items() if k not in PARENT_SESSION_VARS}
             r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=env,

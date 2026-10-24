@@ -77,9 +77,10 @@ class FakeAgent:
         self.discarded.append(sid)
         return True
 
-    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False):
+    def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False,
+            name=None):
         self.runs.append({"cwd": cwd, "prompt": prompt, "mode": mode, "session": session_id,
-                          "untrusted": untrusted})
+                          "untrusted": untrusted, "name": name})
         if self.before_answer:
             self.before_answer()
         produced = new_session_id or {"fork": "fork-1", "fresh": "fresh-1"}.get(mode, session_id)
@@ -420,7 +421,7 @@ class PageRequests(CompanionCase):
         self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "s-open")
         self.comp.run_pass_now("o/r#1", "new_session")
         self.idle()
-        self.assertEqual(self.agent.runs[-1]["mode"], "fresh")
+        self.assertEqual((self.agent.runs[-1]["mode"], self.agent.runs[-1]["name"]), ("fresh", "PR 1 (#1)"))
         self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "fresh-1")
         self.assertEqual(self.agent.discarded, [])
 
