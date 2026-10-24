@@ -380,17 +380,16 @@ class Proposals(CompanionCase):
         self.assertIn(("POST", "/repos/o/r/pulls/1/requested_reviewers",
                        {"reviewers": ["jm"], "team_reviewers": []}), self.gh.calls)
 
-    def test_trusted_re_request_can_be_undone(self):
-        self.comp.set_trust("rerequest_review", True)
+    def test_re_request_never_offers_to_go_automatic(self):
         node = pr_node(decision="CHANGES_REQUESTED", reviews=[{"state": "CHANGES_REQUESTED", "author": "jm"}])
         self.gh.put(node, "author:@me")
         self.poll()
+        for _ in range(3):
+            self.comp.db.click("rerequest_review")
         node["headRefOid"] = "bbb"
         self.gh.put(node, "author:@me")
-        handled = self.poll()["o/r#1"]["handled"][0]
-        self.assertTrue(handled["handled"]["undoable"])
-        self.comp.undo(handled["id"])
-        self.assertEqual(self.gh.calls[-1][0], "DELETE")
+        proposal = next(c for c in self.poll()["o/r#1"]["cards"] if c["kind"] == "proposal")
+        self.assertEqual(proposal["trustOffers"], [])
 
 
 class Dropped(CompanionCase):
