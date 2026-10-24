@@ -5,13 +5,23 @@
 // Starts tests/ui/demo_server.py (the real companion server over fake GitHub and agent
 // data) and a plain static server (hosted mode), answers the page's own GitHub calls
 // with matching fixtures, and checks what renders. Needs Playwright with Chromium.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-const { chromium } = require("playwright");
+// The repo has no package.json, so fall back to a global `npm i -g playwright`, which
+// require() doesn't search on its own.
+function loadPlaywright() {
+  try {
+    return require("playwright");
+  } catch {
+    const globalRoot = execFileSync("npm", ["root", "-g"], { encoding: "utf8" }).trim();
+    return require(path.join(globalRoot, "playwright"));
+  }
+}
+const { chromium } = loadPlaywright();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
 const shots = process.argv[2] || null;
@@ -120,7 +130,7 @@ const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row
 const children = [];
 try {
   children.push(await start("python3", ["tests/ui/demo_server.py", String(COMPANION_PORT)], /demo companion on/));
-  children.push(await start("python3", ["-m", "http.server", String(STATIC_PORT), "--bind", "127.0.0.1"], /Serving HTTP/));
+  children.push(await start("python3", ["-u", "-m", "http.server", String(STATIC_PORT), "--bind", "127.0.0.1"], /Serving HTTP/));
   const browser = await chromium.launch();
 
   console.log("companion mode");

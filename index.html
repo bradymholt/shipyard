@@ -1572,7 +1572,7 @@
       ? `<button class="wt-link wt-main blocked" disabled title="${esc(`Can't check out here — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`)}">${LAUNCH_ICON}</button>`
       : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main clone and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
     const wtBtn = `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Create a worktree for this branch and open it in ${esc(state.launcher.name)}">${MOVE_WT_ICON}</button>`;
-    return `<span class="wt-links">${mainBtn}${wtBtn}</span>`;
+    return `<span class="wt-links">${mainBtn}${wtBtn}${agentButton(pr, null)}</span>`;
   }
 
   // Where the owner/repo link goes: on My PRs, your authored PRs; on Reviews, the
