@@ -559,7 +559,7 @@ def review_worktree(repo, number, head, roots):
         if has_review_commits(clone, path, number):
             return {"ok": False, "error": f"The review worktree {path} has commits of its own; "
                     "move them to a branch first."}
-    error = mutate_git(clone, "fetch", "origin", f"+pull/{int(number)}/head:{review_ref(number)}", timeout=120)
+    error = mutate_git(clone, "fetch", "origin", f"+refs/pull/{int(number)}/head:{review_ref(number)}", timeout=120)
     if error:
         return {"ok": False, "error": f"Couldn't fetch the PR: {error}"}
     target = head or try_git(clone, "rev-parse", review_ref(number)).strip()

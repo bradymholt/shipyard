@@ -40,7 +40,8 @@ class GitCase(unittest.TestCase):
         git(seed, "push", "-q", "origin", "HEAD:refs/pull/5/head")
         self.clone = self.root / "r"
         subprocess.run(["git", "clone", "-q", str(origin), str(self.clone)], check=True)
-        for args in (("config", "user.email", "t@example.com"), ("config", "user.name", "T")):
+        for args in (("config", "user.email", "t@example.com"), ("config", "user.name", "T"),
+                     ("config", "fetch.prune", "true")):
             git(self.clone, *args)
         self.repo = worktrees.parse_origin(git(self.clone, "config", "--get", "remote.origin.url"))
         self.roots = [str(self.root)]
