@@ -2757,9 +2757,8 @@
       const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);
       html = cp ? derivedCardHtml(pr, chip) : "";
     }
-    // The same step as the card's Mark ready button, kept as quiet as it is on the board.
     if (!html && open && pr.isDraft && !isReviewPr(pr)) {
-      html = `<div class="next-card"><div class="nc-head">Draft</div>
+      html = `<div class="next-card first"><div class="nc-head">Draft</div>
         <p class="nc-reason">Mark it ready when you want reviews.</p>
         <div class="nc-actions"><button type="button" class="am-toggle off draft-toggle" data-pr="${esc(pr.id)}">Mark ready</button></div></div>`;
     }
