@@ -1760,10 +1760,13 @@
       .join("");
     const chip = nextRowHtml(pr, reviewMode);
     // The Next row names the next step for changes requested or approved-but-red, so the
-    // state badge would only repeat it.
+    // state badge would only repeat it. Once review is re-requested, the PR is waiting on
+    // the reviewer, and "Changes requested" would read as yours to act on.
+    const awaitingReview = (pr.reviewRequests?.nodes || []).length > 0;
     const badge = reviewMode
       ? viewerReviewBadge(pr)
-      : !chip && (pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr)))
+      : !chip && ((pr.reviewDecision === "CHANGES_REQUESTED" && !awaitingReview) ||
+          (pr.reviewDecision === "APPROVED" && !ciOk(pr)))
         ? reviewBadge(pr)
         : "";
     const reviewUpdate = reviewMode ? reviewUpdateBadge(pr) : "";
@@ -2469,14 +2472,6 @@
     }
     if (pr.reviewDecision === "APPROVED" && ciOk(pr) && !pr.autoMergeRequest && !pr.isDraft && ruleOn("merge"))
       return { kind: "merge", label: "Merge", tone: "green" };
-    // GitHub drops a re-requested reviewer from latestReviews, so name them from the request.
-    const pending = (pr.reviewRequests?.nodes || [])
-      .map((n) => n.requestedReviewer?.login || n.requestedReviewer?.name).filter(Boolean);
-    const changed = changesRequestedBy(pr).map((r) => r.author.login);
-    const asked = changed.length ? changed : pending;
-    if (pr.reviewDecision === "CHANGES_REQUESTED" && asked.length && ruleOn("address_feedback"))
-      return { kind: "awaiting_rereview", rule: "address_feedback", label: `Re-review requested · ${asked.length}`,
-        tone: "muted", reviewers: asked };
     return null;
   }
 
@@ -2773,9 +2768,6 @@
       const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
       body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
       actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
-    } else if (chip.kind === "awaiting_rereview") {
-      body = `Changes were requested; you asked ${chip.reviewers.join(", ")} to look again.`;
-      actionsHtml = continueButton(pr);
     } else if (chip.kind === "rerequest_review") {
       body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
       actionsHtml = rerequest + continueButton(pr);
