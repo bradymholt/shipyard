@@ -1465,9 +1465,9 @@
     }
   }
 
-  async function openAgent(path) {
+  async function openAgent(path, session) {
     try {
-      const res = await companionPost(`open-agent?path=${encodeURIComponent(path)}`);
+      const res = await companionPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) showError(data.error || `Open in ${state.agent.name} failed (${res.status}).`);
     } catch (err) {
@@ -1475,13 +1475,16 @@
     }
   }
 
-  function agentButton(checkout) {
+  function agentButton(pr, wt) {
     const agent = state.agent;
-    if (!agent || !checkout.session) return "";
+    const checkout = sessionTarget(pr, wt);
+    if (!agent || !checkout) return "";
     const icon = AGENT_ICONS[agent.sessions] || DEFAULT_AGENT_ICON;
-    const title = `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
+    const title = companionPr(pr)
+      ? `Open the PR session in ${agent.name} (last active ${timeAgo(checkout.session.updated * 1000)})`
+      : `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
     if (agent.mode === "command") {
-      return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" title="${esc(title)}">${icon}</button>`;
+      return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" data-session="${esc(checkout.session.id)}" title="${esc(title)}">${icon}</button>`;
     }
     const url = agent.url
       .replaceAll("{session}", encodeURIComponent(checkout.session.id))
@@ -1509,7 +1512,7 @@
     const wt = worktreeFor(pr);
     const cleanup = cleanupButton(pr, wt);
     if (!wt && !cleanup) return "";
-    const links = wt ? `<span class="wt-links">${openCheckoutButton(wt)}${agentButton(wt)}</span>` : "";
+    const links = wt ? `<span class="wt-links">${openCheckoutButton(wt)}${agentButton(pr, wt)}</span>` : "";
     return `<div class="card-icons">${links}${cleanup}</div>`;
   }
 
@@ -1563,7 +1566,7 @@
           ? `<button class="wt-link wt-move-wt blocked" disabled title="${esc(blocked)}">${MOVE_WT_ICON}</button>`
           : `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Move this branch out to a new worktree and open it in ${esc(appName)}">${MOVE_WT_ICON}</button>`;
       }
-      return `<span class="wt-links">${openBtn}${agentButton(wt)}${moveBtn}</span>`;
+      return `<span class="wt-links">${openBtn}${agentButton(pr, wt)}${moveBtn}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo
@@ -2274,7 +2277,7 @@
     if (agentBtn) {
       agentBtn.disabled = true;
       try {
-        await openAgent(agentBtn.dataset.path);
+        await openAgent(agentBtn.dataset.path || agentBtn.dataset.agentPath, agentBtn.dataset.session || agentBtn.dataset.agentSession);
       } finally {
         agentBtn.disabled = false;
       }
@@ -2607,13 +2610,17 @@
     return `<a class="${cls}" ${data} href="${esc(url)}" title="Open the PR session in ${esc(agent.name)}">${inner}</a>`;
   }
 
-  // Where Continue goes: the pinned session, else the checkout's latest one.
-  function continueTarget(pr) {
+  // The session every link for a PR opens: the pinned one when the companion follows the
+  // PR (none if nothing is pinned), else the checkout's latest.
+  function sessionTarget(pr, wt = worktreeFor(pr)) {
     const cp = companionPr(pr);
-    if (cp?.session?.id && cp.path) return { path: cp.path, session: cp.session.id };
-    const wt = worktreeFor(pr);
-    if (wt?.session) return { path: wt.path, session: wt.session.id };
-    return null;
+    if (cp) return cp.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
+    return wt?.session ? { path: wt.path, session: wt.session } : null;
+  }
+
+  function continueTarget(pr) {
+    const target = sessionTarget(pr);
+    return target && { path: target.path, session: target.session.id };
   }
 
   function continueButton(pr) {
