@@ -2469,7 +2469,11 @@
     }
     if (pr.reviewDecision === "APPROVED" && ciOk(pr) && !pr.autoMergeRequest && !pr.isDraft && ruleOn("merge"))
       return { kind: "merge", label: "Merge", tone: "green" };
-    const asked = changesRequestedBy(pr).map((r) => r.author.login);
+    // GitHub drops a re-requested reviewer from latestReviews, so name them from the request.
+    const pending = (pr.reviewRequests?.nodes || [])
+      .map((n) => n.requestedReviewer?.login || n.requestedReviewer?.name).filter(Boolean);
+    const changed = changesRequestedBy(pr).map((r) => r.author.login);
+    const asked = changed.length ? changed : pending;
     if (pr.reviewDecision === "CHANGES_REQUESTED" && asked.length && ruleOn("address_feedback"))
       return { kind: "awaiting_rereview", rule: "address_feedback", label: `Re-review requested · ${asked.length}`,
         tone: "muted", reviewers: asked };
