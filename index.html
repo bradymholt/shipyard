@@ -2469,6 +2469,10 @@
     }
     if (pr.reviewDecision === "APPROVED" && ciOk(pr) && !pr.autoMergeRequest && !pr.isDraft && ruleOn("merge"))
       return { kind: "merge", label: "Merge", tone: "green" };
+    const asked = changesRequestedBy(pr).map((r) => r.author.login);
+    if (pr.reviewDecision === "CHANGES_REQUESTED" && asked.length && ruleOn("address_feedback"))
+      return { kind: "awaiting_rereview", rule: "address_feedback", label: `Re-review requested · ${asked.length}`,
+        tone: "muted", reviewers: asked };
     return null;
   }
 
@@ -2754,7 +2758,7 @@
     const field = `d-${key}-${chip.kind}`;
     const run = (action, label, cls = "") => `<button type="button" class="nc-run ${cls}" data-pr-action="${esc(action)}" data-field="${esc(field)}">${esc(label)}</button>`;
     const rerequest = rerequestButton(chip.reviewers);
-    const off = `<button type="button" class="nc-quiet" data-chip-off="${esc(chip.kind)}" title="Hide this chip on every card">Turn off this chip</button>`;
+    const off = `<button type="button" class="nc-quiet" data-chip-off="${esc(chip.rule || chip.kind)}" title="Hide this chip on every card">Turn off this chip</button>`;
     let body = "";
     let actionsHtml = "";
     if (chip.kind === "merge") {
@@ -2765,6 +2769,9 @@
       const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
       body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
       actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
+    } else if (chip.kind === "awaiting_rereview") {
+      body = `Changes were requested; you asked ${chip.reviewers.join(", ")} to look again.`;
+      actionsHtml = continueButton(pr);
     } else if (chip.kind === "rerequest_review") {
       body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
       actionsHtml = rerequest + continueButton(pr);
