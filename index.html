@@ -2525,7 +2525,7 @@
   };
   // Actions that put words in front of someone show the full text, editable, before they post.
   const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review", "nudge", "approve"]);
-  const PASS_FOR_CHIP = { address_feedback: "changes_requested", fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
+  const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
   const PASS_LABELS = { changes_requested: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
   const TRUST_LABELS = {
     rerun_checks: "re-run failed jobs when it looks flaky", rerequest_review: "re-request review after you push",
@@ -2636,6 +2636,18 @@
     return target ? sessionLink(target.path, target.session, `Continue in ${esc(agentName())}`, "btn-link", prKey(pr)) : "";
   }
 
+  // A new session with the feedback prompt typed in; agents without a prompt URL resume instead.
+  function respondButton(pr) {
+    const url = state.agent?.prompt_url;
+    const template = state.rules?.address_feedback?.prompt;
+    if (!url || !template) return continueButton(pr);
+    const prompt = template.replaceAll("{url}", pr.url).replaceAll("{repo}", pr.repository?.nameWithOwner || "")
+      .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "");
+    const path = continueTarget(pr)?.path || worktreeFor(pr)?.path || companionPr(pr)?.path || "";
+    const href = url.replaceAll("{prompt}", encodeURIComponent(prompt)).replaceAll("{path}", encodeURIComponent(path));
+    return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">Respond in ${esc(agentName())}</a>`;
+  }
+
   function sidebarHeader(pr) {
     const key = prKey(pr);
     const cp = companionPr(pr);
@@ -2743,7 +2755,7 @@
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">Keep</button>
           <button type="button" data-dismiss="${card.id}">Don't</button></div>${trustToggles(card)}</div>`;
     }
-    const rerequest = card.pass === "changes_requested" ? rerequestButton(githubChip(pr)?.reviewers, card.id) : "";
+    const rerequest = card.pass === "changes_requested" ? respondButton(pr) + rerequestButton(githubChip(pr)?.reviewers, card.id) : "";
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
@@ -2780,12 +2792,15 @@
     } else if (chip.kind === "rerequest_review") {
       body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
       actionsHtml = rerequest + continueButton(pr);
+    } else if (chip.kind === "address_feedback") {
+      const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved).length;
+      body = `${chip.reviewers.join(", ")} requested changes${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
+      actionsHtml = respondButton(pr) + rerequest;
     } else if (PASS_FOR_CHIP[chip.kind]) {
-      body = { address_feedback: "Changes were requested.", fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
+      body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
         review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
       actionsHtml = `<button type="button" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
-        + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "")
-        + (chip.kind === "address_feedback" ? rerequest : "");
+        + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "");
     } else {
       return "";
     }

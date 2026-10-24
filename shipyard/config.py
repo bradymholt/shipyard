@@ -16,9 +16,11 @@ rule and trust settings that decide what the companion does on its own.
         "sessions": "claude-code",   // or "codex"
         "mode": "url",
         "url": "claude://resume?session={session}",
-        "command": ["open", "claude://resume?session={session}"]
-      },
-      "rules": { "nudge": { "after_hours": 24 }, "passes": { "ci_failed": "ask" } },
+        "command": ["open", "claude://resume?session={session}"],
+        "prompt_url": "claude://code/new?folder={path}&q={prompt}"
+      },                       // a new session with {prompt} typed in; null for none
+      "rules": { "address_feedback": { "prompt": "/pr-review-respond {url} (branch {branch})" },
+                 "nudge": { "after_hours": 24 }, "passes": { "ci_failed": "ask" } },
       "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } }
     }
 """
@@ -49,12 +51,13 @@ DEFAULT_AGENT = {
     "mode": "url",
     "url": "claude://resume?session={session}",
     "command": ["open", "claude://resume?session={session}"],
+    "prompt_url": "claude://code/new?folder={path}&q={prompt}",
 }
 
 # What each rule does is code in rules.py; whether and when it fires is config. A rule
 # set to false shows no chip and runs no pass. Thresholds take their window here.
 RULE_DEFAULTS = {
-    "address_feedback": True,
+    "address_feedback": {"prompt": "Address the review feedback on {url} (branch {branch})"},
     "fix_ci": True,
     "merge": True,
     "review": True,
@@ -62,13 +65,14 @@ RULE_DEFAULTS = {
     "nudge": {"after_hours": 24},
     "rerequest_review": True,
     "passes": {
-        "changes_requested": "auto",
+        "changes_requested": False,
         "ci_failed": "auto",
         "pre_review": "auto",
         "re_review": "auto",
     },
 }
 RULE_THRESHOLDS = {"nudge": "after_hours"}
+RULE_PROMPTS = {"address_feedback"}
 PASS_MODES = ("auto", "ask", False)
 
 # Trust flags: every action type starts manual. "when" sets the confidence an
@@ -122,6 +126,12 @@ def validate_agent(raw):
     if agent["sessions"] not in ADAPTERS:
         raise ValueError(f'agent "sessions" must be one of: {", ".join(ADAPTERS)}')
     validate_open_settings("agent", agent, "{session}")
+    if "prompt_url" not in raw and agent["sessions"] != DEFAULT_AGENT["sessions"]:
+        agent["prompt_url"] = None
+    url = agent["prompt_url"]
+    if url is not None and (not isinstance(url, str) or "{prompt}" not in url or
+                            urlparse(url).scheme.lower() in ("", "data", "javascript")):
+        raise ValueError('agent "prompt_url" must be null or a safe URL with a "{prompt}" placeholder')
     return agent
 
 
@@ -144,6 +154,15 @@ def validate_rules(raw):
                 if mode not in PASS_MODES:
                     raise ValueError(f'rules "passes" "{pass_name}" must be "auto", "ask" or false')
             rules[name] = {**default, **value}
+        elif name in RULE_PROMPTS:
+            if value is True:
+                value = default
+            if value is not False:
+                if (not isinstance(value, dict) or set(value) - {"prompt"} or
+                        not isinstance(value.get("prompt", ""), str) or not value.get("prompt", "x").strip()):
+                    raise ValueError(f'rule "{name}" must be true, false or {{"prompt": a non-empty string}}')
+                value = {**default, **value}
+            rules[name] = value
         elif name in RULE_THRESHOLDS:
             key = RULE_THRESHOLDS[name]
             if value is True:

@@ -12,6 +12,7 @@
     "sessions": "claude-code",
     "mode": "url",
     "url": "claude://resume?session={session}",
-    "command": ["open", "claude://resume?session={session}"]
+    "command": ["open", "claude://resume?session={session}"],
+    "prompt_url": "claude://code/new?folder={path}&q={prompt}"
   }
 }
