@@ -110,7 +110,7 @@ def card_is_stale(card, snap):
     kind = card.get("pass")
     if kind == "changes_requested":
         asked = set(events.requesters(snap))
-        return snap.get("decision") != "CHANGES_REQUESTED" or bool(asked) and asked <= set(snap.get("requested") or [])
+        return not events.needs_changes(snap) or bool(asked) and asked <= set(snap.get("requested") or [])
     if kind == "ci_failed":
         return snap.get("ci") == "SUCCESS" or card.get("head") != snap.get("head")
     if kind == "pre_review":

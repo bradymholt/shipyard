@@ -2434,10 +2434,15 @@
 
   // GitHub keeps a PR at CHANGES_REQUESTED until that reviewer approves, but a later comment-only
   // review replaces theirs in latestReviews; then whoever hasn't approved is the one to answer.
+  // Without that decision, a comment-only review counts while its threads are open.
   function changesRequestedBy(pr) {
     const reviews = (pr.latestReviews?.nodes || []).filter((r) => r.author && r.author.login !== pr.author?.login);
+    if (pr.reviewDecision !== "CHANGES_REQUESTED") {
+      const open = (pr.reviewThreads?.nodes || []).some((t) => !t.isResolved);
+      return open ? reviews.filter((r) => r.state === "COMMENTED") : [];
+    }
     const asked = reviews.filter((r) => r.state === "CHANGES_REQUESTED");
-    return asked.length || pr.reviewDecision !== "CHANGES_REQUESTED" ? asked : reviews.filter((r) => r.state !== "APPROVED");
+    return asked.length ? asked : reviews.filter((r) => r.state !== "APPROVED");
   }
   const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
@@ -2464,7 +2469,7 @@
     }
     if (pr.author?.login !== state.viewer) return null;
     const waitingOn = changesRequestedBy(pr).filter((r) => !reviewRequested(pr, r.author?.login));
-    if (pr.reviewDecision === "CHANGES_REQUESTED" && waitingOn.length) {
+    if (waitingOn.length) {
       const reviewers = waitingOn.map((r) => r.author.login);
       const pushed = waitingOn.every((r) => r.commit?.oid && r.commit.oid !== pr.commits?.nodes?.[0]?.commit?.oid);
       const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved);
@@ -2801,7 +2806,8 @@
       actionsHtml = rerequest + continueButton(pr);
     } else if (chip.kind === "address_feedback") {
       const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved).length;
-      body = `${chip.reviewers.join(", ")} requested changes${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
+      const verb = pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
+      body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
       actionsHtml = respondButton(pr) + rerequest;
     } else if (PASS_FOR_CHIP[chip.kind]) {
       body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,

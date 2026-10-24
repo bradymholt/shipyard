@@ -17,14 +17,21 @@ def _feedback_ids(snap):
 
 
 def requesters(snap):
-    """Who a changes-requested PR is waiting to hear back from. GitHub keeps the decision
+    """Who a PR with feedback is waiting to hear back from. GitHub keeps the decision
     until that reviewer approves, but a later comment-only review replaces theirs in
-    latestReviews; then it's whoever hasn't approved."""
+    latestReviews; then it's whoever hasn't approved. Without a changes-requested
+    decision, a comment-only review counts while its threads are open."""
     reviews = snap.get("reviews") or []
+    if snap.get("decision") != "CHANGES_REQUESTED":
+        if not any(not t.get("resolved") for t in snap.get("threads") or []):
+            return []
+        return [r["author"] for r in reviews if r.get("state") == "COMMENTED"]
     asked = [r["author"] for r in reviews if r.get("state") == "CHANGES_REQUESTED"]
-    if asked or snap.get("decision") != "CHANGES_REQUESTED":
-        return asked
-    return [r["author"] for r in reviews if r.get("state") in FEEDBACK]
+    return asked or [r["author"] for r in reviews if r.get("state") in FEEDBACK]
+
+
+def needs_changes(snap):
+    return snap.get("decision") == "CHANGES_REQUESTED" or bool(requesters(snap))
 
 
 def derive(prev, cur):
@@ -48,14 +55,14 @@ def derive(prev, cur):
     if cur["mine"]:
         if first:
             add("pr_opened")
-        changes = cur.get("decision") == "CHANGES_REQUESTED"
+        changes = needs_changes(cur)
         # A reviewer's comment-only review (each inline reply makes one) is new feedback too.
         new_feedback = _feedback_ids(cur) - (set() if first else _feedback_ids(prev))
-        if changes and (first or prev.get("decision") != "CHANGES_REQUESTED" or new_feedback):
+        if changes and (first or not needs_changes(prev) or new_feedback):
             ids = sorted(str(i) for i in _feedback_ids(cur) if i is not None)
             add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=requesters(cur))
         if (not first and prev.get("head") != cur.get("head") and
-                prev.get("decision") == "CHANGES_REQUESTED"):
+                needs_changes(prev)):
             pending = set(cur.get("requested") or [])
             reviewers = [r for r in requesters(cur) if r not in pending]
             if reviewers:

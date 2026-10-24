@@ -1,4 +1,4 @@
-Shipyard (the PR dashboard) is checking in on this pull request because a reviewer requested changes. Do not edit files or run commands that change anything; this turn only reads and answers.
+Shipyard (the PR dashboard) is checking in on this pull request because a reviewer requested changes or left review comments. Do not edit files or run commands that change anything; this turn only reads and answers.
 
 PR: {repo}#{number} "{title}" ({url})
 Branch: {branch} at {head}
