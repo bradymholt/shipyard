@@ -65,6 +65,11 @@ class ClaudeSessions(HomeCase):
         found = claude.find_pr_session(self.checkout, "nomatch", "https://github.com/o/r/pull/99")
         self.assertEqual(found, {"id": "latest", "how": "latest"})
 
+    def test_no_latest_fallback_when_asked(self):
+        write_jsonl(self.project() / "other.jsonl", [user("about another PR")])
+        found = ClaudeCode().find_pr_session(self.checkout, "feature", "https://github.com/o/r/pull/7", latest=False)
+        self.assertIsNone(found)
+
     def test_pin_skips_sessions_a_shipyard_pass_started(self):
         url = "https://github.com/o/r/pull/7"
         write_jsonl(self.project() / "mine.jsonl", [user("build it")])

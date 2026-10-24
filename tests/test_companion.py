@@ -58,7 +58,7 @@ class FakeAgent:
     def available(self):
         return True
 
-    def find_pr_session(self, path, branch, url):
+    def find_pr_session(self, path, branch, url, latest=True):
         return {"id": "s-open", "how": "pr-url"}
 
     def list_sessions(self, path):

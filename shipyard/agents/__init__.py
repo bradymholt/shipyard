@@ -141,12 +141,12 @@ class Adapter:
         """The session's title as the agent's own app shows it, when the transcript has one."""
         return None
 
-    def find_pr_session(self, path, branch, pr_url):
+    def find_pr_session(self, path, branch, pr_url, latest=True):
         """The session that opened a PR: the newest one whose transcript ran `gh pr create`
         and mentions the PR's URL (best) or its branch. Newest wins because a parent
         session that fans out into children is older than the child holding this PR."""
         best = {}
-        latest = None
+        newest = None
         for sid, f in self.session_files(path):
             text = read_text(f)
             if PASS_PROMPT_START in text and \
@@ -156,8 +156,8 @@ class Adapter:
                 mtime = os.path.getmtime(f)
             except OSError:
                 continue
-            if not latest or mtime > latest["mtime"]:
-                latest = {"id": sid, "mtime": mtime}
+            if not newest or mtime > newest["mtime"]:
+                newest = {"id": sid, "mtime": mtime}
             if "gh pr create" not in text:
                 continue
             how = "pr-url" if pr_url and pr_url in text else "branch" if branch and branch in text else None
@@ -168,7 +168,7 @@ class Adapter:
                 best = {"id": sid, "how": how, "rank": rank, "mtime": mtime}
         if best:
             return {"id": best["id"], "how": best["how"]}
-        return {"id": latest["id"], "how": "latest"} if latest else None
+        return {"id": newest["id"], "how": "latest"} if newest and latest else None
 
     def discard(self, path, session_id):
         """Delete a session Shipyard created only to ask a question (a fork, or a fresh

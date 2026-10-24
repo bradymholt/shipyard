@@ -201,7 +201,8 @@ class Companion:
         current = self.db.pin(key)
         if current and current.get("session_id") and not force:
             return current
-        found = adapter.find_pr_session(wt["path"], snap["branch"], snap["url"])
+        # A main clone holds sessions about many PRs, so its newest one says nothing about this PR.
+        found = adapter.find_pr_session(wt["path"], snap["branch"], snap["url"], latest=not wt.get("main"))
         if found:
             self.db.set_pin(key, wt["path"], found["id"], found["how"])
             self.db.log(key, f"pinned {self.config['agent']['name']} session"
