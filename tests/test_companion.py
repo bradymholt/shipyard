@@ -16,6 +16,7 @@ class FakeGitHub:
         self.lists = {"author:@me": [], "review-requested:@me": [], "reviewed-by:@me": []}
         self.nodes = {}
         self.calls = []
+        self.compare = {"files": [{"filename": "a.py", "status": "modified", "additions": 3, "deletions": 1}]}
 
     def put(self, node, *lists):
         self.nodes[node["id"]] = node
@@ -36,7 +37,7 @@ class FakeGitHub:
 
     def rest(self, method, path, body=None):
         self.calls.append((method, path, body))
-        return {}
+        return self.compare if "/compare/" in path else {}
 
     def job_log_tail(self, repo, job_id, lines=150):
         return "Error: connect ETIMEDOUT registry.npmjs.org"
@@ -362,6 +363,29 @@ class Reviews(CompanionCase):
         self.assertEqual(len(posted), 1)
         self.assertEqual(posted[0][2]["event"], "APPROVE")
         self.assertNotIn("body", posted[0][2])
+
+    def rereview_approval_posted(self, files):
+        self.comp.set_trust("approve_rereview", True)
+        self.gh.compare = {"files": files}
+        self.agent.answers = {"re-review": {"summary": "all addressed", "proposals": [
+            {"action": "approve", "confidence": "high", "reason": "threads fixed"}]}}
+        review = {"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-19T00:00:00Z",
+                  "commit": {"oid": "old"}}
+        self.gh.put(pr_node(number=7, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
+        self.poll()
+        return any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls)
+
+    def test_trusted_approve_fires_on_a_small_change(self):
+        self.assertTrue(self.rereview_approval_posted(
+            [{"filename": "a.py", "status": "modified", "additions": 20, "deletions": 10}]))
+
+    def test_trusted_approve_holds_back_on_a_large_change(self):
+        self.assertFalse(self.rereview_approval_posted(
+            [{"filename": "a.py", "status": "modified", "additions": 25, "deletions": 6}]))
+
+    def test_trusted_approve_holds_back_when_a_file_is_added(self):
+        self.assertFalse(self.rereview_approval_posted(
+            [{"filename": "new.py", "status": "added", "additions": 2, "deletions": 0}]))
 
     def test_trusted_actions_never_fire_on_someone_elses_pr(self):
         self.comp.set_trust("rerun_checks", True)
