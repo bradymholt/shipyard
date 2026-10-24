@@ -2426,7 +2426,13 @@
   // The Reviews tab's copy of a PR carries viewerLatestReview; the targeted copy doesn't.
   const reviewedCopy = (pr) => state.reviewedPrs.find((r) => prKey(r) === prKey(pr)) || pr;
 
-  const changesRequestedBy = (pr) => (pr.latestReviews?.nodes || []).filter((r) => r.state === "CHANGES_REQUESTED" && r.author);
+  // GitHub keeps a PR at CHANGES_REQUESTED until that reviewer approves, but a later comment-only
+  // review replaces theirs in latestReviews; then whoever hasn't approved is the one to answer.
+  function changesRequestedBy(pr) {
+    const reviews = (pr.latestReviews?.nodes || []).filter((r) => r.author && r.author.login !== pr.author?.login);
+    const asked = reviews.filter((r) => r.state === "CHANGES_REQUESTED");
+    return asked.length || pr.reviewDecision !== "CHANGES_REQUESTED" ? asked : reviews.filter((r) => r.state !== "APPROVED");
+  }
   const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
   function githubChip(pr, reviewMode) {
