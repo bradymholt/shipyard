@@ -53,6 +53,8 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
         return None
     if snap.get("draft"):
         rule = rules.get("stale_draft")
+        if snap.get("ci") not in (None, "SUCCESS"):  # running or red checks mean it isn't idle yet
+            return None
         idle = hours_since(snap.get("last_commit_at") or snap.get("created"), now)
         if rule and idle is not None and idle >= rule["after_days"] * 24:
             return {"kind": "stale_draft", "label": f"Stale draft · {int(idle // 24)}d"}

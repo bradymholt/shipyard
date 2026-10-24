@@ -115,6 +115,7 @@ class MemoryChips(unittest.TestCase):
         s = snap(draft=True, committed="2026-10-20T08:00:00Z")
         self.assertEqual(rules.memory_chip(s, RULES, NOW)["label"], "Stale draft · 4d")
         self.assertIsNone(rules.memory_chip(s, validate_rules({"stale_draft": {"after_days": 7}}), NOW))
+        self.assertIsNone(rules.memory_chip(snap(draft=True, committed="2026-10-20T08:00:00Z", ci="PENDING"), RULES, NOW))
 
     def test_snooze_wins_until_it_expires(self):
         s = snap(draft=True, committed="2026-10-01T08:00:00Z")
