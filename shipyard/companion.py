@@ -613,7 +613,8 @@ class Companion:
                 if candidate and os.path.isdir(candidate) and "/.claude/worktrees/" in candidate:
                     cleanup = candidate
             prs[key] = {
-                "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key)),
+                "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key),
+                                          self.db.last_logged(key, actions.NUDGED)),
                 "snoozedUntil": self.db.snooze(key),
                 "cards": [c for c in cards if c["status"] == "open"],
                 "handled": [c for c in cards if c["status"] == "handled"],

@@ -132,9 +132,12 @@ def post_reply(gh, snap, payload, ctx):
     return "posted a comment"
 
 
+NUDGED = "nudged the reviewers"
+
+
 def nudge(gh, snap, payload, ctx):
     gh.rest("POST", f"/repos/{snap['repo']}/issues/{snap['number']}/comments", {"body": _text(payload)})
-    return "nudged the reviewers"
+    return NUDGED
 
 
 def _review(gh, snap, event, body, comments=()):

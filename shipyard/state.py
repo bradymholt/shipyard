@@ -216,6 +216,10 @@ class State:
     def log(self, key, text):
         self._exec("INSERT INTO activity (key, at, text) VALUES (?, ?, ?)", (key, now_iso(), text))
 
+    def last_logged(self, key, text):
+        rows = self._rows("SELECT at FROM activity WHERE key = ? AND text = ? ORDER BY id DESC LIMIT 1", (key, text))
+        return rows[0]["at"] if rows else None
+
     def activity(self, key, limit=30):
         return list(reversed(self._rows("SELECT at, text FROM activity WHERE key = ? ORDER BY id DESC LIMIT ?",
                                         (key, limit))))

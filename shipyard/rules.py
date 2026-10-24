@@ -42,7 +42,7 @@ def waiting_since(snap):
     return max(times) if times else snap.get("ready_at") or snap.get("created")
 
 
-def memory_chip(snap, rules, now=None, snoozed_until=None):
+def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
     now = now or datetime.now(timezone.utc)
     if snoozed_until:
         until = parse_time(snoozed_until)
@@ -60,7 +60,9 @@ def memory_chip(snap, rules, now=None, snoozed_until=None):
     rule = rules.get("nudge")
     waiting_on = [r for r in snap.get("requested") or []]
     if rule and waiting_on and snap.get("decision") not in ("APPROVED", "CHANGES_REQUESTED"):
-        waited = hours_since(waiting_since(snap), now)
+        # A nudge restarts the clock, so the chip comes back only after another full wait.
+        waited = min((h for h in (hours_since(waiting_since(snap), now), hours_since(nudged_at, now))
+                      if h is not None), default=None)
         if waited is not None and waited >= rule["after_hours"]:
             return {"kind": "nudge", "label": f"Nudge · {int(waited)}h", "reviewers": waiting_on}
     return None
