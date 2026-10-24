@@ -10,6 +10,8 @@ Two outputs:
 """
 from datetime import datetime, timezone
 
+from . import events
+
 # Which pass each event asks for, and which rule switches it off.
 EVENT_PASSES = {
     "changes_requested": ("changes_requested", "address_feedback"),
@@ -107,7 +109,7 @@ def card_is_stale(card, snap):
         return True
     kind = card.get("pass")
     if kind == "changes_requested":
-        asked = {r["author"] for r in snap.get("reviews") or [] if r.get("state") == "CHANGES_REQUESTED"}
+        asked = set(events.requesters(snap))
         return snap.get("decision") != "CHANGES_REQUESTED" or bool(asked) and asked <= set(snap.get("requested") or [])
     if kind == "ci_failed":
         return snap.get("ci") == "SUCCESS" or card.get("head") != snap.get("head")
