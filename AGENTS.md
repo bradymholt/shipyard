@@ -67,4 +67,6 @@ before merging: run the unit tests, and the browser smoke test for page changes.
 unrelated work out of the commit, and stop rather than merge when something looks wrong.
 
 The local companion serves `index.html` from the main checkout, so a merge reaches it only
-after that checkout pulls. Finish with `git pull --ff-only` there.
+after that checkout pulls. Finish with `git pull --ff-only` there. A page-only change is live
+after the pull; a change to `shipyard.py` or `shipyard/` also needs `python3
+shipyard-launchd.py restart`, because the reload-on-save watcher doesn't catch a pull.
