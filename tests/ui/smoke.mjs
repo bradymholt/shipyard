@@ -144,8 +144,7 @@ try {
   check((await sb.locator(".next-card.first p").first().textContent()).includes("Rev questions the retry count"), "Next card shows the agent's judgment");
   check((await sb.locator(".sess-title").textContent()).includes("Add retries to the webhook sender"), "PR session shows the pinned session's title");
   check((await sb.locator(".sess-meta").textContent()).includes("2 yours · 1 Shipyard's"), "session turn counts split yours vs Shipyard's");
-  await page.waitForSelector("#sidebar .sb-files li");
-  check((await sb.locator(".sb-reviewers").textContent()).includes("requested changes · 2 comments"), "Review lists reviewers with state and comments");
+  await page.waitForSelector("#sidebar .sb-activity li");
   check(await sb.locator(".sb-activity .act-shipyard").count() > 0, "Activity includes Shipyard's own actions");
   await page.waitForTimeout(400);  // let the slide-in finish
   if (shots) await page.screenshot({ path: `${shots}/sidebar-feedback.png` });
@@ -203,9 +202,9 @@ try {
   check((await chipText(hosted.page, 103))?.trim() === "Merge", "Merge chip works hosted");
   check(await hosted.page.locator('.card[data-key="o/r#104"] .next-chip').count() === 0, "memory chips are absent hosted, not broken");
   await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
-  await hosted.page.waitForSelector("#sidebar .sb-files li");
+  await hosted.page.waitForSelector("#sidebar .sb-activity li");
   check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Next" }).count() === 0, "hosted sidebar has no Next section");
-  check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Review" }).count() === 1, "hosted sidebar still has Review");
+  check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Activity" }).count() === 1, "hosted sidebar still has Activity");
   check(hosted.errors.length === 0, `no page errors hosted${hosted.errors.length ? `: ${hosted.errors.join(" | ")}` : ""}`);
 
   await browser.close();

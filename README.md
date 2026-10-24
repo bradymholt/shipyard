@@ -45,7 +45,7 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
-- **Next actions:** a chip on each card that has a next step (Address feedback, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's reviewers, files, and timeline.
+- **Next actions:** a chip on each card that has a next step (Address feedback, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's timeline.
 - **Shipping orchestrator (local):** the companion watches your PRs, asks your coding agent about the ones that changed, and shows its judgment as a card with the buttons that fit. You decide; it prepares.
 - **Optional local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
 
