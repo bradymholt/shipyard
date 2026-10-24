@@ -197,7 +197,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "undo": lambda c: c.undo(card_id()),
             "trust": lambda c: c.set_trust(arg("flag"), arg("on") == "1"),
             "rule": lambda c: c.set_rule(arg("name"), body.get("value")),
-            "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {}),
+            "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
+                                               int(arg("card")) if arg("card") else None),
         }
         return self._companion_call(calls[name])
 

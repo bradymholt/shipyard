@@ -35,7 +35,7 @@ class FakeCompanion:
         self.calls.append(("card", card, index, payload))
         return {"ok": True}
 
-    def do_action(self, key, action, payload):
+    def do_action(self, key, action, payload, card_id=None):
         raise LookupError("not tracked")
 
 

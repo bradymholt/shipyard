@@ -204,6 +204,13 @@ class CiFailed(CompanionCase):
         self.assertEqual(card["proposals"][0]["action"], "rerun_checks")
         self.assertFalse(any(c[0] == "POST" for c in self.gh.calls))  # manual until trusted
 
+    def test_rerun_from_the_card_closes_it(self):
+        self.gh.put(self.red(), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"], [])
+        self.assertEqual(self.gh.calls[-1][1], "/repos/o/r/actions/runs/22/rerun-failed-jobs")
+
     def test_trusted_rerun_fires_itself_and_lands_in_handled(self):
         self.comp.set_trust("rerun_checks", True)
         self.gh.put(self.red(), "author:@me")

@@ -2687,7 +2687,7 @@
       ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "";
     // Whether a re-run makes sense can hinge on what only you know (say, you freed a quota).
     const rerun = card.pass === "ci_failed" && !(card.proposals || []).some((p) => p.action === "rerun_checks")
-      ? `<button type="button" class="nc-run" data-pr-action="rerun_checks">${esc(ACTION_LABELS.rerun_checks)}</button>` : "";
+      ? `<button type="button" class="nc-run" data-pr-action="rerun_checks" data-done-card="${card.id}">${esc(ACTION_LABELS.rerun_checks)}</button>` : "";
     if (card.kind === "running") {
       return `<div class="${cls}"><div class="nc-head"><span class="plan-dot running"></span>${title}</div>
         <p class="nc-reason">${esc(agentName())} is reading the PR${card.question ? `: “${esc(card.question)}”` : ""}…</p></div>`;
@@ -3014,7 +3014,8 @@
       if (confirmText && !confirm(confirmText)) return;
       return busy(btn, async () => {
         if (btn.dataset.prAction) {
-          await companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}`, { payload });
+          const done = btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : "";
+          await companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${done}`, { payload });
         } else {
           await companionCall(`companion/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
         }
