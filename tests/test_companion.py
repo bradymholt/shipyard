@@ -52,6 +52,7 @@ class FakeAgent:
         self.runs = []
         self.live = False
         self.answers = {}
+        self.discarded = []
 
     def available(self):
         return True
@@ -70,6 +71,10 @@ class FakeAgent:
 
     def is_live(self, path, sid):
         return self.live
+
+    def discard(self, path, sid):
+        self.discarded.append(sid)
+        return True
 
     def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None):
         self.runs.append({"cwd": cwd, "prompt": prompt, "mode": mode, "session": session_id})
@@ -190,6 +195,7 @@ class CiFailed(CompanionCase):
         card = self.poll()["o/r#1"]["cards"][0]
         self.assertEqual(self.agent.runs[0]["mode"], "fork")
         self.assertIn("ETIMEDOUT", self.agent.runs[0]["prompt"])
+        self.assertEqual(self.agent.discarded, ["fork-1"])  # the fork's transcript is not kept
         self.assertEqual(card["proposals"][0]["action"], "rerun_checks")
         self.assertFalse(any(c[0] == "POST" for c in self.gh.calls))  # manual until trusted
 
@@ -246,6 +252,7 @@ class Reviews(CompanionCase):
         run = self.agent.runs[0]
         self.assertEqual((run["mode"], run["cwd"]), ("fresh", self.checkout))
         self.assertEqual(self.comp.db.pin("o/r#5")["how"], "shipyard")
+        self.assertEqual(self.agent.discarded, [])  # the pinned review session stays
         card = pr["cards"][0]
         self.comp.card_action(card["id"], 0, None)
         method, path, body = self.gh.calls[-1]

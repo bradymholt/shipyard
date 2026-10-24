@@ -311,6 +311,9 @@ class Companion:
             return self.fail_pass(row, str(e))
         answer = passes.clean_answer(result["answer"])
         produced = result.get("session_id")
+        throwaway = mode == "fork" or (mode == "fresh" and not pin_after)
+        if throwaway and produced and produced != session:
+            adapter.discard(cwd, produced)  # the answer is on the card; the transcript isn't needed
         self.db.update_pass(row["id"], status="done", mode=mode,
                             session_id=produced if mode != "fork" else session,
                             summary=answer["summary"][:500])

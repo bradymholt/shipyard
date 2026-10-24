@@ -8,6 +8,7 @@ of the companion (rules, passes, the page) never knows which CLI is behind it:
     find_pr_session(...)       the session that opened a PR, for pinning
     user_messages(text)        the messages typed into a session, for its title and turns
     is_live(path, id)          whether the session is being written to right now
+    discard(path, id)          delete a throwaway session Shipyard made for a question
     run(...)                   one headless turn: fresh, resume, or fork
 
 Adapters are looked up by the config's agent "sessions" key.
@@ -156,6 +157,19 @@ class Adapter:
             return {"id": best["id"], "how": best["how"]}
         latest = self.sessions([path]).get(path)
         return {"id": latest["id"], "how": "latest"} if latest else None
+
+    def discard(self, path, session_id):
+        """Delete a session Shipyard created only to ask a question (a fork, or a fresh
+        run nobody will continue), so it never shows up as your latest session or in
+        the agent's session list. Returns True when a file was removed."""
+        f = self.session_file(path, session_id)
+        if not f:
+            return False
+        try:
+            os.remove(f)
+            return True
+        except OSError:
+            return False
 
     def is_live(self, path, session_id):
         f = self.session_file(path, session_id)

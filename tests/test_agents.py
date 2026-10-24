@@ -65,6 +65,14 @@ class ClaudeSessions(HomeCase):
         found = claude.find_pr_session(self.checkout, "nomatch", "https://github.com/o/r/pull/99")
         self.assertEqual(found, {"id": "latest", "how": "latest"})
 
+    def test_discard_removes_only_that_session(self):
+        write_jsonl(self.project() / "keep.jsonl", [user("mine")])
+        write_jsonl(self.project() / "fork.jsonl", [user("shipyard question")])
+        claude = ClaudeCode()
+        self.assertTrue(claude.discard(self.checkout, "fork"))
+        self.assertFalse(claude.discard(self.checkout, "missing"))
+        self.assertEqual([s["id"] for s in claude.list_sessions(self.checkout)], ["keep"])
+
     def test_user_messages_skip_tool_results(self):
         text = "".join(json.dumps(r) + "\n" for r in [user("one"), tool_result(), user("two"),
                                                        {"type": "assistant", "message": {}}])

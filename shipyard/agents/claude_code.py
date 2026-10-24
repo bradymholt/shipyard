@@ -15,6 +15,10 @@ READ_ONLY_TOOLS = [
     "Bash(gh run view:*)",
 ]
 WRITE_TOOLS = ["Edit", "Write", "NotebookEdit", "MultiEdit"]
+# Set when the companion itself was started from inside a Claude Code session; passed
+# through, they make the headless run think it is that session (or a child of it).
+PARENT_SESSION_VARS = {"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
+                       "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PID"}
 
 
 class ClaudeCode(Adapter):
@@ -64,7 +68,8 @@ class ClaudeCode(Adapter):
     def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None):
         argv = self.command(prompt, schema, mode, session_id, new_session_id)
         try:
-            r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
+            env = {k: v for k, v in os.environ.items() if k not in PARENT_SESSION_VARS}
+            r = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, env=env,
                                timeout=PASS_TIMEOUT, stdin=subprocess.DEVNULL)
         except subprocess.TimeoutExpired as e:
             raise AgentError(f"claude timed out after {e.timeout} seconds") from e
