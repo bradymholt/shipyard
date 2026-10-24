@@ -359,7 +359,8 @@ class Companion:
         kind = "answer" if name == "ask" else "pass"
         card = self.db.update_card(row["card_id"], kind=kind, summary=answer["summary"],
                                    proposals=answer["proposals"], addressed=answer.get("addressed"),
-                                   total=answer.get("total"), mode=mode, session_id=produced)
+                                   total=answer.get("total"), mode=mode, session_id=produced,
+                                   status="done" if name == "new_session" else None)
         if kind == "pass" and card:
             for proposal in answer["proposals"]:
                 if self.maybe_auto(card["id"], proposal["action"], proposal["payload"],

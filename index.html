@@ -2767,7 +2767,7 @@
     const key = prKey(pr);
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
-    const cards = cp?.cards || [];
+    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session");  // shown under PR session
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && open) {
       const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);
@@ -2811,6 +2811,12 @@
         <div class="sb-empty">No ${esc(agentName())} session for this PR.</div><div class="nc-actions">${newSession("")}</div></div></div>`;
     }
     const s = cp.session;
+    const starting = (cp.cards || []).find((c) => c.pass === "new_session");
+    if (starting?.kind === "running") {
+      return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
+        <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div></div>`;
+    }
+    const failed = starting ? `<p class="nc-error">${esc(starting.error || "Couldn't start the session.")}</p>` : "";
     let picker = "";
     if (sessionChoices?.key === key) {
       picker = sessionChoices.sessions.length
@@ -2835,7 +2841,7 @@
         <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}
           <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
     }
-    return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${body}${picker}</div></div>`;
+    return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div></div>`;
   }
 
   function timelineEntries(d) {

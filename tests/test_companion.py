@@ -424,6 +424,7 @@ class PageRequests(CompanionCase):
         self.assertEqual((self.agent.runs[-1]["mode"], self.agent.runs[-1]["name"]), ("fresh", "PR 1 (#1)"))
         self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "fresh-1")
         self.assertEqual(self.agent.discarded, [])
+        self.assertEqual(self.comp.db.cards("o/r#1", ("open",)), [])  # no card; the pin is the result
 
     def test_new_session_reads_a_merged_pr_it_never_saw(self):
         self.gh.put(pr_node(), "author:@me")
