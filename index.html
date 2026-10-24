@@ -2657,7 +2657,7 @@
       .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "");
     const path = continueTarget(pr)?.path || worktreeFor(pr)?.path || companionPr(pr)?.path || "";
     const href = url.replaceAll("{prompt}", encodeURIComponent(prompt)).replaceAll("{path}", encodeURIComponent(path));
-    return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">Respond in ${esc(agentName())}</a>`;
+    return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">Address in ${esc(agentName())}</a>`;
   }
 
   function sidebarHeader(pr) {
