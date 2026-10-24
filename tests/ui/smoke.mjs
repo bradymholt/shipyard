@@ -180,6 +180,9 @@ try {
   await page.waitForFunction(() => !document.querySelector('#sidebar button.nc-run[data-action="post_reply"]'));
   const posted = await page.evaluate(() => window.__dashboard.state.companionState.prs["o/r#101"].activity.map((a) => a.text));
   check(posted.includes("posted a reply on a review thread"), "Post reply goes through the companion and the card closes");
+  await sb.locator('button.nc-run[data-pr-action="rerequest_review"]').click();
+  await page.waitForFunction(() => !document.querySelector('#sidebar [data-pr-action="rerequest_review"]'), null, { timeout: 2000 });
+  check(await page.locator(".lane").nth(1).locator('.card[data-key="o/r#101"]').count() === 1, "Re-request review moves the card to Waiting right away");
 
   await page.locator('.card[data-key="o/r#102"] .next-row').click();
   await page.waitForSelector('#sidebar [data-show-diff]');

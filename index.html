@@ -2441,6 +2441,13 @@
   }
   const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
+  // Show a re-request right away, so the card moves to Waiting before GitHub's data catches up.
+  function markRequested(pr, reviewers) {
+    const added = (reviewers || []).filter((r) => !reviewRequested(pr, r)).map((r) => ({ requestedReviewer:
+      r.startsWith("team:") ? { __typename: "Team", name: r.slice(5) } : { __typename: "User", login: r } }));
+    pr.reviewRequests = { nodes: [...(pr.reviewRequests?.nodes || []), ...added] };
+  }
+
   function githubChip(pr, reviewMode) {
     if (pr.mergedAt) return null;
     if (reviewMode) {
@@ -3084,6 +3091,13 @@
           await companionCall(`companion/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
         }
         if (field) drafts.delete(field);
+        // The companion's update and GitHub's catch up in a second or two; show the result now.
+        const cp = pr && companionPr(pr);
+        const cardId = btn.dataset.card || btn.dataset.doneCard;
+        const card = (cp?.cards || []).find((c) => String(c.id) === cardId);
+        if (action === "rerequest_review") markRequested(pr, payload.reviewers || card?.payload?.reviewers);
+        if (card) cp.cards = cp.cards.filter((c) => c !== card);
+        render();
       });
     }
   });
