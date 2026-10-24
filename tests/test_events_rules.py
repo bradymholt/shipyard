@@ -51,6 +51,14 @@ class DeriveMine(unittest.TestCase):
         self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
         self.assertNotEqual(events[0]["head"], derive(None, prev)[1]["head"])
 
+    def test_a_comment_review_with_open_threads_is_feedback(self):
+        cur = snap(reviews=[review("COMMENTED", id=1)], threads=[{"body": "What is this?"}])
+        events = derive(snap(), cur)
+        self.assertEqual(names(events), ["changes_requested"])
+        self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
+        resolved = snap(reviews=[review("COMMENTED", id=1)], threads=[{"body": "Nit", "resolved": True}])
+        self.assertEqual(derive(snap(), resolved), [])
+
     def test_push_after_changes_requested_proposes_re_request(self):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", commit="aaa")])
         cur = snap(head="bbb", decision="CHANGES_REQUESTED",
@@ -175,6 +183,12 @@ class StaleCards(unittest.TestCase):
         self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED")))
         rev = [{"author": "rev", "state": "CHANGES_REQUESTED"}]
         self.assertTrue(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED", reviews=rev, requested=["rev"])))
+
+    def test_comment_feedback_card_goes_when_threads_resolve(self):
+        card = {"pass": "changes_requested", "head": "aaa"}
+        rev = [{"author": "rev", "state": "COMMENTED"}]
+        self.assertFalse(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?"}])))
+        self.assertTrue(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?", "resolved": True}])))
 
     def test_ci_card_goes_on_green_or_new_head(self):
         card = {"pass": "ci_failed", "head": "aaa"}
