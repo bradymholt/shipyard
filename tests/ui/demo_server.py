@@ -73,6 +73,9 @@ def main():
         def user_messages(self, text):
             return ClaudeCode().user_messages(text)
 
+        def title(self, text):
+            return ClaudeCode().title(text)
+
     agent = DemoAgent(str(checkout))
     agent.answers = {
         "reviewer requested changes": {
