@@ -2357,7 +2357,10 @@
     if (draftBtn) return markReadyClick(draftBtn);
 
     const btn = e.target.closest("button.am-toggle");
-    if (!btn) return;
+    if (btn) return autoMergeClick(btn, false);
+  });
+
+  async function autoMergeClick(btn, rerender) {
     btn.disabled = true;
     btn.textContent = "…";
     const enable = btn.dataset.action === "enable";
@@ -2368,16 +2371,15 @@
         pr.autoMergeRequest = enable ? { enabledAt: new Date().toISOString() } : null;
         pr.viewerCanEnableAutoMerge = !enable;
         pr.viewerCanDisableAutoMerge = enable;
-        btn.outerHTML = autoMergeChip(pr);
         saveDashboardCache();
-      } else {
-        render();
       }
+      if (pr && !rerender) btn.outerHTML = autoMergeChip(pr);
+      else render();
     } catch (err) {
       alert(`Auto-merge: ${err.message}`);
       render();
     }
-  });
+  }
 
   $("#sort-select").addEventListener("change", (e) => {
     state.sort = e.target.value;
@@ -2762,6 +2764,11 @@
         <p class="nc-reason">Mark it ready when you want reviews.</p>
         <div class="nc-actions"><button type="button" class="am-toggle off draft-toggle" data-pr="${esc(pr.id)}">Mark ready</button></div></div>`;
     }
+    if (!html && open && !pr.isDraft && !isReviewPr(pr) && !pr.autoMergeRequest && pr.viewerCanEnableAutoMerge) {
+      html = `<div class="next-card first"><div class="nc-head">Auto-merge</div>
+        <p class="nc-reason">Turn it on to merge once it's approved and checks pass.</p>
+        <div class="nc-actions">${autoMergeChip(pr)}</div></div>`;
+    }
     if (!html) {
       html = !cp && open
         ? `<div class="sb-empty">The companion follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
@@ -2962,6 +2969,7 @@
     let btn;
     if (t("[data-close]")) return closeSidebar();
     if ((btn = t("button.draft-toggle"))) return markReadyClick(btn);
+    if ((btn = t("button.am-toggle"))) return autoMergeClick(btn, true);
     if ((btn = t("[data-continue]"))) {
       // Log it; the link itself opens the session (or the companion runs the command).
       companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=continue`, {}).catch(() => {});
