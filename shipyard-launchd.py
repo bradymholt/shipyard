@@ -41,7 +41,7 @@ WATCH_PLIST = AGENT_DIR / f"{WATCH_LABEL}.plist"
 LOG_DIR = Path.home() / "Library" / "Logs"
 OUT_LOG = LOG_DIR / "shipyard.out.log"
 ERR_LOG = LOG_DIR / "shipyard.err.log"
-BASE_PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+BASE_PATH = [str(Path.home() / ".local" / "bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 SETTLE_SECONDS = 3.0
 START_TIMEOUT = 10.0
 POLL_SECONDS = 0.25
@@ -83,7 +83,7 @@ def choose_python(explicit: str | None) -> str:
 
 
 def agent_path(python: str) -> str:
-    # The companion shells out to git, and launchd agents inherit almost no PATH.
+    # The companion shells out to git and the coding agent CLI, and launchd agents inherit almost no PATH.
     home = str(Path(python).parent)
     return ":".join([home] + [p for p in BASE_PATH if p != home])
 
