@@ -43,7 +43,9 @@ def main():
     gh = FakeGitHub()
     gh.put(pr_node(101, head="h101", branch="me/webhook-retry", decision="CHANGES_REQUESTED",
                    reviews=[{"state": "CHANGES_REQUESTED", "author": "rev", "body": "A couple of things."}],
-                   threads=[{"body": "Why retry 5 times? GitHub already retries.", "comment_id": 501}],
+                   threads=[{"body": "Why retry 5 times? GitHub already retries.", "comment_id": 501,
+                             "path": "webhooks.py", "line": 12,
+                             "hunk": "@@ -10,2 +10,3 @@\n def send(event):\n-    retries = 3\n+    retries = 5"}],
                    updated=ago(hours=1)), "author:@me")
     gh.put(pr_node(102, head="h102", branch="me/ci-cache", ci="FAILURE",
                    contexts=[check_run("rspec", "FAILURE", job=7, run=8)], requested=["jm"],
