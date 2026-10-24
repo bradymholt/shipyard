@@ -19,7 +19,7 @@ rule and trust settings that decide what the companion does on its own.
         "command": ["open", "claude://resume?session={session}"],
         "prompt_url": "claude://code/new?folder={path}&q={prompt}"
       },                       // a new session with {prompt} typed in; null for none
-      "rules": { "address_feedback": { "prompt": "/pr-review-respond {url}" },
+      "rules": { "address_feedback": { "prompt": "/pr-review-respond {url} (branch {branch})" },
                  "nudge": { "after_hours": 24 }, "passes": { "ci_failed": "ask" } },
       "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } }
     }
@@ -57,7 +57,7 @@ DEFAULT_AGENT = {
 # What each rule does is code in rules.py; whether and when it fires is config. A rule
 # set to false shows no chip and runs no pass. Thresholds take their window here.
 RULE_DEFAULTS = {
-    "address_feedback": {"prompt": "Address the review feedback on {url}"},
+    "address_feedback": {"prompt": "Address the review feedback on {url} (branch {branch})"},
     "fix_ci": True,
     "merge": True,
     "review": True,

@@ -168,7 +168,7 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-feedback.png` });
 
   const respond = await sb.locator('a.btn-link:has-text("Respond in")').getAttribute("href");
-  check(respond?.startsWith("claude://code/new?folder=") && respond.includes(`q=${encodeURIComponent("Address the review feedback on https://github.com/o/r/pull/101")}`),
+  check(respond?.startsWith("claude://code/new?folder=") && respond.includes(`q=${encodeURIComponent("Address the review feedback on https://github.com/o/r/pull/101 (branch me/webhook-retry)")}`),
     "Respond opens a new session with the feedback prompt typed in");
   check((await sb.locator(".nc-proposal a.nc-thread").getAttribute("href"))?.endsWith("/pull/101#discussion_r501"), "drafted reply links to its review thread");
   check((await sb.locator(".nc-proposal .nc-snippet").textContent())?.includes("+    retries = 5"), "drafted reply shows the code it answers");
