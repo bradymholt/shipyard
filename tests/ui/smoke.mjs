@@ -144,7 +144,7 @@ try {
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
   check((await chipText(page, 106))?.includes("Re-request review · 1"), "replied last on every thread → Re-request review · 1");
   check((await chipText(page, 107))?.includes("Address feedback · 1"), "a comment review on top of changes requested → Address feedback");
-  check((await chipText(page, 108))?.includes("Re-review requested · 1"), "re-requested after changes → Re-review requested chip");
+  check(await page.locator('.card[data-key="o/r#108"] .next-row').count() === 0, "re-requested after changes → no chip, waiting on the reviewer");
   check(await page.locator('.card[data-key^="o/r#10"] .review-badge.changes').count() === 0, "no standalone Changes requested badge");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
