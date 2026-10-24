@@ -65,6 +65,13 @@ class ClaudeSessions(HomeCase):
         found = claude.find_pr_session(self.checkout, "nomatch", "https://github.com/o/r/pull/99")
         self.assertEqual(found, {"id": "latest", "how": "latest"})
 
+    def test_pin_skips_sessions_a_shipyard_pass_started(self):
+        url = "https://github.com/o/r/pull/7"
+        write_jsonl(self.project() / "mine.jsonl", [user("build it")])
+        write_jsonl(self.project() / "pass.jsonl", [user(f"Shipyard (the PR dashboard) asks: gh pr create → {url}")])
+        os.utime(self.project() / "mine.jsonl", (time.time() - 5, time.time() - 5))
+        self.assertEqual(ClaudeCode().find_pr_session(self.checkout, "feature", url), {"id": "mine", "how": "latest"})
+
     def test_discard_removes_only_that_session(self):
         write_jsonl(self.project() / "keep.jsonl", [user("mine")])
         write_jsonl(self.project() / "fork.jsonl", [user("shipyard question")])

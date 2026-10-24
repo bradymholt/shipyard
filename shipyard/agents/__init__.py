@@ -24,6 +24,8 @@ from pathlib import Path
 # A session written to within this window is treated as open in the agent's app.
 LIVE_WINDOW = 120
 PASS_TIMEOUT = 900
+# How every pass prompt Shipyard sends on your own PRs begins (shipyard/passes/*.md).
+PASS_PROMPT_START = "Shipyard (the PR dashboard)"
 
 
 class AgentError(RuntimeError):
@@ -139,23 +141,28 @@ class Adapter:
         and mentions the PR's URL (best) or its branch. Newest wins because a parent
         session that fans out into children is older than the child holding this PR."""
         best = {}
+        latest = None
         for sid, f in self.session_files(path):
             text = read_text(f)
-            if "gh pr create" not in text:
-                continue
-            how = "pr-url" if pr_url and pr_url in text else "branch" if branch and branch in text else None
-            if not how:
+            if PASS_PROMPT_START in text and \
+                    next(iter(self.user_messages(text)), "").startswith(PASS_PROMPT_START):
                 continue
             try:
                 mtime = os.path.getmtime(f)
             except OSError:
+                continue
+            if not latest or mtime > latest["mtime"]:
+                latest = {"id": sid, "mtime": mtime}
+            if "gh pr create" not in text:
+                continue
+            how = "pr-url" if pr_url and pr_url in text else "branch" if branch and branch in text else None
+            if not how:
                 continue
             rank = 2 if how == "pr-url" else 1
             if not best or (rank, mtime) > (best["rank"], best["mtime"]):
                 best = {"id": sid, "how": how, "rank": rank, "mtime": mtime}
         if best:
             return {"id": best["id"], "how": best["how"]}
-        latest = self.sessions([path]).get(path)
         return {"id": latest["id"], "how": "latest"} if latest else None
 
     def discard(self, path, session_id):
