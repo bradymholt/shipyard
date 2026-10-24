@@ -416,6 +416,7 @@
   .am-toggle svg { fill: currentColor; }
   .am-toggle.on { color: var(--green); border: 1px solid rgba(47,158,99,.4); }
   .am-toggle.off { color: var(--fg-muted); border: 1px dashed var(--border-dashed); }
+  .am-toggle.draft-toggle { border: 1px solid var(--border); }
   button.am-toggle:hover { background: color-mix(in srgb, var(--fg-muted) 10%, transparent); }
   button.am-toggle:disabled { opacity: .5; cursor: default; }
 
@@ -475,6 +476,103 @@
   .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; flex: none; }
   .dot.ok { background: var(--green); }
   .dot.off { background: var(--muted-bar); }
+
+  /* ---------- next step ---------- */
+  .card[data-key] { cursor: pointer; }
+  .card[data-key]:hover { border-color: var(--muted-bar); }
+  .card.selected { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal); }
+  .card.snoozed { opacity: .55; }
+  .next-row {
+    display: flex; align-items: center; gap: 0.375rem; width: 100%; margin-top: 0.5rem; padding: 0.375rem 0 0;
+    border: none; border-top: 1px solid var(--border-soft); background: none; text-align: left;
+    font: 600 0.75rem var(--sans); color: var(--fg-muted); cursor: pointer;
+  }
+  .next-row .next-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .next-row .next-prefix { font-weight: 500; color: var(--fg-muted); }
+  .next-row:hover .next-label { text-decoration: underline; }
+  .next-row.red { color: var(--red-text); }
+  .next-row.green { color: var(--green-text); }
+  .next-row.gold { color: var(--gold-text); }
+  .next-row.muted { color: var(--fg-faint); font-weight: 500; }
+  .plan-dot { width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--claude); flex: none; }
+  .plan-dot.running { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+
+  /* ---------- sidebar ---------- */
+  #sidebar {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; z-index: 5;
+    background: var(--surface); border-left: 1px solid var(--border);
+    box-shadow: -8px 0 24px rgba(18,38,58,.08);
+    overflow-y: auto; padding: 0.875rem 1rem 2rem;
+    transform: translateX(100%); transition: transform .18s ease-out; visibility: hidden;
+  }
+  body.sidebar-open #sidebar { transform: none; visibility: visible; }
+  @media (min-width: 1300px) { body.sidebar-open .container, body.sidebar-open .toolbar { margin-right: 400px; } }
+  @media (max-width: 900px) {
+    /* Too narrow to sit beside the board: stack below it instead. */
+    #sidebar { position: static; width: auto; transform: none; transition: none; box-shadow: none;
+      border: 1px solid var(--border); border-radius: 0.625rem; margin-top: 1rem; display: none; }
+    body.sidebar-open #sidebar { display: block; }
+  }
+  @media (prefers-reduced-motion: reduce) { #sidebar { transition: none; } .plan-dot.running { animation: none; } }
+  .sb-top { display: flex; align-items: flex-start; gap: 0.5rem; }
+  .sb-top .sb-where { flex: 1; min-width: 0; font: 500 0.6875rem var(--mono); color: var(--fg-muted); overflow-wrap: anywhere; }
+  .sb-close { border: none; background: none; padding: 0.125rem; color: var(--fg-faint); display: inline-flex; }
+  .sb-close:hover { color: var(--fg); background: var(--btn-hover); }
+  .sb-close svg { fill: currentColor; }
+  .sb-title { font-weight: 600; font-size: 0.875rem; line-height: 1.4; margin: 0.25rem 0; }
+  .sb-title code { font-family: var(--mono); font-size: 0.85em; background: var(--bg-inset); padding: 0.05em 0.35em; border-radius: 0.3em; }
+  .sb-state { display: flex; flex-wrap: wrap; gap: 0.25rem 0.625rem; align-items: center; font: 500 0.6875rem var(--sans); color: var(--fg-muted); }
+  .sb-state .ci { gap: 0.25rem; }
+  .sb-launch { display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center; }
+  .sb-launch .wt-link { display: inline-flex; }
+  .sb-section { margin-top: 1.125rem; }
+  .sb-h { font: 700 0.6875rem var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg-muted); margin-bottom: 0.375rem; display: flex; align-items: center; gap: 0.375rem; }
+  .sb-h .sb-h-aside { margin-left: auto; font: 500 0.6875rem var(--sans); letter-spacing: 0; text-transform: none; }
+  .sb-empty { color: var(--fg-faint); font-size: 0.75rem; }
+  .next-card { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.5rem 0.625rem; margin-bottom: 0.5rem; font-size: 0.8125rem; }
+  .next-card.first { background: color-mix(in srgb, var(--gold) 9%, var(--surface)); border-color: color-mix(in srgb, var(--gold) 45%, var(--border)); }
+  .next-card .nc-head { display: flex; align-items: center; gap: 0.375rem; font: 600 0.75rem var(--sans); }
+  .next-card .nc-head .nc-x { margin-left: auto; }
+  .next-card p { margin: 0.25rem 0; }
+  .next-card .nc-reason { color: var(--fg-muted); font-size: 0.75rem; }
+  .next-card .nc-error { color: var(--red-text); font-size: 0.75rem; white-space: pre-wrap; }
+  .next-card pre { font: 400 0.6875rem/1.45 var(--mono); background: var(--bg-inset); border-radius: 0.375rem; padding: 0.5rem; overflow: auto; max-height: 16rem; white-space: pre-wrap; margin: 0.375rem 0; }
+  .next-card textarea, .sb-ask input { width: 100%; font: 400 0.75rem/1.45 var(--sans); color: var(--fg); background: var(--surface); border: 1px solid var(--border); border-radius: 0.375rem; padding: 0.375rem 0.5rem; resize: vertical; }
+  .next-card textarea:focus, .sb-ask input:focus { outline: none; border-color: var(--teal); }
+  .nc-proposal { border-top: 1px dashed var(--border); padding-top: 0.375rem; margin-top: 0.375rem; }
+  .nc-actions { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.375rem; align-items: center; }
+  .nc-actions button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
+  .nc-actions .nc-quiet { border: none; background: none; color: var(--fg-muted); padding: 0.1875rem 0.25rem; }
+  .nc-actions .nc-quiet:hover { color: var(--fg); }
+  .nc-trust { display: flex; align-items: center; gap: 0.375rem; margin-top: 0.375rem; font-size: 0.6875rem; color: var(--fg-muted); }
+  .nc-inline { list-style: none; margin: 0.25rem 0; padding: 0; font-size: 0.75rem; }
+  .nc-inline li { margin: 0.125rem 0; }
+  .nc-inline code { font: 500 0.6875rem var(--mono); color: var(--teal); }
+  .snooze-menu { display: inline-flex; gap: 0.25rem; align-items: center; }
+  .snooze-menu select { padding: 0.1875rem 0.5rem; font-size: 0.75rem; }
+  .sb-ask { display: flex; gap: 0.375rem; margin-top: 0.625rem; }
+  .sb-ask + .next-card { margin-top: 0.5rem; }
+  .sb-ask button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
+  .sb-handled { font-size: 0.75rem; color: var(--fg-muted); border-left: 2px solid var(--green); padding: 0.125rem 0 0.125rem 0.5rem; margin-bottom: 0.375rem; }
+  .sb-handled button { padding: 0 0.375rem; font-size: 0.6875rem; margin-left: 0.25rem; }
+  .sb-session { font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .sb-session .sess-title { font-weight: 600; font-size: 0.8125rem; }
+  .sb-session .sess-meta { display: flex; align-items: center; gap: 0.375rem; color: var(--fg-muted); font: 500 0.6875rem var(--sans); flex-wrap: wrap; }
+  .sb-session .sess-exchange { color: var(--fg-muted); background: var(--bg-inset); border-radius: 0.375rem; padding: 0.375rem 0.5rem; }
+  .sb-session select { font-size: 0.75rem; padding: 0.1875rem 0.5rem; max-width: 100%; }
+  .f-add { color: var(--green-text); }
+  .f-del { color: var(--red-text); }
+  .btn-link {
+    display: inline-block; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--btn-bg);
+    color: var(--fg); padding: 0.1875rem 0.625rem; font: 500 0.75rem var(--sans); white-space: nowrap;
+  }
+  .btn-link:hover { background: var(--btn-hover); color: var(--fg); text-decoration: none; }
+  .sb-activity { list-style: none; margin: 0; padding: 0; font-size: 0.75rem; }
+  .sb-activity li { display: flex; gap: 0.5rem; padding: 0.1875rem 0; border-bottom: 1px solid var(--border-soft); }
+  .sb-activity .act-when { flex: none; width: 4.5rem; color: var(--fg-faint); font: 500 0.6875rem var(--sans); }
+  .sb-activity .act-shipyard { color: var(--claude); font-weight: 600; }
+  .companion-err { color: var(--red-text); }
 
   @media (max-width: 700px) {
     /* Lanes stack in workflow order so each keeps its header and count on a phone. */
@@ -588,6 +686,8 @@
     </div>
   </div>
 
+  <aside id="sidebar" aria-label="Pull request details"></aside>
+
   <footer>
     <span id="viewer-info"></span>
     <span id="companion-status"></span>
@@ -610,7 +710,7 @@
     FILTER: "ghpr.filter",
     CACHE_PREFIX: "ghpr.cache.",
   };
-  const CACHE_VERSION = 6;
+  const CACHE_VERSION = 7;
   const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
@@ -643,6 +743,9 @@
     companionToken: "",  // per-process token required for local companion mutations
     launcher: DEFAULT_LAUNCHER,
     agent: null,          // coding agent whose latest session a checkout can resume
+    rules: null,          // the companion's "rules" config (which chips are on), when it serves the page
+    orchestrator: false,  // true when the companion watches GitHub and runs passes
+    companionState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
     loading: false,
     targetedFresh: false,
     reviewHistoryFresh: false,
@@ -848,7 +951,8 @@
 
   // ---------- GitHub API ----------
   const PR_FIELDS = `
-    id number title url isDraft createdAt updatedAt mergedAt headRefName baseRefName
+    id number title url isDraft createdAt updatedAt mergedAt headRefName baseRefName headRefOid
+    additions deletions changedFiles
     autoMergeRequest { enabledAt }
     labels(first: 10) { nodes { name color } }
     viewerCanEnableAutoMerge viewerCanDisableAutoMerge
@@ -868,7 +972,11 @@
     latestReviews(first: 10) {
       nodes { state author { login avatarUrl } }
     }
-    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }`;
+    commits(last: 1) { nodes { commit { statusCheckRollup { state contexts(first: 30) { nodes {
+      __typename
+      ... on CheckRun { name conclusion detailsUrl }
+      ... on StatusContext { context state targetUrl }
+    } } } } } }`;
 
   // Smaller pages keep each query under GitHub's timeout (large repos otherwise 502);
   // we page up to MAX_PRS to preserve the "most recent 100" behavior.
@@ -1253,6 +1361,8 @@
       if (!c.companionToken) return false;
       state.launcher = c.launcher || DEFAULT_LAUNCHER;
       state.agent = c.agent || null;
+      state.rules = c.rules || null;
+      state.orchestrator = c.orchestrator === true;
       state.companionToken = c.companionToken;
       return true;
     } catch {
@@ -1260,19 +1370,30 @@
     }
   }
 
-  async function companionPost(url, retry = true) {
+  async function companionPost(url, retry = true, body = undefined) {
     if (!state.companionToken && !(await loadCompanionConfig())) {
       throw new Error("Companion session unavailable. Refresh the page and try again.");
     }
+    const headers = { "X-Shipyard-Token": state.companionToken };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     const res = await fetch(url, {
       method: "POST",
-      headers: { "X-Shipyard-Token": state.companionToken },
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     // The companion may have restarted and generated a new in-memory token.
     if (res.status === 403 && retry && await loadCompanionConfig()) {
-      return companionPost(url, false);
+      return companionPost(url, false, body);
     }
     return res;
+  }
+
+  // POST to the companion and return its JSON, throwing its error message on failure.
+  async function companionCall(url, body = {}) {
+    const res = await companionPost(url, true, body);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || `Companion request failed (${res.status}).`);
+    return data;
   }
 
   async function loadWorktrees() {
@@ -1286,6 +1407,7 @@
         state.worktrees = map;
         lastWtSig = JSON.stringify(map);
         state.companion = await loadCompanionConfig();
+        if (state.companion) connectCompanionEvents();
       }
     } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
     finally {
@@ -1345,9 +1467,9 @@
     }
   }
 
-  async function openAgent(path) {
+  async function openAgent(path, session) {
     try {
-      const res = await companionPost(`open-agent?path=${encodeURIComponent(path)}`);
+      const res = await companionPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) showError(data.error || `Open in ${state.agent.name} failed (${res.status}).`);
     } catch (err) {
@@ -1355,13 +1477,16 @@
     }
   }
 
-  function agentButton(checkout) {
+  function agentButton(pr, wt) {
     const agent = state.agent;
-    if (!agent || !checkout.session) return "";
+    const checkout = sessionTarget(pr, wt);
+    if (!agent || !checkout) return "";
     const icon = AGENT_ICONS[agent.sessions] || DEFAULT_AGENT_ICON;
-    const title = `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
+    const title = state.orchestrator
+      ? `Open the PR session in ${agent.name} (last active ${timeAgo(checkout.session.updated * 1000)})`
+      : `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
     if (agent.mode === "command") {
-      return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" title="${esc(title)}">${icon}</button>`;
+      return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" data-session="${esc(checkout.session.id)}" title="${esc(title)}">${icon}</button>`;
     }
     const url = agent.url
       .replaceAll("{session}", encodeURIComponent(checkout.session.id))
@@ -1388,7 +1513,7 @@
     if (!state.companion) return "";
     const wt = worktreeFor(pr);
     if (!wt) return "";
-    return `<div class="card-icons"><span class="wt-links">${openCheckoutButton(wt)}${agentButton(wt)}</span></div>`;
+    return `<div class="card-icons"><span class="wt-links">${openCheckoutButton(wt)}${agentButton(pr, wt)}</span></div>`;
   }
 
   function worktreeLinks(pr) {
@@ -1431,7 +1556,7 @@
           ? `<button class="wt-link wt-move-wt blocked" disabled title="${esc(blocked)}">${MOVE_WT_ICON}</button>`
           : `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Move this branch out to a new worktree and open it in ${esc(appName)}">${MOVE_WT_ICON}</button>`;
       }
-      return `<span class="wt-links">${openBtn}${agentButton(wt)}${moveBtn}</span>`;
+      return `<span class="wt-links">${openBtn}${agentButton(pr, wt)}${moveBtn}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo
@@ -1470,7 +1595,7 @@
 
   function mergedCard(pr) {
     return `
-      <div class="card merged">
+      <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}">
         <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
         <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)}</div>
         ${mergedWorktreeLinks(pr)}
@@ -1627,15 +1752,18 @@
     const labels = (pr.labels?.nodes || [])
       .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
       .join("");
+    const chip = nextRowHtml(pr, reviewMode);
+    // The Next row names the next step for changes requested or approved-but-red, so the
+    // state badge would only repeat it.
     const badge = reviewMode
       ? viewerReviewBadge(pr)
-      : pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr))
+      : !chip && (pr.reviewDecision === "CHANGES_REQUESTED" || (pr.reviewDecision === "APPROVED" && !ciOk(pr)))
         ? reviewBadge(pr)
         : "";
     const reviewUpdate = reviewMode ? reviewUpdateBadge(pr) : "";
     const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
     return `
-      <div class="card ${pr.isDraft ? "draft" : ""}">
+      <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
         <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}${labels}</div>
         <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
@@ -1650,6 +1778,7 @@
           ${showAutoMerge ? autoMergeChip(pr) : ""}
           ${worktreeLinks(pr)}
         </div>
+        ${chip}
       </div>`;
   }
 
@@ -1674,10 +1803,12 @@
   }
 
   function render() {
-    $("#companion-status").innerHTML = !state.companionChecked ? ""
-      : state.companion
-        ? '<span class="dot ok"></span>Companion connected'
-        : '<span class="dot off"></span>Companion not running';
+    renderBoard();
+    renderSidebar();
+  }
+
+  function renderBoard() {
+    $("#companion-status").innerHTML = companionStatusHtml();
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
     const mineCount = state.prs.filter((pr) => {
@@ -2095,6 +2226,14 @@
 
   listBody.addEventListener("click", async (e) => {
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
+    const chip = e.target.closest("button.next-row");
+    if (chip) { openSidebar(chip.dataset.open); return; }
+    // A click anywhere on a card that isn't a link or control opens its sidebar.
+    const card = e.target.closest(".card[data-key]");
+    if (card && !e.target.closest("a, button, input, select, textarea")) {
+      if (sidebarKey === card.dataset.key) closeSidebar(); else openSidebar(card.dataset.key);
+      return;
+    }
     const laneHeader = e.target.closest(".lane-header[data-lane]");
     if (laneHeader) { toggleLane(laneHeader.dataset.lane); return; }
     if (handleMergedClick(e)) return;
@@ -2115,7 +2254,7 @@
     if (agentBtn) {
       agentBtn.disabled = true;
       try {
-        await openAgent(agentBtn.dataset.path);
+        await openAgent(agentBtn.dataset.path || agentBtn.dataset.agentPath, agentBtn.dataset.session || agentBtn.dataset.agentSession);
       } finally {
         agentBtn.disabled = false;
       }
@@ -2259,6 +2398,665 @@
   );
 
 
+  // ---------- next-action chips ----------
+  // A card gets one chip, only when there is a next step. Chips that are a pure function
+  // of GitHub data are computed here, so they work hosted too; the companion adds the ones
+  // that need memory (waiting on a reviewer, snoozed).
+  const FAILING_CONCLUSIONS = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
+  const ruleOn = (name) => !state.rules || state.rules[name] !== false;
+  const companionPr = (pr) => state.companionState?.prs?.[prKey(pr)] || null;
+  const agentName = () => state.agent?.name || "your agent";
+  const rollupState = (pr) => pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state;
+  const ciFailing = (pr) => rollupState(pr) === "FAILURE" || rollupState(pr) === "ERROR";
+  const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+  function failingChecks(pr) {
+    const nodes = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes || [];
+    return nodes
+      .filter((c) => c.__typename === "CheckRun" ? FAILING_CONCLUSIONS.has(c.conclusion) : c.state === "FAILURE" || c.state === "ERROR")
+      .map((c) => ({ name: c.name || c.context || "check", url: c.detailsUrl || c.targetUrl }));
+  }
+
+  // The Reviews tab's copy of a PR carries viewerLatestReview; the targeted copy doesn't.
+  const reviewedCopy = (pr) => state.reviewedPrs.find((r) => prKey(r) === prKey(pr)) || pr;
+
+  function githubChip(pr, reviewMode) {
+    if (pr.mergedAt) return null;
+    if (reviewMode) {
+      const mine = reviewedCopy(pr).viewerLatestReview;
+      const requested = reviewRequestedForViewer(pr);
+      if (requested && !mine) return ruleOn("review") ? { kind: "review", label: "Review", tone: "gold" } : null;
+      if ((requested && mine) || viewerReviewDismissed(reviewedCopy(pr))) {
+        if (!ruleOn("re_review")) return null;
+        const card = (companionPr(pr)?.cards || []).find((c) => c.pass === "re_review" && c.total);
+        return { kind: "re_review", tone: "gold",
+          label: card ? `Re-review · ${card.addressed} of ${card.total} addressed` : "Re-review" };
+      }
+      return null;
+    }
+    if (pr.author?.login !== state.viewer) return null;
+    if (pr.reviewDecision === "CHANGES_REQUESTED" && ruleOn("address_feedback")) {
+      const who = new Set((pr.latestReviews?.nodes || [])
+        .filter((r) => r.state === "CHANGES_REQUESTED").map((r) => r.author?.login));
+      return { kind: "address_feedback", label: `Address feedback${who.size ? ` · ${who.size}` : ""}`, tone: "red" };
+    }
+    if (ciFailing(pr) && ruleOn("fix_ci")) {
+      const failing = failingChecks(pr);
+      return { kind: "fix_ci", tone: "red", label: failing[0] ? `Fix CI · ${clip(failing[0].name, 18)}` : "Fix CI",
+        title: failing.map((c) => c.name).join(", ") };
+    }
+    if (pr.reviewDecision === "APPROVED" && ciOk(pr) && !pr.autoMergeRequest && !pr.isDraft && ruleOn("merge"))
+      return { kind: "merge", label: "Merge", tone: "green" };
+    return null;
+  }
+
+  function nextChip(pr, reviewMode) {
+    const cp = companionPr(pr);
+    if (cp?.chip?.kind === "snoozed") return { ...cp.chip, tone: "muted" };
+    const chip = githubChip(pr, reviewMode);
+    if (chip) return chip;
+    if (cp?.chip) return { ...cp.chip, tone: cp.chip.kind === "nudge" ? "gold" : "muted" };
+    return null;
+  }
+
+  // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
+  function nextRowHtml(pr, reviewMode) {
+    const chip = nextChip(pr, reviewMode);
+    const cp = companionPr(pr);
+    const dot = cp?.running
+      ? `<span class="plan-dot running" title="${esc(agentName())} is reading this PR"></span>`
+      : cp?.planReady ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
+    if (!chip && !dot) return "";
+    const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
+    const label = chip ? chip.label : cp.running ? "Reading…" : PASS_LABELS[ready?.pass] || "Ready to read";
+    const prefix = chip?.kind === "snoozed" ? "" : `<span class="next-prefix">→ Next:</span>`;
+    return `<button type="button" class="next-row ${chip?.tone || ""}" data-open="${esc(prKey(pr))}" title="${esc(chip?.title || "Open details")}">${prefix}${dot}<span class="next-label">${esc(label)}</span></button>`;
+  }
+
+  function cardClasses(pr, extra) {
+    const snoozed = companionPr(pr)?.chip?.kind === "snoozed";
+    return ["card", extra, snoozed ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : ""].filter(Boolean).join(" ");
+  }
+
+  // ---------- sidebar ----------
+  // One component whose sections appear when the companion is connected, like the
+  // worktree icons: Header, Next, PR session, Review, Activity.
+  let sidebarKey = null;
+  const drafts = new Map();       // unsent text (edited replies, the Ask field), by field id
+  const shownDiffs = new Set();   // proposals whose diff was shown; Apply fix waits for that
+  const detailCache = new Map();  // key -> { updatedAt, loading, data, error }
+  let sessionChoices = null;      // { key, sessions } while the re-pin picker is open
+  let lastSidebarHtml = "";
+  const CLOSE_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>';
+  const GITHUB_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>';
+  const ACTION_LABELS = {
+    rerun_checks: "Re-run failed jobs", apply_fix: "Apply fix and push", post_reply: "Post reply",
+    approve: "Approve", comment_unresolved: "Comment on unresolved", submit_review: "Submit as review",
+    enable_auto_merge: "Enable auto-merge", merge: "Merge", mark_ready: "Mark ready", nudge: "Post nudge",
+    rerequest_review: "Re-request review",
+  };
+  // Actions that put words in front of someone show the full text, editable, before they post.
+  const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review", "nudge", "approve"]);
+  const PASS_FOR_CHIP = { address_feedback: "changes_requested", fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
+  const PASS_LABELS = { changes_requested: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
+  const TRUST_LABELS = {
+    rerun_checks: "re-run failed jobs when it looks flaky", rerequest_review: "re-request review after you push",
+    enable_auto_merge: "enable auto-merge", approve_rereview: "approve a re-review", apply_fix: "apply small fixes",
+  };
+  const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
+    latest: "latest in the checkout", manual: "picked by you", shipyard: "started by Shipyard", review: "review worktree" };
+
+  const allPrs = () => [...state.prs, ...state.reviewedPrs, ...state.merged, ...state.reviewedMerged];
+  const findPr = (key) => allPrs().find((pr) => prKey(pr) === key);
+  const isReviewPr = (pr) => pr.author?.login !== state.viewer;
+
+  function openSidebar(key) {
+    sidebarKey = key;
+    sessionChoices = null;
+    document.body.classList.add("sidebar-open");
+    render();
+    if (narrowViewport.matches || matchMedia("(max-width: 900px)").matches) {
+      $("#sidebar").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function closeSidebar() {
+    sidebarKey = null;
+    document.body.classList.remove("sidebar-open");
+    render();
+  }
+
+  const DETAIL_QUERY = `
+    query($id: ID!) { node(id: $id) { ... on PullRequest {
+      timelineItems(last: 30, itemTypes: [PULL_REQUEST_COMMIT, PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT,
+          ISSUE_COMMENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, MERGED_EVENT,
+          HEAD_REF_FORCE_PUSHED_EVENT, REVIEW_DISMISSED_EVENT]) { nodes {
+        __typename
+        ... on PullRequestCommit { commit { messageHeadline committedDate author { user { login } name } } }
+        ... on PullRequestReview { state submittedAt author { login } }
+        ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } ... on Team { name } } }
+        ... on IssueComment { createdAt author { login } }
+        ... on ReadyForReviewEvent { createdAt actor { login } }
+        ... on ConvertToDraftEvent { createdAt actor { login } }
+        ... on MergedEvent { createdAt actor { login } }
+        ... on HeadRefForcePushedEvent { createdAt actor { login } }
+        ... on ReviewDismissedEvent { createdAt actor { login } }
+      } }
+    } } }`;
+
+  // Reviewers, files, and the timeline are read on demand (hosted mode too), once per PR update.
+  async function loadDetail(key) {
+    const pr = findPr(key);
+    if (!pr || !getToken()) return;
+    const cached = detailCache.get(key);
+    if (cached && (cached.loading || cached.updatedAt === pr.updatedAt)) return;
+    detailCache.set(key, { updatedAt: pr.updatedAt, loading: true, data: cached?.data || null });
+    let entry;
+    try {
+      entry = { updatedAt: pr.updatedAt, loading: false, data: (await gql(DETAIL_QUERY, { id: pr.id })).node };
+    } catch (err) {
+      entry = { updatedAt: pr.updatedAt, loading: false, data: cached?.data || null, error: err.message };
+    }
+    detailCache.set(key, entry);
+    if (sidebarKey === key) renderSidebar();
+  }
+
+  function stageOf(pr) {
+    if (pr.mergedAt) return "Merged";
+    if (isReviewPr(pr)) return reviewLaneOf(pr) === 0 ? "Waiting on you" : "Review submitted";
+    return pr.isDraft ? "Draft" : ["Working", "Waiting", "Ready"][laneOf(pr)];
+  }
+
+  function checksText(pr) {
+    const s = rollupState(pr);
+    if (!s) return "";
+    const failing = failingChecks(pr);
+    const text = { SUCCESS: "Checks passing", PENDING: "Checks running", EXPECTED: "Checks expected" }[s]
+      || `${failing.length || "Checks"} failing`;
+    return `<span class="ci ${s === "SUCCESS" ? "success" : s === "PENDING" || s === "EXPECTED" ? "pending" : "failure"}">${ciHtml(pr).replace(/<\/?span[^>]*>/g, "")}${esc(text)}</span>`;
+  }
+
+  // Resume a specific session (the pinned one) in the agent's app.
+  function sessionLink(path, sessionId, inner, cls, key) {
+    const agent = state.agent;
+    if (!agent || !sessionId || !path) return "";
+    const data = `data-continue="${esc(key || "")}"`;
+    if (agent.mode === "command") {
+      return `<button type="button" class="${cls}" ${data} data-agent-path="${esc(path)}" data-agent-session="${esc(sessionId)}" title="Open the PR session in ${esc(agent.name)}">${inner}</button>`;
+    }
+    const url = agent.url
+      .replaceAll("{session}", encodeURIComponent(sessionId))
+      .replaceAll("{path}", String(path).split("/").map(encodeURIComponent).join("/"));
+    return `<a class="${cls}" ${data} href="${esc(url)}" title="Open the PR session in ${esc(agent.name)}">${inner}</a>`;
+  }
+
+  // The session every link for a PR opens: the pinned one when the companion pins sessions
+  // (none if nothing is pinned), else the checkout's latest.
+  function sessionTarget(pr, wt = worktreeFor(pr)) {
+    const cp = companionPr(pr);
+    if (cp || state.orchestrator) return cp?.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
+    return wt?.session ? { path: wt.path, session: wt.session } : null;
+  }
+
+  function continueTarget(pr) {
+    const target = sessionTarget(pr);
+    return target && { path: target.path, session: target.session.id };
+  }
+
+  function continueButton(pr) {
+    const target = continueTarget(pr);
+    return target ? sessionLink(target.path, target.session, `Continue in ${esc(agentName())}`, "btn-link", prKey(pr)) : "";
+  }
+
+  function sidebarHeader(pr) {
+    const key = prKey(pr);
+    const cp = companionPr(pr);
+    const wt = worktreeFor(pr);
+    const comments = pr.comments?.totalCount || 0;
+    const size = pr.additions != null
+      ? `<span><span class="f-add">+${pr.additions}</span> <span class="f-del">−${pr.deletions}</span> · ${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}</span>` : "";
+    let launch = "";
+    if (state.companion) {
+      const checkout = wt || (cp?.path ? { path: cp.path, workspace: null, main: false } : null);
+      if (checkout) launch += openCheckoutButton(checkout);
+      const target = continueTarget(pr);
+      if (target) launch += sessionLink(target.path, target.session, AGENT_ICONS[state.agent?.sessions] || DEFAULT_AGENT_ICON, "wt-link wt-agent", key);
+    }
+    launch += `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}</a>`;
+    return `
+      <div class="sb-top">
+        <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
+        <button type="button" class="sb-close" data-close title="Close (Esc)" aria-label="Close">${CLOSE_ICON}</button>
+      </div>
+      <div class="sb-title">${fmtTitle(pr.title)}</div>
+      <div class="sb-state"><span>${esc(stageOf(pr))}</span>${checksText(pr)}${size}${comments ? `<span>${comments} comment${comments === 1 ? "" : "s"}</span>` : ""}</div>
+      <div class="sb-launch">${launch}</div>`;
+  }
+
+  function textField(field, text) {
+    const value = drafts.has(field) ? drafts.get(field) : text || "";
+    const rows = Math.min(10, Math.max(3, value.split("\n").length + 1));
+    return `<textarea rows="${rows}" data-field="${esc(field)}">${esc(value)}</textarea>`;
+  }
+
+  function proposalHtml(card, p, i) {
+    if (p.action === "continue") return p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : "";
+    const field = `c${card.id}-${i}`;
+    const label = ACTION_LABELS[p.action] || p.action;
+    let body = "";
+    if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
+    if (p.action === "submit_review") {
+      const event = drafts.get(`${field}-event`) || p.payload?.event || "COMMENT";
+      body += `<div class="nc-actions"><select data-field="${field}-event">${["COMMENT", "APPROVE", "REQUEST_CHANGES"].map((e) =>
+        `<option value="${e}"${e === event ? " selected" : ""}>${{ COMMENT: "Comment", APPROVE: "Approve", REQUEST_CHANGES: "Request changes" }[e]}</option>`).join("")}</select></div>`;
+      const inline = p.payload?.comments || [];
+      if (inline.length) {
+        body += `<ul class="nc-inline">${inline.map((c) => `<li><code>${esc(c.path)}:${esc(c.line)}</code> ${esc(c.body)}</li>`).join("")}</ul>`;
+      }
+    }
+    let button = `<button type="button" class="nc-run" data-card="${card.id}" data-index="${i}" data-action="${esc(p.action)}" data-field="${field}">${esc(label)}</button>`;
+    if (p.action === "apply_fix") {
+      // Never the default: the diff shows first, and the button stays plain.
+      button = shownDiffs.has(field)
+        ? `<pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
+        : `<button type="button" data-show-diff="${field}">Show diff</button>`;
+    }
+    const where = p.action === "post_reply" && p.payload?.comment_id ? " · replies on the review thread" : "";
+    return `
+      <div class="nc-proposal">
+        <div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${esc(p.reason || "")}</div>
+        ${body}
+        <div class="nc-actions">${button}</div>
+      </div>`;
+  }
+
+  function trustToggles(card) {
+    return (card.trustOffers || []).map((flag) =>
+      `<label class="nc-trust"><input type="checkbox" data-trust="${esc(flag)}"> Do this automatically when ${esc(agentName())} is confident: ${esc(TRUST_LABELS[flag] || flag)}</label>`
+    ).join("");
+  }
+
+  function companionCardHtml(pr, card, first) {
+    const cls = `next-card${first ? " first" : ""}`;
+    const dismiss = `<button type="button" class="sb-close nc-x" data-dismiss="${card.id}" title="Dismiss" aria-label="Dismiss">${CLOSE_ICON}</button>`;
+    const title = esc(PASS_LABELS[card.pass] || card.title || "Next");
+    const passMode = card.pass && state.rules?.passes?.[card.pass];
+    const onlyAsk = card.pass && card.pass !== "ask" && passMode === "auto"
+      ? `<button type="button" class="nc-quiet" data-only-ask="${esc(card.pass)}" title="Stop running this pass on its own; offer it here instead">Only run when I ask</button>` : "";
+    const viewLog = card.pass === "ci_failed" && failingChecks(pr)[0]?.url
+      ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "";
+    // Whether a re-run makes sense can hinge on what only you know (say, you freed a quota).
+    const rerun = card.pass === "ci_failed" && !(card.proposals || []).some((p) => p.action === "rerun_checks")
+      ? `<button type="button" class="nc-run" data-pr-action="rerun_checks" data-done-card="${card.id}">${esc(ACTION_LABELS.rerun_checks)}</button>` : "";
+    if (card.kind === "running") {
+      return `<div class="${cls}"><div class="nc-head"><span class="plan-dot running"></span>${title}</div>
+        <p class="nc-reason">${esc(agentName())} is reading the PR${card.question ? `: “${esc(card.question)}”` : ""}…</p></div>`;
+    }
+    if (card.kind === "offer") {
+      return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
+        <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div></div>`;
+    }
+    if (card.kind === "error" || card.kind === "raw") {
+      const raw = card.raw ? `<pre>${esc(card.raw)}</pre><div class="nc-actions"><button type="button" data-copy="${card.id}">Copy</button>${continueButton(pr)}</div>` : "";
+      const retry = card.kind === "error" && card.pass && card.pass !== "ask"
+        ? `<div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Try again</button>${continueButton(pr)}</div>` : "";
+      return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
+        <p class="${card.kind === "error" ? "nc-error" : "nc-reason"}">${esc(card.error || "")}</p>${raw}${retry}</div>`;
+    }
+    if (card.kind === "proposal") {
+      return `<div class="${cls}"><div class="nc-head">${esc(card.title)}${dismiss}</div>
+        <p class="nc-reason">${esc(card.summary || "")}</p>
+        <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">Keep</button>
+          <button type="button" data-dismiss="${card.id}">Don't</button></div>${trustToggles(card)}</div>`;
+    }
+    const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
+    const proposals = (card.proposals || []).map((p, i) => proposalHtml(card, p, i)).join("");
+    return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
+      <p>${esc(card.summary || "")}</p>${proposals}
+      ${card.pass === "ask" ? "" : `<div class="nc-actions">${continueButton(pr)}${rerun}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
+  }
+
+  // With no card from the companion, the chip still implies the buttons that fit it.
+  function derivedCardHtml(pr, chip) {
+    if (!chip) return "";
+    const key = prKey(pr);
+    const field = `d-${key}-${chip.kind}`;
+    const run = (action, label, cls = "") => `<button type="button" class="nc-run ${cls}" data-pr-action="${esc(action)}" data-field="${esc(field)}">${esc(label)}</button>`;
+    const off = `<button type="button" class="nc-quiet" data-chip-off="${esc(chip.kind)}" title="Hide this chip on every card">Turn off this chip</button>`;
+    let body = "";
+    let actionsHtml = "";
+    if (chip.kind === "merge") {
+      body = "Approved and checks are green.";
+      actionsHtml = run("merge", "Merge") + (pr.viewerCanEnableAutoMerge ? run("enable_auto_merge", "Enable auto-merge") : "");
+    } else if (chip.kind === "nudge") {
+      const owner = (pr.repository?.nameWithOwner || "").split("/")[0];
+      const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
+      body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
+      actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
+    } else if (PASS_FOR_CHIP[chip.kind]) {
+      body = { address_feedback: "Changes were requested.", fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
+        review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
+      actionsHtml = `<button type="button" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
+        + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "");
+    } else {
+      return "";
+    }
+    return `<div class="next-card first"><div class="nc-head">${esc(chip.label)}</div><p class="nc-reason">${esc(body)}</p>
+      <div class="nc-actions">${actionsHtml}${off}</div></div>`;
+  }
+
+  function nextSection(pr) {
+    if (!state.orchestrator) return "";
+    const key = prKey(pr);
+    const cp = companionPr(pr);
+    const open = !pr.mergedAt;
+    // Your own asks and new sessions show under PR session.
+    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
+    let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
+    if (!html && open) {
+      const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);
+      html = cp ? derivedCardHtml(pr, chip) : "";
+    }
+    if (!html) {
+      html = !cp && open
+        ? `<div class="sb-empty">The companion follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
+        : `<div class="sb-empty">Nothing to do right now.</div>`;
+    }
+    html += (cp?.handled || []).map((c) => {
+      const h = c.handled || {};
+      return `<div class="sb-handled"><strong>Handled:</strong> ${esc(h.result || "")}${h.reason ? ` — ${esc(h.reason)}` : ""}
+        ${h.undoable ? `<button type="button" data-undo="${c.id}">Undo</button>` : ""}
+        <button type="button" data-trust-off="${esc(h.flag || "")}" title="Back to asking first">Stop doing this automatically</button>
+        <button type="button" data-dismiss="${c.id}">OK</button></div>`;
+    }).join("");
+    let snooze = "";
+    if (cp && open) {
+      const until = cp.snoozedUntil && new Date(cp.snoozedUntil) > new Date() ? cp.snoozedUntil : null;
+      snooze = `<span class="sb-h-aside snooze-menu"><select data-snooze="${esc(key)}" title="Snooze dims the card until then">
+        <option value="">${until ? `Snoozed until ${new Date(until).toLocaleString([], { weekday: "short", hour: "numeric" })}` : "Snooze…"}</option>
+        ${until ? '<option value="0">Unsnooze</option>' : ""}
+        <option value="4">4 hours</option><option value="24">1 day</option><option value="72">3 days</option><option value="168">1 week</option>
+      </select></span>`;
+    }
+    return `<div class="sb-section"><div class="sb-h">Next${snooze}</div>${html}</div>`;
+  }
+
+  // A question runs in a fork of the pinned session, so it lives in that session's section.
+  function askHtml(pr, cp) {
+    if (pr.mergedAt) return "";
+    const key = prKey(pr);
+    const q = drafts.get(`ask-${key}`) || "";
+    return `<form class="sb-ask" data-ask="${esc(key)}"><input type="text" data-field="ask-${esc(key)}" value="${esc(q)}" placeholder="Ask ${esc(agentName())} about this PR" autocomplete="off"><button type="submit">Ask</button></form>`
+      + (cp.cards || []).filter((c) => c.pass === "ask").map((c) => companionCardHtml(pr, c, false)).join("");
+  }
+
+  function sessionSection(pr) {
+    if (!state.orchestrator || !state.agent) return "";
+    const key = prKey(pr);
+    const cp = companionPr(pr);
+    const newSession = (cls) => `<button type="button" class="${cls}" data-run-pass="new_session" data-node="${esc(pr.id)}" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
+    if (!cp) {
+      return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
+        <div class="sb-empty">No ${esc(agentName())} session for this PR.</div><div class="nc-actions">${newSession("")}</div></div></div>`;
+    }
+    const s = cp.session;
+    const starting = (cp.cards || []).find((c) => c.pass === "new_session");
+    if (starting?.kind === "running") {
+      return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
+        <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div>${askHtml(pr, cp)}</div>`;
+    }
+    const failed = ["error", "raw"].includes(starting?.kind) ? `<p class="nc-error">${esc(starting.error || "Couldn't start the session.")}</p>` : "";
+    let picker = "";
+    if (sessionChoices?.key === key) {
+      picker = sessionChoices.sessions.length
+        ? `<div class="nc-actions"><select data-field="pin-${esc(key)}">${sessionChoices.sessions.map((x) =>
+            `<option value="${esc(x.id)}"${s?.id === x.id ? " selected" : ""}>${esc(clip(x.title || x.id, 60))} · ${esc(timeAgo(x.updated * 1000))}</option>`).join("")}</select>
+            <button type="button" data-pin="${esc(key)}">Pin</button><button type="button" class="nc-quiet" data-repin-cancel>Cancel</button></div>`
+        : `<div class="sb-empty">No ${esc(agentName())} sessions in this checkout.</div>`;
+    }
+    const repin = cp.path ? `<button type="button" class="nc-quiet" data-repin="${esc(key)}">Re-pin</button>` : "";
+    let body;
+    if (!s) {
+      body = `<div class="sb-empty">${cp.path ? `No ${esc(agentName())} session pinned.` : "No local checkout for this PR."}</div>
+        <div class="nc-actions">${newSession("")}${repin}</div>`;
+    } else {
+      const yours = Math.max(0, s.turns - (s.shipyardTurns || 0));
+      const ex = cp.exchange;
+      body = `
+        <div class="sess-title">${esc(s.title || s.id)}</div>
+        <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${esc(timeAgo(s.updated * 1000))}`}
+          · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
+        ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${esc(timeAgo(ex.at))}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
+        <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}
+          <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
+    }
+    return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div>${askHtml(pr, cp)}</div>`;
+  }
+
+  function timelineEntries(d) {
+    const out = [];
+    for (const n of d?.timelineItems?.nodes || []) {
+      const who = (x) => x?.login ? `@${x.login}` : "someone";
+      switch (n.__typename) {
+        case "PullRequestCommit": out.push({ at: n.commit.committedDate, text: `commit: ${n.commit.messageHeadline}` }); break;
+        case "PullRequestReview": out.push({ at: n.submittedAt, text: `${who(n.author)} ${{ APPROVED: "approved", CHANGES_REQUESTED: "requested changes", COMMENTED: "reviewed", DISMISSED: "review dismissed" }[n.state] || "reviewed"}` }); break;
+        case "ReviewRequestedEvent": out.push({ at: n.createdAt, text: `review requested from ${n.requestedReviewer?.login ? `@${n.requestedReviewer.login}` : n.requestedReviewer?.name || "a reviewer"}` }); break;
+        case "IssueComment": out.push({ at: n.createdAt, text: `${who(n.author)} commented` }); break;
+        case "ReadyForReviewEvent": out.push({ at: n.createdAt, text: "marked ready for review" }); break;
+        case "ConvertToDraftEvent": out.push({ at: n.createdAt, text: "converted to draft" }); break;
+        case "MergedEvent": out.push({ at: n.createdAt, text: `merged by ${who(n.actor)}` }); break;
+        case "HeadRefForcePushedEvent": out.push({ at: n.createdAt, text: "force-pushed" }); break;
+        case "ReviewDismissedEvent": out.push({ at: n.createdAt, text: "a review was dismissed" }); break;
+      }
+    }
+    return out;
+  }
+
+  function activitySection(pr) {
+    const key = prKey(pr);
+    const entries = [
+      ...timelineEntries(detailCache.get(key)?.data),
+      ...(companionPr(pr)?.activity || []).map((a) => ({ at: a.at, text: a.text, shipyard: true })),
+    ].filter((e) => e.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 25);
+    if (!entries.length) return "";
+    return `<div class="sb-section"><div class="sb-h">Activity</div><ul class="sb-activity">${entries.map((e) =>
+      `<li><span class="act-when">${esc(timeAgo(e.at).replace(" ago", ""))}</span><span>${e.shipyard ? '<span class="act-shipyard">Shipyard</span> ' : ""}${esc(e.text)}</span></li>`).join("")}</ul></div>`;
+  }
+
+  function renderSidebar() {
+    const el = $("#sidebar");
+    const pr = sidebarKey && findPr(sidebarKey);
+    if (!pr) {
+      if (sidebarKey) { sidebarKey = null; document.body.classList.remove("sidebar-open"); }
+      if (lastSidebarHtml) { el.innerHTML = ""; lastSidebarHtml = ""; }
+      return;
+    }
+    loadDetail(sidebarKey);
+    const html = sidebarHeader(pr) + nextSection(pr) + sessionSection(pr) + activitySection(pr);
+    if (html === lastSidebarHtml) return;
+    // Re-rendering on every pushed update must not eat what you're typing.
+    const active = document.activeElement;
+    const field = el.contains(active) ? active.dataset.field : null;
+    const caret = field && "selectionStart" in active ? [active.selectionStart, active.selectionEnd] : null;
+    const scroll = el.scrollTop;
+    el.innerHTML = html;
+    lastSidebarHtml = html;
+    el.scrollTop = scroll;
+    if (field) {
+      const again = el.querySelector(`[data-field="${CSS.escape(field)}"]`);
+      if (again) {
+        again.focus();
+        if (caret && again.setSelectionRange) again.setSelectionRange(...caret);
+      }
+    }
+  }
+
+  // Run a companion request from a button, showing progress on it and any error in a dialog.
+  async function busy(btn, fn, title = "Couldn't do that") {
+    const original = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.textContent = "…"; }
+    try {
+      await fn();
+      setTimeout(() => { if (getToken() && getCurrentRepo()) load(true); }, 2500);
+    } catch (err) {
+      showError(err.message, title);
+    } finally {
+      if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = original; }
+    }
+  }
+
+  const fieldValue = (field) => {
+    const el = $("#sidebar").querySelector(`[data-field="${CSS.escape(field)}"]`);
+    return el ? el.value : drafts.get(field);
+  };
+
+  $("#sidebar").addEventListener("input", (e) => {
+    const field = e.target.dataset?.field;
+    if (field) drafts.set(field, e.target.value);
+  });
+
+  $("#sidebar").addEventListener("change", async (e) => {
+    const t = e.target;
+    if (t.dataset.field) drafts.set(t.dataset.field, t.value);
+    if (t.dataset.snooze !== undefined && t.value !== "") {
+      const hours = Number(t.value) || null;
+      await busy(null, () => companionCall(`companion/snooze?key=${encodeURIComponent(t.dataset.snooze)}`, { hours }));
+    } else if (t.dataset.trust) {
+      await busy(null, () => companionCall(`companion/trust?flag=${encodeURIComponent(t.dataset.trust)}&on=${t.checked ? 1 : 0}`));
+    }
+  });
+
+  $("#sidebar").addEventListener("submit", async (e) => {
+    const form = e.target.closest("form[data-ask]");
+    if (!form) return;
+    e.preventDefault();
+    const key = form.dataset.ask;
+    const question = fieldValue(`ask-${key}`) || "";
+    await busy(form.querySelector("button"), async () => {
+      await companionCall(`companion/ask?key=${encodeURIComponent(key)}`, { question });
+      drafts.delete(`ask-${key}`);
+    }, "Couldn't ask");
+  });
+
+  $("#sidebar").addEventListener("click", async (e) => {
+    const t = (sel) => e.target.closest(sel);
+    const key = sidebarKey;
+    const pr = key && findPr(key);
+    let btn;
+    if (t("[data-close]")) return closeSidebar();
+    if ((btn = t("[data-continue]"))) {
+      // Log it; the link itself opens the session (or the companion runs the command).
+      companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=continue`, {}).catch(() => {});
+      if (btn.dataset.agentSession) {
+        e.preventDefault();
+        await busy(btn, async () => {
+          const res = await companionPost(`open-agent?path=${encodeURIComponent(btn.dataset.agentPath)}&session=${encodeURIComponent(btn.dataset.agentSession)}`);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) throw new Error(data.error || `Open in ${agentName()} failed (${res.status}).`);
+        });
+      }
+      return;
+    }
+    if ((btn = t("button.wt-open"))) return busy(btn, () => openInApp(btn.dataset.target));
+    if ((btn = t("[data-show-diff]"))) { shownDiffs.add(btn.dataset.showDiff); return renderSidebar(); }
+    if ((btn = t("[data-copy]"))) {
+      const card = (companionPr(pr)?.cards || []).find((c) => String(c.id) === btn.dataset.copy);
+      try { await navigator.clipboard.writeText(card?.raw || ""); btn.textContent = "Copied"; } catch { showError("Copy failed; select the text instead."); }
+      return;
+    }
+    if ((btn = t("[data-run-pass]"))) {
+      const node = btn.dataset.node ? `&node=${encodeURIComponent(btn.dataset.node)}` : "";
+      return busy(btn, () => companionCall(`companion/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}${node}`), `Couldn't ask ${agentName()}`);
+    }
+    if ((btn = t("[data-dismiss]"))) return busy(btn, () => companionCall(`companion/dismiss?card=${btn.dataset.dismiss}`));
+    if ((btn = t("[data-undo]"))) return busy(btn, () => companionCall(`companion/undo?card=${btn.dataset.undo}`), "Couldn't undo");
+    if ((btn = t("[data-trust-off]"))) {
+      if (!btn.dataset.trustOff) return;
+      return busy(btn, () => companionCall(`companion/trust?flag=${encodeURIComponent(btn.dataset.trustOff)}&on=0`));
+    }
+    if ((btn = t("[data-only-ask]"))) {
+      return busy(btn, () => companionCall(`companion/rule?name=${encodeURIComponent(`passes.${btn.dataset.onlyAsk}`)}`, { value: "ask" }));
+    }
+    if ((btn = t("[data-chip-off]"))) {
+      if (!confirm("Hide this chip on every card? Set it back in shipyard.config.json under \"rules\".")) return;
+      return busy(btn, () => companionCall(`companion/rule?name=${encodeURIComponent(btn.dataset.chipOff)}`, { value: false }));
+    }
+    if ((btn = t("[data-repin]"))) {
+      return busy(btn, async () => {
+        const res = await fetch(`companion/sessions?key=${encodeURIComponent(btn.dataset.repin)}`, { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't list sessions.");
+        sessionChoices = { key: btn.dataset.repin, sessions: data.sessions };
+        lastSidebarHtml = "";
+        renderSidebar();
+      });
+    }
+    if (t("[data-repin-cancel]")) { sessionChoices = null; return renderSidebar(); }
+    if ((btn = t("[data-unpin]"))) return busy(btn, () => companionCall(`companion/unpin?key=${encodeURIComponent(btn.dataset.unpin)}`));
+    if ((btn = t("[data-pin]"))) {
+      const session = fieldValue(`pin-${btn.dataset.pin}`);
+      return busy(btn, async () => {
+        await companionCall(`companion/pin?key=${encodeURIComponent(btn.dataset.pin)}&session=${encodeURIComponent(session || "")}`);
+        sessionChoices = null;
+      });
+    }
+    if ((btn = t("button.nc-run"))) {
+      const action = btn.dataset.action || btn.dataset.prAction;
+      const field = btn.dataset.field;
+      const payload = {};
+      if (field && TEXT_ACTIONS.has(action)) payload.body = fieldValue(field) || "";
+      if (action === "submit_review") payload.event = fieldValue(`${field}-event`) || "COMMENT";
+      const confirmText = {
+        merge: `Merge #${pr?.number} now?`,
+        apply_fix: "Apply this diff in your checkout, commit it, and push to the PR's branch?",
+        approve: `Approve #${pr?.number}?`,
+      }[action];
+      if (confirmText && !confirm(confirmText)) return;
+      return busy(btn, async () => {
+        if (btn.dataset.prAction) {
+          const done = btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : "";
+          await companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${done}`, { payload });
+        } else {
+          await companionCall(`companion/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
+        }
+        if (field) drafts.delete(field);
+      });
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && sidebarKey && !document.querySelector("dialog[open]")) closeSidebar();
+  });
+
+  // ---------- companion events ----------
+  // The companion pushes its whole state (chips, cards, sessions, activity) over SSE
+  // whenever something changes; EventSource reconnects on its own if it restarts.
+  let companionEvents = null;
+  function connectCompanionEvents() {
+    if (!state.orchestrator || companionEvents || typeof EventSource === "undefined") return;
+    companionEvents = new EventSource("companion/events");
+    companionEvents.addEventListener("state", (e) => {
+      try {
+        state.companionState = JSON.parse(e.data);
+      } catch { return; }
+      if (state.companionState.config?.rules) state.rules = state.companionState.config.rules;
+      render();
+    });
+  }
+
+  function companionStatusHtml() {
+    if (!state.companionChecked) return "";
+    if (!state.companion) return '<span class="dot off"></span>Companion not running';
+    if (!state.orchestrator) return '<span class="dot ok"></span>Companion connected';
+    const status = state.companionState?.status;
+    if (!status) return '<span class="dot ok"></span>Companion connected';
+    const agent = status.agent && !status.agent.available ? ` · ${esc(status.agent.name)} CLI not found` : "";
+    if (status.github && status.github !== "ok" && status.github !== "starting") {
+      return `<span class="dot off"></span><span class="companion-err" title="${esc(status.github)}">Companion can't reach GitHub: ${esc(clip(status.github, 80))}</span>${agent}`;
+    }
+    return `<span class="dot ok"></span>Companion connected · watching your PRs${agent}`;
+  }
+
   // ---------- init ----------
   renderRepoSelect();
   renderViewsList();
@@ -2281,7 +3079,7 @@
     if (getToken() && getCurrentRepo()) load(true);
   });
 
-  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees };
+  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees, openSidebar, closeSidebar };
 })();
 </script>
 </body>

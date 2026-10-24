@@ -5,3 +5,5 @@ __pycache__/
 shipyard.config.json
 .claude/*
 !.claude/settings.json
+shipyard.db
+shipyard.db-*
