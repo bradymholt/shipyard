@@ -411,6 +411,7 @@ class PageRequests(CompanionCase):
         self.assertIn("what did we decide about caching?", self.agent.runs[-1]["prompt"])
         pr = self.comp.page_state()["prs"]["o/r#1"]
         self.assertEqual(pr["cards"][0]["kind"], "answer")
+        self.assertFalse(pr["planReady"])  # an answer to your question doesn't flag the board
         self.assertIn("asked a question in a fork of the pinned session", [a["text"] for a in pr["activity"]])
         with self.assertRaises(ValueError):
             self.comp.ask("o/r#1", "   ")

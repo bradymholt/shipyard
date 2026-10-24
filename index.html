@@ -550,6 +550,7 @@
   .snooze-menu { display: inline-flex; gap: 0.25rem; align-items: center; }
   .snooze-menu select { padding: 0.1875rem 0.5rem; font-size: 0.75rem; }
   .sb-ask { display: flex; gap: 0.375rem; margin-top: 0.25rem; }
+  .sb-ask + .next-card { margin-top: 0.5rem; }
   .sb-ask button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
   .sb-handled { font-size: 0.75rem; color: var(--fg-muted); border-left: 2px solid var(--green); padding: 0.125rem 0 0.125rem 0.5rem; margin-bottom: 0.375rem; }
   .sb-handled button { padding: 0 0.375rem; font-size: 0.6875rem; margin-left: 0.25rem; }
@@ -2727,7 +2728,8 @@
     const key = prKey(pr);
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
-    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session");  // shown under PR session
+    // Your own asks show under the Ask field, and a new session under PR session.
+    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && open) {
       const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);
@@ -2758,6 +2760,7 @@
     if (cp && open) {
       const q = drafts.get(`ask-${key}`) || "";
       html += `<form class="sb-ask" data-ask="${esc(key)}"><input type="text" data-field="ask-${esc(key)}" value="${esc(q)}" placeholder="Ask ${esc(agentName())} about this PR" autocomplete="off"><button type="submit">Ask</button></form>`;
+      html += (cp.cards || []).filter((c) => c.pass === "ask").map((c) => companionCardHtml(pr, c, false)).join("");
     }
     let snooze = "";
     if (cp && open) {

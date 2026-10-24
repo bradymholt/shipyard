@@ -607,8 +607,8 @@ class Companion:
                     session["shipyardTurns"] = self.db.shipyard_turns(pin["session_id"])
                     session["how"] = pin.get("how")
             cards = [self.card_view(c) for c in self.db.cards(key)]
-            # A new session shows only in the PR session panel, not as a chip on the board.
-            next_cards = [c for c in cards if c["status"] == "open" and c.get("pass") != "new_session"]
+            # Your own asks and new sessions show in the sidebar where you started them, not as a chip.
+            next_cards = [c for c in cards if c["status"] == "open" and c.get("pass") not in ("ask", "new_session")]
             done = [p for p in self.db.passes(key) if p["status"] == "done"]
             exchange = done[-1] if done else None
             path = pin.get("path") if pin else None
