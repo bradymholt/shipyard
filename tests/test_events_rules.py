@@ -111,17 +111,14 @@ class MemoryChips(unittest.TestCase):
         self.assertIsNone(rules.memory_chip(old, validate_rules({"nudge": False}), NOW))
         self.assertIsNotNone(rules.memory_chip(old, validate_rules({"nudge": {"after_hours": 48}}), NOW))
 
-    def test_stale_draft(self):
-        s = snap(draft=True, committed="2026-10-20T08:00:00Z")
-        self.assertEqual(rules.memory_chip(s, RULES, NOW)["label"], "Stale draft · 4d")
-        self.assertIsNone(rules.memory_chip(s, validate_rules({"stale_draft": {"after_days": 7}}), NOW))
-        self.assertIsNone(rules.memory_chip(snap(draft=True, committed="2026-10-20T08:00:00Z", ci="PENDING"), RULES, NOW))
+    def test_idle_draft_gets_no_chip(self):
+        self.assertIsNone(rules.memory_chip(snap(draft=True, committed="2026-10-01T08:00:00Z"), RULES, NOW))
 
     def test_snooze_wins_until_it_expires(self):
-        s = snap(draft=True, committed="2026-10-01T08:00:00Z")
+        s = snap(requested=["rev"], requested_at={"rev": "2026-10-20T10:00:00Z"})
         chip = rules.memory_chip(s, RULES, NOW, "2026-10-26T00:00:00Z")
         self.assertEqual(chip["kind"], "snoozed")
-        self.assertEqual(rules.memory_chip(s, RULES, NOW, "2026-10-23T00:00:00Z")["kind"], "stale_draft")
+        self.assertEqual(rules.memory_chip(s, RULES, NOW, "2026-10-23T00:00:00Z")["kind"], "nudge")
 
     def test_others_prs_get_no_memory_chip(self):
         s = snap(author="alice", draft=True, committed="2026-10-01T08:00:00Z")

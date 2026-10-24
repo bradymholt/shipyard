@@ -2,7 +2,7 @@
 the "rules" config, so they are unit-tested against fixture PR states.
 
 Two outputs:
-  memory_chip()  the chip a PR earns from time or memory (waiting, stale, snoozed);
+  memory_chip()  the chip a PR earns from time or memory (waiting, snoozed);
                  chips that are a pure function of GitHub data live in the page.
   reactions()    what an event sets in motion: a pass, a proposed card, a pin, a
                  review worktree, or a cleanup. Rules never call an agent directly;
@@ -52,12 +52,6 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
     if snap.get("state") != "OPEN" or not snap.get("mine"):
         return None
     if snap.get("draft"):
-        rule = rules.get("stale_draft")
-        if snap.get("ci") not in (None, "SUCCESS"):  # running or red checks mean it isn't idle yet
-            return None
-        idle = hours_since(snap.get("last_commit_at") or snap.get("created"), now)
-        if rule and idle is not None and idle >= rule["after_days"] * 24:
-            return {"kind": "stale_draft", "label": f"Stale draft · {int(idle // 24)}d"}
         return None
     rule = rules.get("nudge")
     waiting_on = [r for r in snap.get("requested") or []]

@@ -129,7 +129,7 @@ try {
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
-  check((await chipText(page, 104))?.includes("Stale draft · 5d"), "companion memory chip → Stale draft · 5d");
+  check(await page.locator('.card[data-key="o/r#104"] .next-chip').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 30h"), "companion memory chip → Nudge · 30h");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
   check(await page.locator('.card[data-key="o/r#99"] .cleanup-btn').count() === 1, "Clean up worktree on a merged card");
@@ -200,7 +200,7 @@ try {
   await hosted.page.waitForSelector('.card[data-key="o/r#101"] .next-chip');
   check((await chipText(hosted.page, 101))?.includes("Address feedback"), "GitHub-derived chips work hosted");
   check((await chipText(hosted.page, 103))?.trim() === "Merge", "Merge chip works hosted");
-  check(await hosted.page.locator('.card[data-key="o/r#104"] .next-chip').count() === 0, "memory chips are absent hosted, not broken");
+  check(await hosted.page.locator('.card[data-key="o/r#105"] .next-chip').count() === 0, "memory chips are absent hosted, not broken");
   await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await hosted.page.waitForSelector("#sidebar .sb-activity li");
   check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Next" }).count() === 0, "hosted sidebar has no Next section");

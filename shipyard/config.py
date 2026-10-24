@@ -60,7 +60,6 @@ RULE_DEFAULTS = {
     "review": True,
     "re_review": True,
     "nudge": {"after_hours": 24},
-    "stale_draft": {"after_days": 3},
     "rerequest_review": True,
     "cleanup_worktree": True,
     "passes": {
@@ -70,7 +69,7 @@ RULE_DEFAULTS = {
         "re_review": "auto",
     },
 }
-RULE_THRESHOLDS = {"nudge": "after_hours", "stale_draft": "after_days"}
+RULE_THRESHOLDS = {"nudge": "after_hours"}
 PASS_MODES = ("auto", "ask", False)
 
 # Trust flags: every action type starts manual. "when" sets the confidence an

@@ -2421,7 +2421,7 @@
   // ---------- next-action chips ----------
   // A card gets one chip, only when there is a next step. Chips that are a pure function
   // of GitHub data are computed here, so they work hosted too; the companion adds the ones
-  // that need memory (waiting on a reviewer, a stale draft, snoozed).
+  // that need memory (waiting on a reviewer, snoozed).
   const FAILING_CONCLUSIONS = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
   const ruleOn = (name) => !state.rules || state.rules[name] !== false;
   const companionPr = (pr) => state.companionState?.prs?.[prKey(pr)] || null;
@@ -2743,9 +2743,6 @@
       const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
       body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
       actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
-    } else if (chip.kind === "stale_draft") {
-      body = "No new commits in a while.";
-      actionsHtml = run("mark_ready", "Mark ready") + continueButton(pr);
     } else if (PASS_FOR_CHIP[chip.kind]) {
       body = { address_feedback: "Changes were requested.", fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
         review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
