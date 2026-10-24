@@ -497,6 +497,11 @@
   .plan-dot { width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--claude); flex: none; }
   .plan-dot.running { animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .25; } }
+  .next-spinner {
+    width: 0.625rem; height: 0.625rem; flex: none; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--claude); animation: spin .8s linear infinite;
+  }
+  .next-row .next-status { margin-left: auto; flex: none; font-weight: 500; color: var(--fg-faint); }
 
   /* ---------- sidebar ---------- */
   #sidebar {
@@ -514,7 +519,7 @@
       border: 1px solid var(--border); border-radius: 0.625rem; margin-top: 1rem; display: none; }
     body.sidebar-open #sidebar { display: block; }
   }
-  @media (prefers-reduced-motion: reduce) { #sidebar { transition: none; } .plan-dot.running { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { #sidebar { transition: none; } .plan-dot.running, .next-spinner { animation: none; } }
   .sb-top { display: flex; align-items: flex-start; gap: 0.5rem; }
   .sb-top .sb-where { flex: 1; min-width: 0; font: 500 0.6875rem var(--mono); color: var(--fg-muted); overflow-wrap: anywhere; }
   .sb-close { border: none; background: none; padding: 0.125rem; color: var(--fg-faint); display: inline-flex; }
@@ -2464,13 +2469,13 @@
     const chip = nextChip(pr, reviewMode);
     const cp = companionPr(pr);
     const dot = cp?.running
-      ? `<span class="plan-dot running" title="${esc(agentName())} is reading this PR"></span>`
+      ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
       : cp?.planReady ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
     if (!chip && !dot) return "";
     const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
     const label = chip ? chip.label : cp.running ? "Reading…" : PASS_LABELS[ready?.pass] || "Ready to read";
     const prefix = chip?.kind === "snoozed" ? "" : `<span class="next-prefix">→ Next:</span>`;
-    return `<button type="button" class="next-row ${chip?.tone || ""}" data-open="${esc(prKey(pr))}" title="${esc(chip?.title || "Open details")}">${prefix}${dot}<span class="next-label">${esc(label)}</span></button>`;
+    return `<button type="button" class="next-row ${chip?.tone || ""}" data-open="${esc(prKey(pr))}" title="${esc(chip?.title || "Open details")}">${prefix}${dot}<span class="next-label">${esc(label)}</span>${chip && cp?.running ? '<span class="next-status">Working…</span>' : ""}</button>`;
   }
 
   function cardClasses(pr, extra) {
