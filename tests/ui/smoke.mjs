@@ -62,7 +62,7 @@ const MINE = [
   pr(105, { title: "Refactor auth middleware", requested: ["jm"], updated: ago(30) }),
   pr(106, { title: "Tidy the README", decision: "CHANGES_REQUESTED", reviews: [["CHANGES_REQUESTED", "rev"]], threads: ["me"] }),
   pr(107, { title: "Fix the typo", decision: "CHANGES_REQUESTED", reviews: [["COMMENTED", "rev"]], threads: ["me", "rev"] }),
-  pr(108, { title: "Rename the flag", decision: "CHANGES_REQUESTED", reviews: [["CHANGES_REQUESTED", "rev"]], requested: ["rev"] }),
+  pr(108, { title: "Rename the flag", decision: "CHANGES_REQUESTED", requested: ["rev"] }),
 ];
 const REQUESTED = [
   pr(201, { author: "alice", title: "Fuzzy search in the index", requested: ["me"] }),
