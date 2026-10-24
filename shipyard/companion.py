@@ -366,6 +366,8 @@ class Companion:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
                     f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
+        if name == "pre_review":
+            answer["proposals"] = self.draft_on_github(snap, answer["proposals"])
         kind = "answer" if name == "ask" else "pass"
         for proposal in answer["proposals"]:
             context = reply_context(snap, (proposal.get("payload") or {}).get("comment_id"))
@@ -381,6 +383,27 @@ class Companion:
                 if self.maybe_auto(card["id"], proposal["action"], proposal["payload"],
                                    proposal["confidence"], proposal["reason"], source=name):
                     break
+
+    def draft_on_github(self, snap, proposals):
+        """A clean, confident approval stays a button; any other review is drafted as a
+        pending review, so it is edited and submitted on GitHub next to the diff."""
+        out = []
+        for p in proposals:
+            payload = p["payload"]
+            if p["action"] != "submit_review":
+                out.append(p)
+            elif payload.get("event") == "APPROVE" and p["confidence"] == "high" and not payload.get("comments"):
+                out.append({**p, "action": "approve", "payload": {"body": payload.get("body") or ""}})
+            else:
+                try:
+                    result = actions.run(self.github, "draft_review", snap, payload)
+                    self.db.log(snap["key"], result)
+                    error = None
+                except Exception as e:
+                    error = str(e)
+                out.append({**p, "action": "finish_on_github",
+                            "payload": {"event": payload.get("event"), "error": error}})
+        return out
 
     # ---------- trust ladder
     def maybe_auto(self, card_id, action, payload, confidence, reason, source):
@@ -608,7 +631,8 @@ class Companion:
             flag = actions.TRUST_FLAG.get(p["action"])
             if (flag and flag not in HARD_LOCKED and not self.config["auto"].get(flag) and
                     self.db.clicks(p["action"]) >= TRUST_OFFER_AFTER and
-                    (p["action"] != "apply_fix" or (p.get("payload") or {}).get("diff"))):
+                    (p["action"] != "apply_fix" or (p.get("payload") or {}).get("diff")) and
+                    (p["action"] != "approve" or card.get("pass") == "re_review")):
                 offers.append(flag)
         view["trustOffers"] = sorted(set(offers))
         return view

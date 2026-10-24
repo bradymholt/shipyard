@@ -318,11 +318,20 @@ class Reviews(CompanionCase):
         self.assertTrue(run["untrusted"])  # their checkout's agent settings don't load
         self.assertEqual(self.comp.db.pin("o/r#5")["how"], "shipyard")
         self.assertEqual(self.agent.discarded, [])  # the pinned review session stays
-        card = pr["cards"][0]
-        self.comp.card_action(card["id"], 0, None)
         method, path, body = self.gh.calls[-1]
         self.assertEqual((method, path), ("POST", "/repos/o/r/pulls/5/reviews"))
+        self.assertNotIn("event", body)  # pending: only you see it until you submit on GitHub
         self.assertEqual(body["comments"][0]["side"], "RIGHT")
+        self.assertEqual(pr["cards"][0]["proposals"][0]["action"], "finish_on_github")
+
+    def test_confident_clean_approval_stays_a_button(self):
+        self.agent.answers["first-pass code review"] = {"summary": "Fine.", "proposals": [
+            {"action": "submit_review", "confidence": "high", "reason": "tiny and tested",
+             "payload": {"event": "APPROVE", "body": "LGTM"}}]}
+        self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
+        pr = self.poll()["o/r#5"]
+        self.assertFalse(any(c[1].endswith("/reviews") for c in self.gh.calls))
+        self.assertEqual(pr["cards"][0]["proposals"][0]["action"], "approve")
 
 
     def test_re_review_without_a_review_worktree_makes_one(self):
