@@ -511,7 +511,7 @@ class Companion:
         if name not in passes.TITLES or name == "ask":
             raise ValueError(f"Unknown pass: {name}")
         for card in self.db.cards(key, ("open",)):
-            if card.get("pass") == name and card.get("kind") in ("offer", "error", "raw"):
+            if card.get("pass") == name and (card.get("kind") in ("offer", "error", "raw") or name == "new_session"):
                 self.db.update_card(card["id"], status="done")
         card = self.queue_pass(snap, name, retry=True)
         if card is None:
@@ -634,6 +634,8 @@ class Companion:
                     session["shipyardTurns"] = self.db.shipyard_turns(pin["session_id"])
                     session["how"] = pin.get("how")
             cards = [self.card_view(c) for c in self.db.cards(key)]
+            # A new session shows only in the PR session panel, not as a chip on the board.
+            next_cards = [c for c in cards if c["status"] == "open" and c.get("pass") != "new_session"]
             done = [p for p in self.db.passes(key) if p["status"] == "done"]
             exchange = done[-1] if done else None
             path = pin.get("path") if pin else None
@@ -649,8 +651,8 @@ class Companion:
                 "snoozedUntil": self.db.snooze(key),
                 "cards": [c for c in cards if c["status"] == "open"],
                 "handled": [c for c in cards if c["status"] == "handled"],
-                "planReady": any(c["kind"] in ("pass", "answer") for c in cards if c["status"] == "open"),
-                "running": any(c["kind"] == "running" for c in cards if c["status"] == "open"),
+                "planReady": any(c["kind"] in ("pass", "answer") for c in next_cards),
+                "running": any(c["kind"] == "running" for c in next_cards),
                 "session": session,
                 "path": path or self.checkout_for(snap),
                 "exchange": ({"pass": exchange["name"], "at": exchange["finished"],

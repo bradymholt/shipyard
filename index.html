@@ -2816,7 +2816,7 @@
       return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
         <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div></div>`;
     }
-    const failed = starting ? `<p class="nc-error">${esc(starting.error || "Couldn't start the session.")}</p>` : "";
+    const failed = ["error", "raw"].includes(starting?.kind) ? `<p class="nc-error">${esc(starting.error || "Couldn't start the session.")}</p>` : "";
     let picker = "";
     if (sessionChoices?.key === key) {
       picker = sessionChoices.sessions.length
