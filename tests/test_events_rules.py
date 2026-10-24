@@ -163,6 +163,8 @@ class StaleCards(unittest.TestCase):
         card = {"pass": "changes_requested", "head": "aaa"}
         self.assertFalse(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED")))
         self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED")))
+        rev = [{"author": "rev", "state": "CHANGES_REQUESTED"}]
+        self.assertTrue(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED", reviews=rev, requested=["rev"])))
 
     def test_ci_card_goes_on_green_or_new_head(self):
         card = {"pass": "ci_failed", "head": "aaa"}

@@ -43,6 +43,7 @@ function pr(number, extra = {}) {
     reviewDecision: extra.decision || null, comments: { totalCount: extra.comments || 0 },
     reviewRequests: { nodes: (extra.requested || []).map((l) => ({ requestedReviewer: user(l) })) },
     latestReviews: { nodes: (extra.reviews || []).map(([state, login]) => ({ state, author: { login, avatarUrl: null } })) },
+    reviewThreads: { nodes: (extra.threads || []).map((login) => ({ isResolved: false, comments: { nodes: [{ author: { login } }] } })) },
     commits: { nodes: [{ commit: { oid: `h${number}`, statusCheckRollup: extra.ci === null ? null : {
       state: extra.ci || "SUCCESS",
       contexts: { nodes: (extra.failing || []).map((name) => ({ __typename: "CheckRun", name, conclusion: "FAILURE",
@@ -59,6 +60,7 @@ const MINE = [
   pr(103, { title: "Bump the parser", decision: "APPROVED", reviews: [["APPROVED", "jm"]] }),
   pr(104, { title: "New onboarding flow", draft: true, updated: ago(120) }),
   pr(105, { title: "Refactor auth middleware", requested: ["jm"], updated: ago(30) }),
+  pr(106, { title: "Tidy the README", decision: "CHANGES_REQUESTED", reviews: [["CHANGES_REQUESTED", "rev"]], threads: ["me"] }),
 ];
 const REQUESTED = [
   pr(201, { author: "alice", title: "Fuzzy search in the index", requested: ["me"] }),
@@ -138,6 +140,7 @@ try {
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
+  check((await chipText(page, 106))?.includes("Re-request review · 1"), "replied last on every thread → Re-request review · 1");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
