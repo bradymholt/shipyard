@@ -115,7 +115,7 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }) 
   return { page, errors, context };
 }
 
-const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-chip`).first().textContent().catch(() => null);
+const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row .next-label`).first().textContent().catch(() => null);
 
 const children = [];
 try {
@@ -125,11 +125,11 @@ try {
 
   console.log("companion mode");
   const { page, errors } = await openPage(browser, COMPANION_PORT);
-  await page.waitForSelector('.card[data-key="o/r#105"] .next-chip');
+  await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
-  check(await page.locator('.card[data-key="o/r#104"] .next-chip').count() === 0, "an idle draft gets no chip");
+  check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
   check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
@@ -157,7 +157,7 @@ try {
   const posted = await page.evaluate(() => window.__dashboard.state.companionState.prs["o/r#101"].activity.map((a) => a.text));
   check(posted.includes("posted a reply on a review thread"), "Post reply goes through the companion and the card closes");
 
-  await page.locator('.card[data-key="o/r#102"] .next-chip').click();
+  await page.locator('.card[data-key="o/r#102"] .next-row').click();
   await page.waitForSelector('#sidebar [data-show-diff]');
   check(await sb.locator('button.nc-run[data-action="apply_fix"]').count() === 0, "Apply fix stays hidden until the diff is shown");
   await sb.locator("[data-show-diff]").click();
@@ -172,10 +172,10 @@ try {
   check((await chipText(page, 105))?.startsWith("Snoozed"), "snoozed card dims in place with the until-date on the chip");
 
   await page.locator('.tab[data-filter="review"]').click();
-  await page.waitForSelector('.card[data-key="o/r#201"] .next-chip');
+  await page.waitForSelector('.card[data-key="o/r#201"] .next-row');
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
-  await page.locator('.card[data-key="o/r#201"] .next-chip').click();
+  await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar button.nc-run[data-action="submit_review"]');
   check((await sb.locator(".nc-inline").textContent()).includes("search/tokenize.py:12"), "pre-review shows its inline comments before submitting");
   await page.waitForTimeout(400);
@@ -197,10 +197,10 @@ try {
 
   console.log("hosted mode (no companion)");
   const hosted = await openPage(browser, STATIC_PORT);
-  await hosted.page.waitForSelector('.card[data-key="o/r#101"] .next-chip');
+  await hosted.page.waitForSelector('.card[data-key="o/r#101"] .next-row');
   check((await chipText(hosted.page, 101))?.includes("Address feedback"), "GitHub-derived chips work hosted");
   check((await chipText(hosted.page, 103))?.trim() === "Merge", "Merge chip works hosted");
-  check(await hosted.page.locator('.card[data-key="o/r#105"] .next-chip').count() === 0, "memory chips are absent hosted, not broken");
+  check(await hosted.page.locator('.card[data-key="o/r#105"] .next-row').count() === 0, "memory chips are absent hosted, not broken");
   await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await hosted.page.waitForSelector("#sidebar .sb-activity li");
   check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Next" }).count() === 0, "hosted sidebar has no Next section");
