@@ -97,12 +97,12 @@ class MemoryChips(unittest.TestCase):
         s = snap(requested=["rev"], requested_at={"rev": "2026-10-23T10:00:00Z"})
         chip = rules.memory_chip(s, RULES, NOW)
         self.assertEqual(chip["kind"], "nudge")
-        self.assertEqual(chip["label"], "Nudge · 26h")
+        self.assertEqual(chip["label"], "Nudge · 1d")
 
     def test_nudge_restarts_the_clock(self):
         s = snap(requested=["rev"], requested_at={"rev": "2026-10-20T10:00:00Z"})
         self.assertIsNone(rules.memory_chip(s, RULES, NOW, nudged_at="2026-10-24T02:00:00Z"))
-        self.assertEqual(rules.memory_chip(s, RULES, NOW, nudged_at="2026-10-23T10:00:00Z")["label"], "Nudge · 26h")
+        self.assertEqual(rules.memory_chip(s, RULES, NOW, nudged_at="2026-10-23T10:00:00Z")["label"], "Nudge · 1d")
 
     def test_no_nudge_before_threshold_or_when_off(self):
         s = snap(requested=["rev"], requested_at={"rev": "2026-10-24T02:00:00Z"})

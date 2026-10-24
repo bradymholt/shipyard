@@ -60,7 +60,8 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
         waited = min((h for h in (hours_since(waiting_since(snap), now), hours_since(nudged_at, now))
                       if h is not None), default=None)
         if waited is not None and waited >= rule["after_hours"]:
-            return {"kind": "nudge", "label": f"Nudge · {int(waited)}h", "reviewers": waiting_on}
+            age = f"{int(waited // 24)}d" if waited >= 24 else f"{int(waited)}h"
+            return {"kind": "nudge", "label": f"Nudge · {age}", "reviewers": waiting_on}
     return None
 
 

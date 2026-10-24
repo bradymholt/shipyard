@@ -130,7 +130,7 @@ try {
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check(await page.locator('.card[data-key="o/r#104"] .next-chip').count() === 0, "an idle draft gets no chip");
-  check((await chipText(page, 105))?.includes("Nudge · 30h"), "companion memory chip → Nudge · 30h");
+  check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
   check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
   check((await page.locator("#companion-status").textContent()).includes("watching your PRs"), "footer shows the companion watching");
