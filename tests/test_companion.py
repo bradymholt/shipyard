@@ -167,14 +167,15 @@ class ChangesRequested(CompanionCase):
                       self.gh.calls)
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"], [])
 
-    def test_live_session_gets_the_raw_event_instead_of_a_turn(self):
+    def test_live_session_gets_a_kept_fork_instead_of_a_turn(self):
         self.agent.live = True
         self.gh.put(pr_node(decision="CHANGES_REQUESTED",
                             reviews=[{"state": "CHANGES_REQUESTED", "author": "rev"}]), "author:@me")
         card = self.poll()["o/r#1"]["cards"][0]
-        self.assertEqual(self.agent.runs, [])
-        self.assertEqual(card["kind"], "raw")
-        self.assertIn("Changes were requested", card["raw"])
+        self.assertEqual(self.agent.runs[0]["mode"], "fork")
+        self.assertEqual(self.agent.discarded, [])
+        self.assertEqual(card["kind"], "pass")
+        self.assertEqual(card["fork"], {"path": self.checkout, "session": "fork-1"})
 
     def test_card_goes_away_once_feedback_is_addressed(self):
         node = pr_node(decision="CHANGES_REQUESTED", reviews=[{"state": "CHANGES_REQUESTED", "author": "rev"}])
