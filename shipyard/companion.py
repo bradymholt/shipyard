@@ -52,7 +52,6 @@ class Companion:
         self.viewer = None
         self.status = {"github": "starting", "lastPoll": None}
         self.worktree_map = {}
-        self.pin_tried = set()
         self.live_cache = {}
         self.info_cache = {}
         self.version = 0
@@ -124,7 +123,9 @@ class Companion:
         for snap in self.db.prs():
             if snap.get("state") == "OPEN" and not snap.get("dropped"):
                 self.resolve_stale_cards(snap)
-                if snap["mine"] and snap["key"] not in self.pin_tried:
+                # A running pass's transcript would win the "latest session" fallback.
+                if snap["mine"] and not any(p["status"] in ("queued", "running")
+                                            for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
         self.db.forget_old_prs()
         self.status = {"github": "ok", "lastPoll": now_iso()}
@@ -185,7 +186,6 @@ class Companion:
 
     def ensure_pin(self, snap, force=False):
         key = snap["key"]
-        self.pin_tried.add(key)
         adapter = self.adapter
         wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
         if not adapter or not wt:

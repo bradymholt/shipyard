@@ -390,6 +390,14 @@ class PageRequests(CompanionCase):
         with self.assertRaises(LookupError):
             self.comp.repin("o/r#1", "not-in-this-checkout")
 
+    def test_pin_found_once_the_worktree_appears_after_the_first_poll(self):
+        self.gh.put(pr_node(), "author:@me")
+        with mock.patch("shipyard.companion.worktrees.discover", return_value=[]):
+            self.poll()
+        self.assertIsNone(self.comp.db.pin("o/r#1"))
+        self.poll()
+        self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "s-open")
+
     def test_ask_runs_a_fork_with_the_question(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()
