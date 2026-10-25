@@ -2913,7 +2913,7 @@
     const rule = state.companionState?.config?.approveRereview;
     const why = !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
       : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
-      : setting.on ? "On because your last review approved it." : "Off until you turn it on; no pre-review set it.";
+      : setting.on ? "On because your last review approved it." : "Off because your last review didn't approve it.";
     return `<div class="sb-section"><div class="sb-h">Auto-approve</div><div class="sb-auto">
       <label><input type="checkbox" data-auto-approve="${esc(prKey(pr))}"${setting.on && rule ? " checked" : ""}${rule ? "" : " disabled"}>
         Approve on its own when a re-review finds my review addressed</label>

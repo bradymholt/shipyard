@@ -428,6 +428,14 @@ class Reviews(CompanionCase):
         self.assertEqual({k: v for k, v in self.comp.db.auto_approve("o/r#5").items() if k in ("on", "by")},
                          {"on": False, "by": "you"})
 
+    def test_auto_approve_stays_hidden_until_something_decides_it(self):
+        self.agent.answers["first-pass code review"] = {"summary": "Fine.", "proposals": []}
+        self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
+        self.poll()
+        self.assertIsNone(self.comp.page_state()["prs"]["o/r#5"]["autoApprove"])
+        self.comp.set_auto_approve("o/r#5", True)
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#5"]["autoApprove"]["by"], "you")
+
     def test_held_auto_approval_says_why_on_the_card(self):
         self.assertFalse(self.rereview_approval_posted(
             [{"filename": "a.py", "status": "modified", "additions": 25, "deletions": 6}]))
