@@ -200,6 +200,11 @@ try {
   check(await sb.locator('button.nc-run[data-action="apply_fix"]').count() === 1, "then Apply fix and push appears");
   check(await sb.locator('a.btn-link:has-text("View log")').count() === 1, "CI card links the failing log");
 
+  await page.locator('.card[data-key="o/r#103"] .next-row').click();
+  await sb.locator('button.nc-run[data-pr-action="merge"]').click();
+  await page.waitForSelector('.card.merged[data-key="o/r#103"]', { timeout: 2000 });
+  check(await page.locator('.card[data-key="o/r#103"]:not(.merged)').count() === 0, "Merge moves the card to Recently merged right away");
+
   await page.locator('.card[data-key="o/r#105"] .card-meta').click();
   await page.waitForSelector("#sidebar select[data-snooze]");
   await sb.locator("select[data-snooze]").selectOption("24");

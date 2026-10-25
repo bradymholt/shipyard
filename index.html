@@ -2418,6 +2418,18 @@
     pr.reviewRequests = { nodes: [...(pr.reviewRequests?.nodes || []), ...added] };
   }
 
+  // Likewise for a merge, so the card drops to Recently merged without waiting for a sync.
+  function markMerged(pr) {
+    const key = prKey(pr);
+    const mergedAt = new Date().toISOString();
+    const mine = state.prs.find((p) => prKey(p) === key);
+    const reviewed = state.reviewedPrs.find((p) => prKey(p) === key);
+    state.prs = state.prs.filter((p) => p !== mine);
+    state.reviewedPrs = state.reviewedPrs.filter((p) => p !== reviewed);
+    if (mine) state.merged = mergeMergedLists([{ ...mine, mergedAt }], state.merged);
+    if (reviewed) state.reviewedMerged = mergeMergedLists([{ ...reviewed, mergedAt }], state.reviewedMerged);
+  }
+
   function githubChip(pr, reviewMode) {
     if (pr.mergedAt) return null;
     if (reviewMode) {
@@ -3080,6 +3092,7 @@
         const cardId = btn.dataset.card || btn.dataset.doneCard;
         const card = (cp?.cards || []).find((c) => String(c.id) === cardId);
         if (action === "rerequest_review") markRequested(pr, payload.reviewers || card?.payload?.reviewers);
+        if (action === "merge" && pr) markMerged(pr);
         if (card) cp.cards = cp.cards.filter((c) => c !== card);
         render();
       });
