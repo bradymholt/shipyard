@@ -377,14 +377,18 @@ class Reviews(CompanionCase):
         self.assertEqual(posted[0][2]["event"], "APPROVE")
         self.assertNotIn("body", posted[0][2])
 
-    def rereview_approval_posted(self, files, state="APPROVED"):
+    def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None):
         self.comp.set_trust("approve_rereview", True)
         self.gh.compare = {"files": files}
         self.agent.answers = {"re-review": {"summary": "all addressed", "proposals": [
             {"action": "approve", "confidence": "high", "reason": "threads fixed"}]}}
         review = {"databaseId": 9, "state": state, "submittedAt": "2026-10-19T00:00:00Z",
                   "commit": {"oid": "old"}}
-        self.gh.put(pr_node(number=7, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
+        node = pr_node(number=7, author="bob", requested=[VIEWER], my_review=review)
+        if state == "DISMISSED":
+            node["timelineItems"]["nodes"].append({"__typename": "ReviewDismissedEvent",
+                                                   "previousReviewState": dismissed_from, "review": {"databaseId": 9}})
+        self.gh.put(node, "review-requested:@me")
         self.poll()
         return any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls)
 
@@ -395,6 +399,10 @@ class Reviews(CompanionCase):
     def test_trusted_approve_holds_back_unless_you_approved_before(self):
         self.assertFalse(self.rereview_approval_posted(
             [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}], state="CHANGES_REQUESTED"))
+
+    def test_trusted_approve_fires_after_your_approval_was_dismissed(self):
+        small = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]
+        self.assertTrue(self.rereview_approval_posted(small, state="DISMISSED", dismissed_from="APPROVED"))
 
     def test_trusted_approve_holds_back_on_a_large_change(self):
         self.assertFalse(self.rereview_approval_posted(

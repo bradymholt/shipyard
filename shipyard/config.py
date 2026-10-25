@@ -75,12 +75,12 @@ RULE_THRESHOLDS = {"nudge": "after_hours"}
 RULE_PROMPTS = {"address_feedback"}
 PASS_MODES = ("auto", "ask", False)
 
-# Trust flags: every action type starts manual. "when" sets the confidence an
+# Trust flags: every action type but re-review approval starts manual. "when" sets the confidence an
 # agent's proposal needs before the companion presses the button itself.
 AUTO_DEFAULTS = {
     "rerun_checks": False,
     "enable_auto_merge": False,
-    "approve_rereview": False,
+    "approve_rereview": True,
     "post_reply": False,
     "apply_fix": False,
 }
@@ -191,7 +191,7 @@ def validate_auto(raw):
         raise ValueError(f"unknown auto action(s): {', '.join(unknown)}")
     auto = {}
     for name in AUTO_DEFAULTS:
-        value = raw.get(name, False)
+        value = raw.get(name, AUTO_DEFAULTS[name])
         if value is not False and name in HARD_LOCKED:
             raise ValueError(f'auto "{name}" is locked: it posts under your name, so it stays manual')
         if isinstance(value, dict):
