@@ -50,6 +50,8 @@ def main():
     gh.put(pr_node(102, head="h102", branch="me/ci-cache", ci="FAILURE",
                    contexts=[check_run("rspec", "FAILURE", job=7, run=8)], requested=["jm"],
                    requested_at={"jm": ago(hours=3)}, updated=ago(hours=2)), "author:@me")
+    gh.put(pr_node(103, head="h103", branch="me/parser", decision="APPROVED",
+                   reviews=[{"state": "APPROVED", "author": "jm", "body": ""}]), "author:@me")
     gh.put(pr_node(104, head="h104", branch="me/onboarding", draft=True, committed=ago(days=5),
                    updated=ago(days=5)), "author:@me")
     gh.put(pr_node(105, head="h105", branch="me/auth", requested=["jm"], requested_at={"jm": ago(hours=30)},
