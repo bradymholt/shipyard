@@ -3290,7 +3290,7 @@
     if (status.github && status.github !== "ok" && status.github !== "starting") {
       return `<span class="dot off"></span><span class="companion-err" title="${esc(status.github)}">Companion can't reach GitHub: ${esc(clip(status.github, 80))}</span>${agent}`;
     }
-    return `<span class="dot ok"></span>Companion connected · watching your PRs${agent}`;
+    return `<span class="dot ok"></span>Companion connected${agent}`;
   }
 
   // With the companion connected, its poll stands in for the page's: the page re-reads
