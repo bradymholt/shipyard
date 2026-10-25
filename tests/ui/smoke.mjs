@@ -154,6 +154,12 @@ try {
   check((await chipText(page, 106))?.includes("Re-request review · 1"), "replied last on every thread → Re-request review · 1");
   check((await chipText(page, 107))?.includes("Address feedback · 1"), "a comment review on top of changes requested → Address feedback");
   check(await page.locator('.card[data-key="o/r#108"] .next-row').count() === 0, "re-requested after changes → no chip, waiting on the reviewer");
+  await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    state.prs.find((p) => p.number === 108).updatedAt = new Date().toISOString();
+    render();
+  });
+  check((await chipText(page, 108))?.includes("Checking"), "a change the companion hasn't seen yet shows Checking…");
   check(await page.locator('.card[data-key^="o/r#10"] .review-badge.changes').count() === 0, "no standalone Changes requested badge");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
