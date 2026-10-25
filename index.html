@@ -1916,21 +1916,29 @@
     $("#companion-status").innerHTML = companionStatusHtml();
 
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
-    const mineCount = state.prs.filter((pr) => {
-      if (pr.author?.login !== state.viewer || pr.isDraft) return false;
-      const lane = laneOf(pr);
-      return lane === 0 || (lane === 2 && !pr.autoMergeRequest);
+    const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
+      [prKey(pr), pr]
+    )).values()];
+    const stepsFor = (prs) => prs.filter((pr) => {
+      const chip = nextChip(pr);
+      return chip && chip.tone !== "muted" && !checkingPr(pr);
     }).length;
+    const mineCount = state.companionState
+      ? stepsFor([...state.prs.filter((pr) => pr.author?.login === state.viewer), ...state.merged])
+      : state.prs.filter((pr) => {
+        if (pr.author?.login !== state.viewer || pr.isDraft) return false;
+        const lane = laneOf(pr);
+        return lane === 0 || (lane === 2 && !pr.autoMergeRequest);
+      }).length;
     const mineCountEl = $("#count-mine");
     mineCountEl.textContent = mineCount || "";
     mineCountEl.classList.toggle("hidden", mineCount === 0);
     mineCountEl.title = mineCount
       ? `${mineCount} pull request${mineCount === 1 ? "" : "s"} ${mineCount === 1 ? "needs" : "need"} your attention`
       : "";
-    const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
-      [prKey(pr), pr]
-    )).values()];
-    const reviewCount = reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
+    const reviewCount = state.companionState
+      ? stepsFor([...reviewSet.filter(reviewItem), ...reviewedMergedItems()])
+      : reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
     const reviewCountEl = $("#count-review");
     reviewCountEl.textContent = reviewCount || "";
     reviewCountEl.classList.toggle("hidden", reviewCount === 0);
