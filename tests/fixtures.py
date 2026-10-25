@@ -15,7 +15,7 @@ def check_run(name, conclusion, job=11, run=22):
 def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci="SUCCESS",
             contexts=None, requested=(), reviews=(), threads=(), draft=False, my_review=None,
             updated="2026-10-20T10:00:00Z", requested_at=None, committed="2026-10-20T09:00:00Z",
-            created="2026-10-19T09:00:00Z", repo="o/r", branch="feature"):
+            created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=()):
     """A PullRequest node shaped like the companion's detail query returns."""
     requested_at = requested_at or {}
     return copy.deepcopy({
@@ -38,8 +38,12 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
              "path": t.get("path", "app.py"), "line": t.get("line", 3),
              "comments": {"nodes": [{"databaseId": t.get("comment_id", 500 + i), "body": t["body"],
                                      "createdAt": updated, "diffHunk": t.get("hunk"),
-                                     "author": {"login": t.get("author", "rev")}}]}}
+                                     "author": {"login": t.get("author", "rev")}}] +
+                                   [{"databaseId": 900 + i, "body": "reply", "createdAt": updated,
+                                     "author": {"login": who}} for who in t.get("replies", ())]}}
             for i, t in enumerate(threads)]},
+        "comments": {"nodes": [{"createdAt": c.get("at", updated), "author": {"login": c["author"]}}
+                               for c in comments]},
         "commits": {"nodes": [{"commit": {
             "oid": head, "committedDate": committed,
             "statusCheckRollup": {"state": ci, "contexts": {"nodes": contexts or []}} if ci else None}}]},

@@ -6,14 +6,46 @@ request) so a PR you open the board on is handled like one that just changed. Th
 caller dedupes by (PR, event, head SHA), so a re-poll never fires the same event twice.
 """
 
-FAILING = {"FAILURE", "ERROR"}
+import re
 
+FAILING = {"FAILURE", "ERROR"}
 
 FEEDBACK = {"CHANGES_REQUESTED", "COMMENTED"}
 
 
+# An approval whose body is only one of these is a plain sign-off, not feedback to answer.
+SIGN_OFF = re.compile(r"^(lgtm|looks good( to me)?|ship ?it|:shipit:|approved?|nice( work| one)?|"
+                      r"great( work)?|thanks?( you)?|ty)?[\s!.,:;)\U0001F300-\U0001FAFF\u2600-\u27BF]*$", re.I)
+
+
+def approval_feedback(snap):
+    """Approving reviews with something still to answer: a thread the approver opened that is
+    unresolved without your reply last, or a review body beyond a sign-off that you haven't
+    pushed or commented after."""
+    viewer = snap.get("viewer")
+    out = []
+    for r in snap.get("reviews") or []:
+        if r.get("state") != "APPROVED":
+            continue
+        threads = [t for t in snap.get("threads") or [] if not t.get("resolved") and t.get("comments")
+                   and t["comments"][0].get("author") == r["author"]]
+        if any(t["comments"][-1].get("author") != viewer for t in threads):
+            out.append(r)
+            continue
+        if SIGN_OFF.match((r.get("body") or "").strip()):
+            continue
+        answered = (r.get("commit") and r["commit"] != snap.get("head")) or any(
+            c.get("author") == viewer and (c.get("created") or "") > (r.get("submitted") or "")
+            for c in (snap.get("comments") or []) + [c for t in snap.get("threads") or []
+                                                     for c in t.get("comments") or []])
+        if not answered:
+            out.append(r)
+    return out
+
+
 def _feedback_ids(snap):
-    return {r["id"] for r in snap.get("reviews") or [] if r.get("state") in FEEDBACK}
+    return ({r["id"] for r in snap.get("reviews") or [] if r.get("state") in FEEDBACK} |
+            {r["id"] for r in approval_feedback(snap)})
 
 
 def requesters(snap):
@@ -31,7 +63,7 @@ def requesters(snap):
 
 
 def needs_changes(snap):
-    return snap.get("decision") == "CHANGES_REQUESTED" or bool(requesters(snap))
+    return snap.get("decision") == "CHANGES_REQUESTED" or bool(requesters(snap) or approval_feedback(snap))
 
 
 def derive(prev, cur):
@@ -60,7 +92,9 @@ def derive(prev, cur):
         new_feedback = _feedback_ids(cur) - (set() if first else _feedback_ids(prev))
         if changes and (first or not needs_changes(prev) or new_feedback):
             ids = sorted(str(i) for i in _feedback_ids(cur) if i is not None)
-            add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=requesters(cur))
+            reviewers = requesters(cur)
+            reviewers += [r["author"] for r in approval_feedback(cur) if r["author"] not in reviewers]
+            add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=reviewers)
         if (not first and prev.get("head") != cur.get("head") and
                 needs_changes(prev)):
             pending = set(cur.get("requested") or [])

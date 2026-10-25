@@ -965,7 +965,7 @@
     repository { nameWithOwner }
     author { login avatarUrl }
     reviewDecision
-    comments { totalCount }
+    comments(last: 10) { totalCount nodes { createdAt author { login } } }
     reviewRequests(first: 10) {
       nodes {
         requestedReviewer {
@@ -976,9 +976,11 @@
       }
     }
     latestReviews(first: 10) {
-      nodes { state author { login avatarUrl } commit { oid } }
+      nodes { state body submittedAt author { login avatarUrl } commit { oid } }
     }
-    reviewThreads(first: 30) { nodes { isResolved comments(last: 1) { nodes { author { login } } } } }
+    reviewThreads(first: 30) { nodes { isResolved
+      opener: comments(first: 1) { nodes { author { login } } }
+      comments(last: 1) { nodes { createdAt author { login } } } } }
     commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
       __typename
       ... on CheckRun { name conclusion detailsUrl }
@@ -2415,6 +2417,22 @@
     const asked = reviews.filter((r) => r.state === "CHANGES_REQUESTED");
     return asked.length ? asked : reviews.filter((r) => r.state !== "APPROVED");
   }
+  // Mirrors approval_feedback in shipyard/events.py: an approval still waiting on your answer.
+  const SIGN_OFF = /^(lgtm|looks good( to me)?|ship ?it|:shipit:|approved?|nice( work| one)?|great( work)?|thanks?( you)?|ty)?[\s!.,:;)\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*$/iu;
+  function approvalFeedback(pr) {
+    const head = pr.commits?.nodes?.[0]?.commit?.oid;
+    const threads = pr.reviewThreads?.nodes || [];
+    const mine = [...(pr.comments?.nodes || []), ...threads.map((t) => t.comments?.nodes?.[0])]
+      .filter((c) => c?.author?.login === state.viewer && c.createdAt);
+    return (pr.latestReviews?.nodes || []).filter((r) => {
+      if (r.state !== "APPROVED" || !r.author || r.author.login === pr.author?.login) return false;
+      if (threads.some((t) => !t.isResolved && t.opener?.nodes?.[0]?.author?.login === r.author.login &&
+          t.comments?.nodes?.[0]?.author?.login !== state.viewer)) return true;
+      if (SIGN_OFF.test((r.body || "").trim())) return false;
+      const pushed = r.commit?.oid && head && r.commit.oid !== head;
+      return !pushed && !mine.some((c) => c.createdAt > (r.submittedAt || ""));
+    });
+  }
   const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
   // Show a re-request right away, so the card moves to Waiting before GitHub's data catches up.
@@ -2463,6 +2481,10 @@
       if (ruleOn("address_feedback"))
         return { kind: "address_feedback", label: `Address feedback · ${reviewers.length}`, tone: "red", reviewers };
     }
+    const approvers = approvalFeedback(pr).map((r) => r.author.login);
+    if (approvers.length && ruleOn("address_feedback"))
+      return { kind: "address_feedback", label: `Reply to approval · ${approvers.length}`, tone: "gold",
+        reviewers: approvers, approval: true };
     if (ciFailing(pr) && ruleOn("fix_ci")) {
       const failing = failingChecks(pr);
       return { kind: "fix_ci", tone: "red", label: failing[0] ? `Fix CI · ${clip(failing[0].name, 18)}` : "Fix CI",
@@ -2767,7 +2789,8 @@
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
           <button type="button" data-dismiss="${card.id}">Dismiss</button></div>${trustToggles(card)}</div>`;
     }
-    const rerequest = card.pass === "changes_requested" ? respondButton(pr) + rerequestButton(githubChip(pr)?.reviewers, card.id) : "";
+    const chip = card.pass === "changes_requested" ? githubChip(pr) : null;
+    const rerequest = card.pass === "changes_requested" ? respondButton(pr) + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
@@ -2806,9 +2829,10 @@
       actionsHtml = rerequest + continueButton(pr);
     } else if (chip.kind === "address_feedback") {
       const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved).length;
-      const verb = pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
+      const verb = chip.approval ? "approved with comments"
+        : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
       body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
-      actionsHtml = respondButton(pr) + rerequest;
+      actionsHtml = respondButton(pr) + (chip.approval ? "" : rerequest);
     } else if (PASS_FOR_CHIP[chip.kind]) {
       body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
         review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
