@@ -2628,13 +2628,14 @@
     if (cp?.chip?.kind === "snoozed") return { ...cp.chip, tone: "muted" };
     const chip = companionSteps(pr)[0];
     if (chip) return chip;
-    if (cp?.chip) return { ...cp.chip, tone: cp.chip.kind === "nudge" ? "gold" : "muted" };
+    if (cp?.chip?.kind === "nudge") return { ...cp.chip, tone: "gold", optional: true };
+    if (cp?.chip) return { ...cp.chip, tone: "muted" };
     return null;
   }
 
   const needsYou = (pr) => {
     const chip = nextChip(pr);
-    return !!chip && chip.tone !== "muted" && !checkingPr(pr);
+    return !!chip && chip.tone !== "muted" && !chip.optional && !checkingPr(pr);
   };
 
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
@@ -2650,7 +2651,7 @@
     if (!chip && !dot) return "";
     const label = chip ? chip.label : cp.running ? "Reading…" : PASS_LABELS[ready?.pass] || "Ready to read";
     const prefix = chip?.kind === "snoozed" ? "" : `<span class="next-prefix">→ Next:</span>`;
-    return `<button type="button" class="next-row ${chip?.tone || ""}" data-open="${esc(prKey(pr))}" title="${esc(chip?.title || "Open details")}">${prefix}${dot}<span class="next-label">${esc(label)}</span>${chip && cp?.running ? '<span class="next-status">Working…</span>' : ""}</button>`;
+    return `<button type="button" class="next-row ${chip?.tone || ""}${chip?.optional ? " optional" : ""}" data-open="${esc(prKey(pr))}" title="${esc(chip?.title || "Open details")}">${prefix}${dot}<span class="next-label">${esc(label)}</span>${chip && cp?.running ? '<span class="next-status">Working…</span>' : ""}</button>`;
   }
 
   function cardClasses(pr, extra) {

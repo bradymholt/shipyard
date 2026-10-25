@@ -203,6 +203,7 @@ try {
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
   check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
+  check(await page.locator('.card[data-key="o/r#105"] .next-row.optional').count() === 1, "a nudge is optional, so it doesn't count as needing you");
   const nudgeUpdated = await page.evaluate(() => {
     const { state, render } = window.__dashboard;
     const pr = state.prs.find((p) => p.number === 105);
@@ -232,7 +233,7 @@ try {
   check((await page.locator("#companion-status").textContent()).trim() === "Companion connected", "footer shows the companion connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
-    document.querySelectorAll(".card:not(.merged) .next-row:not(.muted)").length,
+    document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional)").length,
     [...document.querySelectorAll(".lane-needs")].reduce((n, el) => n + parseInt(el.textContent, 10), 0),
   ]);
   check(steps > 0 && badge === String(steps) && lanes === steps, "the My PRs badge and lane headers count the Next steps on the board");
