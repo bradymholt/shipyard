@@ -579,10 +579,6 @@
   .sb-auto label { display: flex; align-items: flex-start; gap: 0.375rem; font: 500 0.75rem var(--sans); cursor: pointer; }
   .sb-auto input { margin: 0.1875rem 0 0; accent-color: var(--teal); }
   .sb-auto .auto-why { color: var(--fg-muted); font: 500 0.6875rem var(--sans); }
-  .sb-auto details { color: var(--fg-muted); }
-  .sb-auto summary { cursor: pointer; font: 500 0.6875rem var(--sans); }
-  .sb-auto ul { margin: 0.25rem 0 0; padding-left: 1.125rem; }
-  .sb-auto li { margin: 0.125rem 0; }
   .next-card .nc-held { color: var(--gold-text); font-size: 0.75rem; border-left: 2px solid var(--gold); padding-left: 0.5rem; }
   .sb-session { font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
   .sb-session .sess-title { font-weight: 600; font-size: 0.8125rem; }
@@ -2904,18 +2900,10 @@
     const why = !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
       : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
       : setting.on ? "On because your last review approved it." : "Off until you turn it on; no pre-review set it.";
-    const checks = rule ? `<details><summary>Checks it must pass first</summary><ul>
-        <li>The re-review finds your threads addressed and nothing else risky changed, with ${esc(rule.min_confidence)} confidence</li>
-        <li>At most ${esc(rule.max_lines)} lines changed since your last review, and no new files</li>
-        <li>At most ${esc(rule.max_per_pr)} automatic approvals on this PR</li>
-        <li>The PR is still open at the commit the re-review read</li>
-        <li>A re-review runs when the author re-requests your review or a push dismisses it, not on every push</li>
-        <li>It approves with no text, and can approve over a Request changes review</li>
-      </ul></details>` : "";
     return `<div class="sb-section"><div class="sb-h">Auto-approve</div><div class="sb-auto">
       <label><input type="checkbox" data-auto-approve="${esc(prKey(pr))}"${setting.on && rule ? " checked" : ""}${rule ? "" : " disabled"}>
         Approve on its own when a re-review finds my review addressed</label>
-      <div class="auto-why">${esc(why)}</div>${checks}</div></div>`;
+      <div class="auto-why">${esc(why)}</div></div></div>`;
   }
 
   // A question runs in a fork of the pinned session, so it lives in that session's section.
