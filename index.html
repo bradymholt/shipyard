@@ -551,6 +551,15 @@
   .nc-proposal { border-top: 1px dashed var(--border); padding-top: 0.375rem; margin-top: 0.375rem; }
   .nc-actions { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.375rem; align-items: center; }
   .nc-actions button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
+  .nc-verdict { display: flex; align-items: baseline; gap: 0.5rem; margin: 0.375rem 0 0.25rem; padding: 0.375rem 0.5rem;
+    border-left: 3px solid var(--muted-bar); border-radius: 0.25rem; background: var(--bg-inset); font: 600 0.875rem var(--sans); }
+  .nc-verdict.red { border-left-color: var(--red); color: var(--red-text); }
+  .nc-verdict.green { border-left-color: var(--green); color: var(--green-text); }
+  .nc-verdict .nc-verdict-label { white-space: nowrap; }
+  .nc-verdict .nc-verdict-pre { font: 500 0.6875rem var(--sans); color: var(--fg-muted); white-space: nowrap; }
+  .nc-verdict .nc-verdict-conf { margin-left: auto; font: 500 0.6875rem var(--sans); color: var(--fg-muted); white-space: nowrap; }
+  .nc-actions a.btn-link.primary { background: var(--navy); border-color: var(--navy); color: #f4f7f9; font-weight: 600; }
+  .nc-actions a.btn-link.primary:hover { background: var(--navy-2); }
   .nc-actions .nc-quiet { border: none; background: none; color: var(--fg-muted); padding: 0.1875rem 0.25rem; }
   .nc-actions .nc-quiet:hover { color: var(--fg); }
   .nc-inline { list-style: none; margin: 0.25rem 0; padding: 0; font-size: 0.75rem; }
@@ -2652,16 +2661,26 @@
     return `<textarea rows="${rows}" data-field="${esc(field)}">${esc(value)}</textarea>`;
   }
 
-  function proposalHtml(pr, card, p, i) {
+  // A review card leads with its verdict: what to do with the PR, then where to do it.
+  const VERDICTS = { APPROVE: ["Approve", "green"], REQUEST_CHANGES: ["Request changes", "red"], COMMENT: ["Comment", ""] };
+  const verdictProposal = (card) => (card.pass === "pre_review" || card.pass === "re_review")
+    ? (card.proposals || []).findIndex((p) => p.action === "finish_on_github" || p.action === "approve") : -1;
+  function verdictHtml(p) {
+    const [label, tone] = VERDICTS[p.action === "approve" ? "APPROVE" : p.payload?.event] || VERDICTS.COMMENT;
+    return `<div class="nc-verdict ${tone}"><span class="nc-verdict-pre">Recommends</span><span class="nc-verdict-label">${label}</span><span class="nc-verdict-conf">${esc(p.confidence)} confidence</span></div>
+      ${p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : ""}`;
+  }
+
+  function proposalHtml(pr, card, p, i, bare = false) {
     if (p.action === "continue") return p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : "";
     if (p.action === "finish_on_github") {
-      const verdict = { COMMENT: "Comment", APPROVE: "Approve", REQUEST_CHANGES: "Request changes" }[p.payload?.event] || "Comment";
-      const drafted = p.payload?.error ? esc(p.payload.error) : "Drafted as a pending review on GitHub.";
+      const n = p.payload?.comments || 0;
+      const drafted = p.payload?.error ? esc(p.payload.error)
+        : `Drafted on GitHub as a pending review${n ? ` with ${n} comment${n === 1 ? "" : "s"}` : ""}, visible only to you. Edit it there, then submit.`;
       return `
       <div class="nc-proposal">
-        <div class="nc-reason"><strong>${verdict}</strong> · ${esc(p.confidence)} confidence — ${esc(p.reason || "")}</div>
         <p class="nc-reason">${drafted}</p>
-        <div class="nc-actions"><a class="btn-link" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a></div>
+        <div class="nc-actions"><a class="btn-link primary" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a></div>
       </div>`;
     }
     const field = `c${card.id}-${i}`;
@@ -2693,7 +2712,7 @@
       ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
     return `
       <div class="nc-proposal">
-        <div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${esc(p.reason || "")}</div>
+        ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${esc(p.reason || "")}</div>`}
         ${body}
         <div class="nc-actions">${button}</div>
       </div>`;
@@ -2735,8 +2754,10 @@
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
-    const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i)).join("");
-    return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
+    const vi = verdictProposal(card);
+    const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
+    const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
+    return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}
       <p>${esc(card.summary || "")}</p>${proposals}
       ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
   }

@@ -433,7 +433,8 @@ class Companion:
             except Exception as e:
                 error = str(e)
             out.append({**p, "action": "finish_on_github",
-                        "payload": {"event": payload.get("event"), "error": error}})
+                        "payload": {"event": payload.get("event"), "error": error,
+                                    "comments": len(payload.get("comments") or [])}})
         # GitHub allows one pending review, so an Approve button would fail; approve it there.
         return [p for p in out if p["action"] != "approve"] if drafted else out
 
