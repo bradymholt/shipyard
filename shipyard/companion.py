@@ -411,8 +411,9 @@ class Companion:
                     break
 
     def draft_on_github(self, snap, proposals):
-        """A clean, confident approval stays a button; any other review is drafted as a
-        pending review, so it is edited and submitted on GitHub next to the diff."""
+        """An approval with no comments stays a button, whatever its confidence; any other
+        review is drafted as a pending review, so it is edited and submitted on GitHub
+        next to the diff."""
         out = []
         drafted = False
         for p in proposals:
@@ -422,7 +423,7 @@ class Companion:
             elif p["action"] != "submit_review":
                 out.append(p)
                 continue
-            elif payload.get("event") == "APPROVE" and p["confidence"] == "high" and not payload.get("comments"):
+            elif payload.get("event") == "APPROVE" and not payload.get("comments"):
                 out.append({**p, "action": "approve", "payload": {"body": payload.get("body") or ""}})
                 continue
             try:
