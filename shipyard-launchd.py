@@ -34,7 +34,6 @@ WATCH_LABEL = "local.shipyard-restart"
 REPO = Path(__file__).resolve().parent
 COMPANION = REPO / "shipyard.py"
 PACKAGE = REPO / "shipyard"
-CONFIG = REPO / "shipyard.config.json"
 AGENT_DIR = Path.home() / "Library" / "LaunchAgents"
 PLIST = AGENT_DIR / f"{LABEL}.plist"
 WATCH_PLIST = AGENT_DIR / f"{WATCH_LABEL}.plist"
@@ -102,10 +101,10 @@ def service_plist(python: str) -> dict:
 
 
 def watch_plist() -> dict:
-    # A missing WatchPaths entry can make launchd fire the job repeatedly, so
-    # only watch files that exist; re-run install after adding the config. The
-    # package directory changes when an editor saves one of its modules.
-    watched = [str(p) for p in (COMPANION, PACKAGE, CONFIG) if p.exists()]
+    # The package directory changes when an editor saves one of its modules. The
+    # config isn't watched: the companion reloads it itself, so a save doesn't cut
+    # running passes short.
+    watched = [str(p) for p in (COMPANION, PACKAGE)]
     return {
         "Label": WATCH_LABEL,
         "ProgramArguments": ["/bin/sh", "-c", f"launchctl kickstart -k {target(LABEL)}"],
@@ -281,8 +280,6 @@ def cmd_install(args: argparse.Namespace) -> int:
     ensure_plist(PLIST, service_plist(python))
     print(f"watcher      {WATCH_PLIST}")
     ensure_plist(WATCH_PLIST, watch_plist())
-    if not CONFIG.exists():
-        print(f"             {CONFIG.name} not found, so it is not watched yet")
 
     warn_on_foreign_plist()
     out_log, err_log = configured_logs(PLIST)

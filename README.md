@@ -177,7 +177,7 @@ Passes on someone else's PR run in its review worktree with only your user-level
 ./shipyard-launchd.py install
 ```
 
-That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the companion, and `local.shipyard-restart` watches `shipyard.py`, the `shipyard/` package, and `shipyard.config.json` to reload it when you save. `install` then confirms the companion actually stayed running rather than crash-looping. Re-run it after moving the repo, upgrading Python, or creating your config.
+That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the companion, and `local.shipyard-restart` watches `shipyard.py` and the `shipyard/` package to restart it when you save. The companion picks up edits to `shipyard.config.json` itself within a minute (except `roots`, which needs a restart). `install` then confirms the companion actually stayed running rather than crash-looping. Re-run it after moving the repo or upgrading Python.
 
 ```bash
 ./shipyard-launchd.py status     # state, pid, restart count, log sizes

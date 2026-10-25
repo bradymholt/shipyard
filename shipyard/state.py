@@ -40,7 +40,7 @@ class State:
         self.lock = threading.RLock()
         with self.lock:
             self.db.executescript(SCHEMA)
-            # A restart (under launchd, a config save reloads the companion) cuts running
+            # A restart (under launchd, saving the companion's code reloads it) cuts running
             # passes short. Re-running one could add a second turn to your session, so
             # mark it failed; its card offers Try again.
             self.db.execute("UPDATE passes SET status = 'failed', error = 'interrupted by a restart' "
