@@ -203,8 +203,8 @@ try {
   check((await page.locator("#companion-status").textContent()).includes("watching your PRs"), "footer shows the companion watching");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
-    document.querySelectorAll(".card .next-row:not(.muted)").length,
-    [...document.querySelectorAll(".lane-needs")].reduce((n, el) => n + Number(el.textContent.match(/\d+/)[0]), 0),
+    document.querySelectorAll(".card:not(.merged) .next-row:not(.muted)").length,
+    [...document.querySelectorAll(".lane-needs")].reduce((n, el) => n + parseInt(el.textContent, 10), 0),
   ]);
   check(steps > 0 && badge === String(steps) && lanes === steps, "the My PRs badge and lane headers count the Next steps on the board");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });

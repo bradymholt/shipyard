@@ -441,10 +441,6 @@
   }
   .merged-divider::before { content: "recently merged"; }
   .drafts-divider::before { content: "drafts"; }
-  .merged-divider .lane-needs {
-    position: relative; z-index: 1; display: inline-block; background: var(--surface);
-    margin-left: -0.5rem; padding-right: 0.75rem; font: 600 0.625rem var(--sans);
-  }
   .lane .merged-divider, .lane .drafts-divider { margin: 0.5rem 0 0.375rem; }
   .merged-actions {
     display: flex; justify-content: center; gap: 0.75rem; padding: 0.375rem 0;
@@ -1926,7 +1922,7 @@
     )).values()];
     const stepsFor = (prs) => prs.filter(needsYou).length;
     const mineCount = state.companionState
-      ? stepsFor([...state.prs.filter((pr) => pr.author?.login === state.viewer), ...state.merged])
+      ? stepsFor(state.prs.filter((pr) => pr.author?.login === state.viewer))
       : state.prs.filter((pr) => {
         if (pr.author?.login !== state.viewer || pr.isDraft) return false;
         const lane = laneOf(pr);
@@ -1939,7 +1935,7 @@
       ? `${mineCount} pull request${mineCount === 1 ? "" : "s"} ${mineCount === 1 ? "needs" : "need"} your attention`
       : "";
     const reviewCount = state.companionState
-      ? stepsFor([...reviewSet.filter(reviewItem), ...reviewedMergedItems()])
+      ? stepsFor(reviewSet.filter(reviewItem))
       : reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
     const reviewCountEl = $("#count-review");
     reviewCountEl.textContent = reviewCount || "";
@@ -2000,10 +1996,9 @@
       let laneHtml = renderGroup((p) => !p.isDraft);
       const draftHtml = renderGroup((p) => p.isDraft);
       if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
-      const needsLabel = (n, lead = "") => n ? `<span class="lane-needs">${lead}${n} need${n === 1 ? "s" : ""} you</span>` : "";
+      const needsLabel = (n) => n ? `<span class="lane-needs">${n} need${n === 1 ? "s" : ""} you</span>` : "";
       if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
-        const mergedNeeds = needsLabel(state.companionState ? stepsFor(recentMerged) : 0, "· ");
-        laneHtml += `<div class="merged-divider">${mergedNeeds}</div>` + mergedSection(recentMerged, mergedCard);
+        laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
       }
       const laneAction = (!reviewBoard && i === 0 && state.companion)
         ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
