@@ -433,7 +433,8 @@ class Companion:
         if self.db.auto_runs(snap["key"], action) >= rule["max_per_pr"]:
             return False
         if action == "approve":
-            held = self.rereview_too_big(snap, rule["max_lines"])
+            held = ("you hadn't approved it before" if (snap.get("my_review") or {}).get("state") != "APPROVED"
+                    else self.rereview_too_big(snap, rule["max_lines"]))
             if held:
                 self.db.log(snap["key"], f"left the approval for you: {held}")
                 return False
