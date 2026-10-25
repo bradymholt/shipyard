@@ -1069,6 +1069,7 @@
             latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
             commits(last: 1) { nodes { commit { oid } } }
             pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
+            recentComments: comments(last: 10) { nodes { author { login } createdAt } }
           }
         }
       }
@@ -1359,9 +1360,14 @@
     const mine = (pr.reviewThreads?.nodes || [])
       .filter((t) => !t.isResolved && t.opener?.nodes?.[0]?.author?.login === state.viewer);
     const replied = mine.filter((t) => t.comments?.nodes?.[0]?.author?.login === pr.author?.login).length;
-    if (!replied) return "";
-    const count = replied < mine.length ? ` · ${replied} of ${mine.length}` : "";
-    const title = `${pr.author.login} replied last on ${replied} of your ${mine.length} open thread${mine.length === 1 ? "" : "s"}`;
+    const comments = pr.recentComments?.nodes || [];
+    const since = [pr.viewerLatestReview?.submittedAt,
+      ...comments.filter((c) => c.author?.login === state.viewer).map((c) => c.createdAt)].filter(Boolean).sort().at(-1);
+    const commented = !!since && comments.some((c) => c.author?.login === pr.author?.login && c.createdAt > since);
+    if (!replied && !commented) return "";
+    const count = replied && replied < mine.length ? ` · ${replied} of ${mine.length}` : "";
+    const title = [replied && `${pr.author.login} replied last on ${replied} of your ${mine.length} open thread${mine.length === 1 ? "" : "s"}`,
+      commented && `${pr.author.login} commented after your review`].filter(Boolean).join("; ");
     return `<span class="review-badge pending" title="${esc(title)}">${ICONS.comment} Author replied${count}</span>`;
   }
 

@@ -50,6 +50,7 @@ function pr(number, extra = {}) {
       contexts: { nodes: (extra.failing || []).map((name) => ({ __typename: "CheckRun", name, conclusion: "FAILURE",
         detailsUrl: `https://github.com/o/r/actions/runs/8/job/7` })) } } } }] },
     pendingReviews: { nodes: [] },
+    recentComments: { nodes: (extra.commentsBy || []).map(([login, h]) => ({ author: { login }, createdAt: ago(h) })) },
     viewerLatestReview: extra.myReview || null,
     latestOpinionatedReviews: { nodes: (extra.standing || []).map(([state, login]) => ({ state, author: { login } })) },
   };
@@ -82,7 +83,11 @@ const MERGED = [pr(99, { title: "Old feature", branch: "me/old-feature", mergedA
   pr(98, { title: "Auto-merged on approval", decision: "APPROVED", mergedAt: ago(10),
     reviews: [["APPROVED", "jm", "Approving, though I'd prefer a Map here."]] })];
 const REVIEWED_MERGED = [pr(97, { author: "cy", title: "Merged with a reply", mergedAt: ago(5), threads: [["me", "cy"]],
-  myReview: { state: "APPROVED", commit: { oid: "h97" }, onBehalfOf: { nodes: [] } } })];
+  myReview: { state: "APPROVED", commit: { oid: "h97" }, onBehalfOf: { nodes: [] } } }),
+  pr(96, { author: "cy", title: "Merged after a comment", mergedAt: ago(1), commentsBy: [["cy", 1]],
+    myReview: { state: "APPROVED", submittedAt: ago(2), commit: { oid: "h96" }, onBehalfOf: { nodes: [] } } }),
+  pr(95, { author: "cy", title: "Merged, comment answered", mergedAt: ago(1), commentsBy: [["cy", 3], ["me", 2]],
+    myReview: { state: "APPROVED", submittedAt: ago(4), commit: { oid: "h95" }, onBehalfOf: { nodes: [] } } })];
 
 function answer(body) {
   const q = body.variables?.q || "";
@@ -260,6 +265,10 @@ try {
     "a reply from the author on your thread shows Author replied");
   check((await page.locator('.card.merged[data-key="o/r#97"] .review-badge').allTextContents()).some((t) => t.includes("Author replied")),
     "an author's reply after merge shows Author replied on the Recently merged card");
+  check((await page.locator('.card.merged[data-key="o/r#96"] .review-badge').allTextContents()).some((t) => t.includes("Author replied")),
+    "an author's comment after your review shows Author replied");
+  check(await page.locator('.card.merged[data-key="o/r#95"] .review-badge').count() === 0,
+    "an author's comment you already answered shows no Author replied");
   check(await page.locator('.card[data-key="o/r#204"]').count() === 0, "a comment-only review doesn't add the PR to Reviews");
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
