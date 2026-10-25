@@ -117,6 +117,7 @@ class ClaudeSessions(HomeCase):
         self.assertEqual(argv[argv.index("--resume") + 1], "abc")
         self.assertIn("--fork-session", argv)
         self.assertIn("--json-schema", argv)
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "dontAsk")
         self.assertNotIn("Edit", argv[argv.index("--allowedTools"):argv.index("--disallowedTools")])
         fresh = ClaudeCode().command("hi", {}, "fresh", None, "new-id")
         self.assertEqual(ClaudeCode().command("hi", {}, "fresh", None, "x", name="Fix it (#7)")[-2:], ["--name", "Fix it (#7)"])
