@@ -1555,6 +1555,12 @@
       return `<span class="wt-links">${openBtn}${agentButton(pr, wt)}${moveBtn}</span>`;
     }
 
+    // A review worktree is detached, so it has no branch entry in worktrees.json.
+    const cp = companionPr(pr);
+    if (cp?.path) {
+      return `<span class="wt-links">${openCheckoutButton({ path: cp.path, workspace: null, main: false })}${agentButton(pr, null)}</span>`;
+    }
+
     // Not checked out anywhere → open by checking the branch out in the main repo
     // (blocked if the main repo has uncommitted changes), or spin up a worktree for it.
     const mainWt = Object.values(state.worktrees).find((w) => w.repo === repoName && w.main);
