@@ -363,52 +363,6 @@ def open_default_in_main(repo, roots):
     return open_in_main(repo, default_branch(clone), roots)
 
 
-def move_to_worktree(repo, branch, roots):
-    """Create a worktree for the branch and open it.
-    If the branch is currently the main clone's checkout, switch the main clone to the
-    default branch first (guarded on uncommitted work) so the worktree can claim it."""
-    clone = find_clone(repo, roots)
-    if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
-    branch, error = validate_branch(branch)
-    if error:
-        return {"ok": False, "error": error}
-    here = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
-    if here and not here["main"]:  # already in a linked worktree → just open it
-        return {"ok": True, "path": here["path"], "workspace": here.get("workspace"), "created": False}
-    if here and here["main"]:  # occupying the main clone — free it before the worktree can take it
-        base = default_branch(clone)
-        if base == branch:
-            return {"ok": False, "error": f"{branch} is your default branch — it can't move to a worktree."}
-        try:
-            if has_tracked_changes(clone):
-                return {"ok": False, "error": "Your main clone has uncommitted changes. Commit or stash them first."}
-        except GitError as e:
-            return {"ok": False, "error": f"Could not verify the main clone's status: {e}"}
-        try_git(clone, "fetch", "origin", base)
-        error = mutate_git(clone, "switch", base, timeout=60)
-        if error and try_git(clone, "branch", "--show-current").strip() != base:
-            return {"ok": False, "error": error}
-    try_git(clone, "fetch", "origin", branch)  # best effort so the ref is present
-    try:
-        local_exists = git_ref_exists(clone, f"refs/heads/{branch}")
-        remote_exists = git_ref_exists(clone, f"refs/remotes/origin/{branch}")
-    except GitError as e:
-        return {"ok": False, "error": f"Could not inspect branches: {e}"}
-    if not local_exists and not remote_exists:
-        return {"ok": False, "error": f"Branch {branch} was not found locally or on origin."}
-    path = worktree_path(clone, branch)
-    args = ("worktree", "add", path, branch) if local_exists else (
-        "worktree", "add", "--track", "-b", branch, path, f"origin/{branch}")
-    error = mutate_git(clone, *args, timeout=120)
-    if error:
-        existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
-        if existing and not existing["main"]:
-            return {"ok": True, "path": existing["path"], "workspace": existing.get("workspace"), "created": True}
-        return {"ok": False, "error": error}
-    return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True}
-
-
 def new_branch_in_main(repo, branch, roots):
     """Create a new branch off the default branch, checked out in the main clone
     (instead of a worktree). Guarded: won't switch a main clone with uncommitted work."""
