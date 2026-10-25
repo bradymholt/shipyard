@@ -35,9 +35,11 @@ class Config(unittest.TestCase):
         self.assertEqual(auto["enable_auto_merge"]["min_confidence"], "high")
         self.assertEqual(validate_auto({"approve_rereview": {"max_lines": 10}})["approve_rereview"]["max_lines"], 10)
         self.assertEqual(validate_auto({"approve_rereview": True})["approve_rereview"]["max_lines"], 30)
+        self.assertEqual(validate_auto({"approve_rereview": True})["approve_rereview"]["min_wait_minutes"], 3)
+        self.assertEqual(validate_auto({"approve_rereview": {"min_wait_minutes": 0}})["approve_rereview"]["min_wait_minutes"], 0)
         for bad in ({"post_reply": True}, {"rerequest_review": True}, {"rerun_checks": {"when": "sometimes"}},
                     {"rerun_checks": {"max_per_pr": 0}}, {"merge_everything": True},
-                    {"approve_rereview": {"max_lines": -1}}, {"rerun_checks": {"max_lines": 5}}):
+                    {"approve_rereview": {"max_lines": -1}}, {"approve_rereview": {"min_wait_minutes": -1}}, {"rerun_checks": {"max_lines": 5}}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 validate_auto(bad)
 

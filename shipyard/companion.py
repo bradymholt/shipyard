@@ -29,8 +29,6 @@ AUTO_POLICY = {
     "approve": {"sources": {"re_review"}, "mine": False},
 }
 LIVE_CACHE_SECONDS = 15
-# An approval seconds after a push reads as one nobody looked at.
-APPROVE_MIN_WAIT = timedelta(minutes=3)
 
 PASS_ACTIVITY = {
     "feedback": "asked for a plan",
@@ -487,7 +485,7 @@ class Companion:
                 self.db.update_card(card_id, auto_held=held)
             return False
         if action == "approve":
-            ready_at = self.approve_ready_at(snap)
+            ready_at = self.approve_ready_at(snap, rule["min_wait_minutes"])
             if ready_at > datetime.now(timezone.utc):
                 self.db.update_card(card_id, auto_wait={
                     "until": ready_at.strftime("%Y-%m-%dT%H:%M:%SZ"), "action": action,
@@ -510,9 +508,9 @@ class Companion:
         self.poke()
         return True
 
-    def approve_ready_at(self, snap):
+    def approve_ready_at(self, snap, minutes):
         seen = self.db.head_seen_at(snap["key"], snap.get("head")) or now_iso()
-        return datetime.fromisoformat(seen.replace("Z", "+00:00")) + APPROVE_MIN_WAIT
+        return datetime.fromisoformat(seen.replace("Z", "+00:00")) + timedelta(minutes=minutes)
 
     def retry_waiting_approvals(self):
         now = now_iso()
