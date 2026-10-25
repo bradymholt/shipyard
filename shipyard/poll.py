@@ -46,11 +46,12 @@ DETAIL_FIELDS = """
       ... on StatusContext { context state targetUrl }
     } } }
   } } }
-  timelineItems(last: 40, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) { nodes {
+  timelineItems(last: 40, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT, REVIEW_DISMISSED_EVENT]) { nodes {
     __typename
     ... on ReviewRequestedEvent { createdAt requestedReviewer {
       __typename ... on User { login } ... on Team { slug } } }
     ... on ReadyForReviewEvent { createdAt }
+    ... on ReviewDismissedEvent { previousReviewState review { databaseId } }
   } }
 """
 
@@ -99,7 +100,7 @@ def snapshot(node, viewer):
                             "job_id": None, "run_id": None})
     requested = [n for n in (reviewer_name(r.get("requestedReviewer"))
                              for r in (node.get("reviewRequests") or {}).get("nodes") or []) if n]
-    requested_at, ready_at = {}, None
+    requested_at, ready_at, dismissed_from = {}, None, {}
     for item in (node.get("timelineItems") or {}).get("nodes") or []:
         if item.get("__typename") == "ReviewRequestedEvent":
             name = reviewer_name(item.get("requestedReviewer"))
@@ -107,6 +108,8 @@ def snapshot(node, viewer):
                 requested_at[name] = max(requested_at.get(name, ""), item.get("createdAt") or "")
         elif item.get("__typename") == "ReadyForReviewEvent":
             ready_at = item.get("createdAt")
+        elif item.get("__typename") == "ReviewDismissedEvent":
+            dismissed_from[(item.get("review") or {}).get("databaseId")] = item.get("previousReviewState")
     author = (node.get("author") or {}).get("login")
     reviews = []
     for r in (node.get("latestReviews") or {}).get("nodes") or []:
@@ -159,6 +162,7 @@ def snapshot(node, viewer):
         "ready_at": ready_at,
         "reviews": reviews,
         "my_review": ({"id": mine.get("databaseId"), "state": mine.get("state"),
+                       "dismissed_from": dismissed_from.get(mine.get("databaseId")),
                        "submitted": mine.get("submittedAt"),
                        "commit": (mine.get("commit") or {}).get("oid")} if mine else None),
         "threads": threads,
