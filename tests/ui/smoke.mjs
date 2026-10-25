@@ -189,6 +189,21 @@ try {
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
   check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
+  const nudgeUpdated = await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    const pr = state.prs.find((p) => p.number === 105);
+    const was = pr.updatedAt;
+    pr.updatedAt = new Date().toISOString();
+    render();
+    render();
+    return was;
+  });
+  check((await chipText(page, 105))?.includes("Nudge · 1d"), "a nudge stays up instead of Checking… while the companion catches up");
+  await page.evaluate((was) => {
+    const { state, render } = window.__dashboard;
+    state.prs.find((p) => p.number === 105).updatedAt = was;
+    render();
+  }, nudgeUpdated);
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
   check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
   check((await chipText(page, 98))?.includes("Reply to approval · 1"), "merged before you answered the approval → Reply to approval");
