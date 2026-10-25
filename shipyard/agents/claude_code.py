@@ -9,7 +9,7 @@ from . import PASS_TIMEOUT, Adapter, AgentError, parse_json_answer
 # Passes only read: files and the PR on GitHub. Only the interactive session you open
 # yourself edits files. git log/show are left out because --output writes a file.
 READ_ONLY_TOOLS = [
-    "Read", "Grep", "Glob", "Task", "Skill",
+    "Read", "Grep", "Glob", "Task", "Agent", "Skill",
     "Bash(git status:*)", "Bash(git blame:*)", "Bash(git diff:*)", "Bash(git fetch origin:*)",
     "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr checks:*)", "Bash(gh run view:*)",
 ]

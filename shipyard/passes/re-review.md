@@ -12,7 +12,7 @@ Then review everything that changed since your last review: `git diff {reviewed_
 
 Then decide whether the PR is ready to approve.
 
-If you have a code-review skill, follow its review approach, but answer in the format below and post nothing.
+If a code-review skill is installed, invoke it before answering, with its no-post or read-only option if it has one, and {reviewed_commit} as the commit to review since if it takes one. Its guidance decides what to flag and how comments are worded; this prompt decides the answer format, the verdict, and that nothing is posted.
 
 Answer with one JSON object and nothing else:
 {{"summary": "N of M threads addressed; what is left",
