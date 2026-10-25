@@ -75,7 +75,8 @@ class ClaudeCode(Adapter):
     def command(self, prompt, schema, mode, session_id, new_session_id, untrusted=False, name=None):
         argv = ["claude", "-p", prompt, "--output-format", "json",
                 "--json-schema", json.dumps(schema),
-                "--allowedTools", *READ_ONLY_TOOLS, "--disallowedTools", *WRITE_TOOLS]
+                "--allowedTools", *READ_ONLY_TOOLS, "--disallowedTools", *WRITE_TOOLS,
+                "--permission-mode", "dontAsk"]
         if untrusted:
             # Someone else's PR may ship .claude/settings.json hooks or allow rules;
             # load only your user settings.
