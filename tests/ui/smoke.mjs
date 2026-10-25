@@ -201,9 +201,12 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-merged-approval.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#companion-status").textContent()).includes("watching your PRs"), "footer shows the companion watching");
-  const [badge, steps] = await page.evaluate(() =>
-    [document.querySelector("#count-mine").textContent, document.querySelectorAll(".card .next-row:not(.muted)").length]);
-  check(steps > 0 && badge === String(steps), "the My PRs badge counts the Next steps on the board");
+  const [badge, steps, lanes] = await page.evaluate(() => [
+    document.querySelector("#count-mine").textContent,
+    document.querySelectorAll(".card .next-row:not(.muted)").length,
+    [...document.querySelectorAll(".lane-needs")].reduce((n, el) => n + Number(el.textContent.match(/\d+/)[0]), 0),
+  ]);
+  check(steps > 0 && badge === String(steps) && lanes === steps, "the My PRs badge and lane headers count the Next steps on the board");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
   await page.locator('.card[data-key="o/r#101"] .card-meta').click();
