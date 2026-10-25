@@ -410,10 +410,14 @@ class Companion:
                                    kept_path=cwd if kept else None,
                                    status="done" if name == "new_session" else None)
         if kind == "pass" and card:
+            acted = False
             for proposal in answer["proposals"]:
                 if self.maybe_auto(card["id"], proposal["action"], proposal["payload"],
                                    proposal["confidence"], proposal["reason"], source=name):
+                    acted = True
                     break
+            if name == "re_review" and not acted:
+                self.note_unapproved(card["id"], snap, answer["proposals"])
 
     def draft_on_github(self, snap, proposals):
         """An approval with no comments stays a button, whatever its confidence; any other
@@ -458,8 +462,11 @@ class Companion:
             return False
         card = self.db.card(card_id)
         snap = self.db.pr(card["key"]) if card else None
-        if (not snap or snap.get("state") != "OPEN" or snap.get("dropped") or
-                snap["mine"] != policy["mine"] or card.get("head") != snap.get("head")):
+        if not snap or snap.get("state") != "OPEN" or snap.get("dropped") or snap["mine"] != policy["mine"]:
+            return False
+        if card.get("head") != snap.get("head"):
+            if action == "approve":
+                self.db.update_card(card_id, auto_held="new commits landed after the re-review read it")
             return False
         if action == "approve" and not self.auto_approve_setting(snap)["on"]:
             self.db.log(snap["key"], "left the approval for you: auto-approve is off for this PR")
@@ -493,6 +500,17 @@ class Companion:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
+
+    def note_unapproved(self, card_id, snap, proposals):
+        """With auto-approve on, a re-review that proposed no approval says so on its card."""
+        if not self.config["auto"].get("approve_rereview") or not self.auto_approve_setting(snap)["on"]:
+            return
+        if any(p["action"] == "approve" for p in proposals):
+            return
+        held = ("the re-review drafted comments for you to finish on GitHub"
+                if any(p["action"] == "finish_on_github" for p in proposals)
+                else "the re-review didn't recommend approving")
+        self.db.update_card(card_id, auto_held=held)
 
     def auto_approve_setting(self, snap):
         """Whether a re-review may approve this PR on its own: your choice, else the

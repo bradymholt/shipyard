@@ -432,6 +432,15 @@ class Reviews(CompanionCase):
         card = self.comp.page_state()["prs"]["o/r#7"]["cards"][0]
         self.assertEqual(card["auto_held"], "31 lines changed since your review (limit 30)")
 
+    def test_a_rereview_that_does_not_approve_says_so_with_auto_approve_on(self):
+        self.trust("approve_rereview")
+        self.agent.answers = {"re-review": {"summary": "one thread left", "proposals": []}}
+        review = {"databaseId": 9, "state": "APPROVED", "submittedAt": "2026-10-19T00:00:00Z", "commit": {"oid": "old"}}
+        self.gh.put(pr_node(number=7, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
+        self.poll()
+        card = self.comp.page_state()["prs"]["o/r#7"]["cards"][0]
+        self.assertEqual(card["auto_held"], "the re-review didn't recommend approving")
+
     def test_trusted_approve_fires_after_your_approval_was_dismissed(self):
         small = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]
         self.assertTrue(self.rereview_approval_posted(small, state="DISMISSED", dismissed_from="APPROVED"))
