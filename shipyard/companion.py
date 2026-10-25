@@ -745,6 +745,7 @@ class Companion:
             done = [p for p in self.db.passes(key) if p["status"] == "done"]
             exchange = done[-1] if done else None
             path = pin.get("path") if pin else None
+            auto = None if snap["mine"] else self.auto_approve_setting(snap)
             prs[key] = {
                 "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
@@ -761,7 +762,7 @@ class Companion:
                 "exchange": ({"pass": exchange["name"], "at": exchange["finished"],
                               "summary": exchange["summary"], "mode": exchange["mode"]} if exchange else None),
                 "activity": self.db.activity(key),
-                "autoApprove": None if snap["mine"] else self.auto_approve_setting(snap),
+                "autoApprove": auto if auto and (auto["by"] != "default" or snap.get("my_review")) else None,
             }
         adapter = self.adapter
         return {
