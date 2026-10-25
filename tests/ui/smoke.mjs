@@ -50,6 +50,7 @@ function pr(number, extra = {}) {
         detailsUrl: `https://github.com/o/r/actions/runs/8/job/7` })) } } } }] },
     pendingReviews: { nodes: [] },
     viewerLatestReview: extra.myReview || null,
+    latestOpinionatedReviews: { nodes: (extra.standing || []).map(([state, login]) => ({ state, author: { login } })) },
   };
 }
 
@@ -69,7 +70,11 @@ const REQUESTED = [
   pr(202, { author: "bob", title: "Export to CSV", requested: ["me"] }),
 ];
 const REVIEWED = [pr(202, { author: "bob", title: "Export to CSV", requested: ["me"],
-  myReview: { state: "CHANGES_REQUESTED", commit: { oid: "old" }, onBehalfOf: { nodes: [] } } })];
+  myReview: { state: "CHANGES_REQUESTED", commit: { oid: "old" }, onBehalfOf: { nodes: [] } } }),
+  pr(203, { author: "cy", title: "Follow-up after changes", standing: [["CHANGES_REQUESTED", "me"]],
+    myReview: { state: "COMMENTED", commit: { oid: "h203" }, onBehalfOf: { nodes: [] } } }),
+  pr(204, { author: "di", title: "Drive-by comment",
+    myReview: { state: "COMMENTED", commit: { oid: "h204" }, onBehalfOf: { nodes: [] } } })];
 const MERGED = [pr(99, { title: "Old feature", branch: "me/old-feature", mergedAt: ago(20) })];
 
 function answer(body) {
@@ -205,6 +210,8 @@ try {
   await page.waitForSelector('.card[data-key="o/r#201"] .next-row');
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
+  check(await page.locator('.card[data-key="o/r#203"]').count() === 1, "a comment after your changes request keeps the PR on Reviews");
+  check(await page.locator('.card[data-key="o/r#204"]').count() === 0, "a comment-only review doesn't add the PR to Reviews");
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
   check((await sb.locator('a.btn-link:has-text("Finish review on GitHub")').getAttribute("href")).endsWith("/files"), "pre-review drafts on GitHub and links to the diff");
