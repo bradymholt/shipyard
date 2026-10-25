@@ -2465,11 +2465,15 @@
   function nextRowHtml(pr, reviewMode) {
     const chip = nextChip(pr, reviewMode);
     const cp = companionPr(pr);
+    // The companion retires a pre-review on its next poll; the page sees the review first.
+    const mine = reviewedCopy(pr).viewerLatestReview?.state;
+    const reviewed = mine && mine !== "PENDING" && !reviewRequestedForViewer(pr);
+    const ready = (cp?.cards || []).find((c) =>
+      (c.kind === "pass" || c.kind === "answer") && !(reviewed && c.pass === "pre_review"));
     const dot = cp?.running
       ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
-      : cp?.planReady ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
+      : cp?.planReady && ready ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
     if (!chip && !dot) return "";
-    const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
     const label = chip ? chip.label : cp.running ? "Reading…" : PASS_LABELS[ready?.pass] || "Ready to read";
     const prefix = chip?.kind === "snoozed" ? "" : `<span class="next-prefix">→ Next:</span>`;
     return `<button type="button" class="next-row ${chip?.tone || ""}" data-open="${esc(prKey(pr))}" title="${esc(chip?.title || "Open details")}">${prefix}${dot}<span class="next-label">${esc(label)}</span>${chip && cp?.running ? '<span class="next-status">Working…</span>' : ""}</button>`;
