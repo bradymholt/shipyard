@@ -1812,6 +1812,32 @@
   function render() {
     renderBoard();
     renderSidebar();
+    checkNewPrs();
+  }
+
+  // The page refreshes on its own and can see a new PR, or a new review request, before
+  // the companion's next poll; ask it to look now rather than up to a minute later.
+  // GitHub's search can trail a new request by a few seconds, so keep asking for a while.
+  const CHECK_AGAIN_MS = 15000;
+  const CHECKING_MS = 120000;
+  const checks = new Map();  // key -> { first, last } times the page asked the companion to look
+  const companionFollows = (pr) => !pr.mergedAt && (pr.author?.login === state.viewer || reviewItem(pr));
+  function checkingPr(pr) {
+    const c = checks.get(prKey(pr));
+    return !!c && Date.now() - c.first < CHECKING_MS && !companionPr(pr);
+  }
+  function checkNewPrs() {
+    if (!state.orchestrator || !state.companionState) return;
+    const now = Date.now();
+    const due = [...state.prs, ...state.reviewedPrs].filter((pr) => {
+      if (!companionFollows(pr) || companionPr(pr)) return false;
+      const c = checks.get(prKey(pr));
+      return !c || (now - c.first < CHECKING_MS && now - c.last >= CHECK_AGAIN_MS);
+    });
+    if (!due.length) return;
+    for (const pr of due) checks.set(prKey(pr), { first: checks.get(prKey(pr))?.first || now, last: now });
+    companionCall("companion/check-now").catch(() => {});
+    setTimeout(render, CHECK_AGAIN_MS);
   }
 
   function renderBoard() {
@@ -2439,6 +2465,8 @@
 
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr) {
+    if (checkingPr(pr))
+      return `<button type="button" class="next-row muted" data-open="${esc(prKey(pr))}" title="The companion is checking this PR"><span class="next-prefix">→ Next:</span><span class="next-spinner"></span><span class="next-label">Checking…</span></button>`;
     const chip = nextChip(pr);
     const cp = companionPr(pr);
     const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
@@ -2782,7 +2810,9 @@
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && cp) html = derivedCardHtml(pr, companionSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
     if (!html) {
-      html = !cp && open
+      html = checkingPr(pr)
+        ? `<div class="sb-empty">The companion is picking this PR up; its next step shows here in a moment.</div>`
+        : !cp && open
         ? `<div class="sb-empty">The companion follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
         : `<div class="sb-empty">Nothing to do right now.</div>`;
     }

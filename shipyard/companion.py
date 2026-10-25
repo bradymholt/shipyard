@@ -130,6 +130,11 @@ class Companion:
         """Poll again soon, e.g. right after an action changed the PR."""
         self.wake.set()
 
+    def check_now(self):
+        """The page saw a PR of yours before the poll did."""
+        self.poke()
+        return {"ok": True}
+
     # ---------- publishing
     def publish(self):
         with self.cond:
