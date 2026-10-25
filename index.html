@@ -2966,7 +2966,7 @@
         <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${esc(timeAgo(s.updated * 1000))}`}
           · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
         ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${esc(timeAgo(ex.at))}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
-        <div class="nc-actions">${sessionLink(cp.path, s.id, `Open in ${esc(agentName())}`, "btn-link", key)}${repin}
+        <div class="nc-actions">${repin}
           <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
     }
     return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div>${askHtml(pr, cp)}</div>`;
