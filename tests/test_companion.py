@@ -379,8 +379,10 @@ class Reviews(CompanionCase):
         self.assertEqual(posted[0][2]["event"], "APPROVE")
         self.assertNotIn("body", posted[0][2])
 
-    def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None):
+    def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None, auto_approve=None):
         self.trust("approve_rereview")
+        if auto_approve is not None:
+            self.comp.db.set_auto_approve("o/r#7", auto_approve, "you")
         self.gh.compare = {"files": files}
         self.agent.answers = {"re-review": {"summary": "all addressed", "proposals": [
             {"action": "approve", "confidence": "high", "reason": "threads fixed"}]}}
@@ -401,6 +403,34 @@ class Reviews(CompanionCase):
     def test_trusted_approve_holds_back_unless_you_approved_before(self):
         self.assertFalse(self.rereview_approval_posted(
             [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}], state="CHANGES_REQUESTED"))
+
+    def test_trusted_approve_fires_after_changes_requested_when_turned_on(self):
+        self.assertTrue(self.rereview_approval_posted(
+            [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}],
+            state="CHANGES_REQUESTED", auto_approve=True))
+
+    def test_trusted_approve_holds_back_when_turned_off(self):
+        self.assertFalse(self.rereview_approval_posted(
+            [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}], auto_approve=False))
+
+    def test_your_auto_approve_choice_beats_the_pre_review(self):
+        self.agent.answers["first-pass code review"] = {"summary": "Fine.", "proposals": [],
+                                                        "auto_approve": {"on": True, "why": "one rename"}}
+        self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
+        self.poll()
+        self.assertEqual(self.comp.db.auto_approve("o/r#5")["why"], "one rename")
+        self.comp.set_auto_approve("o/r#5", False)
+        self.comp.run_pass_now("o/r#5", "pre_review")
+        self.idle()
+        self.assertEqual(len(self.agent.runs), 2)
+        self.assertEqual({k: v for k, v in self.comp.db.auto_approve("o/r#5").items() if k in ("on", "by")},
+                         {"on": False, "by": "you"})
+
+    def test_held_auto_approval_says_why_on_the_card(self):
+        self.assertFalse(self.rereview_approval_posted(
+            [{"filename": "a.py", "status": "modified", "additions": 25, "deletions": 6}]))
+        card = self.comp.page_state()["prs"]["o/r#7"]["cards"][0]
+        self.assertEqual(card["auto_held"], "31 lines changed since your review (limit 30)")
 
     def test_trusted_approve_fires_after_your_approval_was_dismissed(self):
         small = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]

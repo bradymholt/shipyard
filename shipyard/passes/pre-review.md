@@ -14,5 +14,8 @@ Answer with one JSON object and nothing else:
       "payload": {{"event": "APPROVE|COMMENT|REQUEST_CHANGES",
                    "body": "the review summary, in the reviewer's voice",
                    "comments": [{{"path": "file", "line": 42, "body": "specific, actionable comment"}}]}}}}
-  ]}}
+  ],
+  "auto_approve": {{"on": true|false, "why": "one short sentence"}}}}
 Lines must be lines in the PR's new version of the file.
+
+`auto_approve` says whether a later re-review may approve on its own once the author's next push addresses this review. Turn it on when what you ask for is small, specific, and checkable from the diff (a rename, a missing test, a guard, a typo), whatever the verdict. Turn it off when the asks are about design or direction, open questions the author has to answer, or anything the reviewer should judge in person.

@@ -1,6 +1,7 @@
 """The companion's memory, in one SQLite file next to shipyard.config.json: the last
 snapshot of each PR, events already handled, pins, snoozes, cards, passes, activity,
-and how often each action ran automatically on each PR."""
+how often each action ran automatically on each PR, and whether each may be approved
+on a re-review."""
 import json
 import sqlite3
 import threading
@@ -25,12 +26,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS passes_once ON passes (key, name, head) WHERE 
 CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY, key TEXT NOT NULL, at TEXT NOT NULL, text TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS auto_runs (key TEXT NOT NULL, action TEXT NOT NULL, count INTEGER NOT NULL,
   PRIMARY KEY (key, action));
+CREATE TABLE IF NOT EXISTS auto_approve (key TEXT PRIMARY KEY, enabled INTEGER NOT NULL, by TEXT NOT NULL,
+  why TEXT, at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS cards_key ON cards (key, status);
 CREATE INDEX IF NOT EXISTS passes_key ON passes (key);
 CREATE INDEX IF NOT EXISTS activity_key ON activity (key, id);
 """
 # Rows that belong to one PR, dropped with it.
-PER_PR_TABLES = ("events", "cards", "passes", "activity", "pins", "snoozes", "auto_runs")
+PER_PR_TABLES = ("events", "cards", "passes", "activity", "pins", "snoozes", "auto_runs", "auto_approve")
 KEEP_DAYS = 14
 ACTIVITY_PER_PR = 100
 
@@ -260,3 +263,11 @@ class State:
     def count_auto_run(self, key, action):
         self._exec("INSERT INTO auto_runs (key, action, count) VALUES (?, ?, 1) "
                    "ON CONFLICT(key, action) DO UPDATE SET count = count + 1", (key, action))
+
+    def auto_approve(self, key):
+        rows = self._rows("SELECT enabled, by, why, at FROM auto_approve WHERE key = ?", (key,))
+        return {"on": bool(rows[0]["enabled"]), "by": rows[0]["by"], "why": rows[0]["why"], "at": rows[0]["at"]} if rows else None
+
+    def set_auto_approve(self, key, on, by, why=None):
+        self._exec("INSERT OR REPLACE INTO auto_approve (key, enabled, by, why, at) VALUES (?, ?, ?, ?, ?)",
+                   (key, int(bool(on)), by, why, now_iso()))

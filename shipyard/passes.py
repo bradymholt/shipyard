@@ -38,6 +38,11 @@ ANSWER_SCHEMA = {
         "summary": {"type": "string"},
         "addressed": {"type": "integer"},
         "total": {"type": "integer"},
+        "auto_approve": {
+            "type": "object",
+            "required": ["on", "why"],
+            "properties": {"on": {"type": "boolean"}, "why": {"type": "string"}},
+        },
         "proposals": {
             "type": "array",
             "items": {
@@ -155,4 +160,7 @@ def clean_answer(answer):
     out = {"summary": str(answer.get("summary") or "").strip()[:2000], "proposals": proposals}
     if isinstance(answer.get("addressed"), int) and isinstance(answer.get("total"), int):
         out["addressed"], out["total"] = answer["addressed"], answer["total"]
+    auto = answer.get("auto_approve")
+    if isinstance(auto, dict) and isinstance(auto.get("on"), bool):
+        out["auto_approve"] = {"on": auto["on"], "why": str(auto.get("why") or "")[:300]}
     return out
