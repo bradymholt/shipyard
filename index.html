@@ -1750,8 +1750,9 @@
     // state badge would only repeat it. Once review is re-requested, the PR is waiting on
     // the reviewer, and "Changes requested" would read as yours to act on.
     const awaitingReview = (pr.reviewRequests?.nodes || []).length > 0;
+    const nextKind = nextChip(pr, reviewMode)?.kind;
     const badge = reviewMode
-      ? viewerReviewBadge(pr)
+      ? nextKind === "review" || nextKind === "re_review" ? "" : viewerReviewBadge(pr)
       : !chip && ((pr.reviewDecision === "CHANGES_REQUESTED" && !awaitingReview) ||
           (pr.reviewDecision === "APPROVED" && !ciOk(pr)))
         ? reviewBadge(pr)
