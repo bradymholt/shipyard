@@ -1826,27 +1826,35 @@
     checkNewPrs();
   }
 
-  // The page refreshes on its own and can see a new PR, or a new review request, before
-  // the companion's next poll; ask it to look now rather than up to a minute later.
-  // GitHub's search can trail a new request by a few seconds, so keep asking for a while.
+  // The page refreshes on its own and can see a new PR, a re-request or any other change
+  // before the companion's next poll; ask it to look now rather than up to a minute later.
+  // GitHub's search can trail a change by a few seconds, so keep asking for a while.
   const CHECK_AGAIN_MS = 15000;
   const CHECKING_MS = 120000;
-  const checks = new Map();  // key -> { first, last } times the page asked the companion to look
+  const checks = new Map();  // "key@updatedAt" -> { first, last } times the page asked the companion to look
   const companionFollows = (pr) => !pr.mergedAt && (pr.author?.login === state.viewer || reviewItem(pr));
+  function companionBehind(pr) {
+    const cp = companionPr(pr);
+    return !cp || (!!pr.updatedAt && !!cp.updated && pr.updatedAt > cp.updated);
+  }
   function checkingPr(pr) {
-    const c = checks.get(prKey(pr));
-    return !!c && Date.now() - c.first < CHECKING_MS && !companionPr(pr);
+    const c = checks.get(`${prKey(pr)}@${pr.updatedAt}`);
+    return !!c && Date.now() - c.first < CHECKING_MS && companionBehind(pr) &&
+      !companionSteps(pr).length && !companionPr(pr)?.running;
   }
   function checkNewPrs() {
     if (!state.orchestrator || !state.companionState) return;
     const now = Date.now();
     const due = [...state.prs, ...state.reviewedPrs].filter((pr) => {
-      if (!companionFollows(pr) || companionPr(pr)) return false;
-      const c = checks.get(prKey(pr));
+      if (!companionFollows(pr) || !companionBehind(pr)) return false;
+      const c = checks.get(`${prKey(pr)}@${pr.updatedAt}`);
       return !c || (now - c.first < CHECKING_MS && now - c.last >= CHECK_AGAIN_MS);
     });
     if (!due.length) return;
-    for (const pr of due) checks.set(prKey(pr), { first: checks.get(prKey(pr))?.first || now, last: now });
+    for (const pr of due) {
+      const key = `${prKey(pr)}@${pr.updatedAt}`;
+      checks.set(key, { first: checks.get(key)?.first || now, last: now });
+    }
     companionCall("companion/check-now").catch(() => {});
     setTimeout(render, CHECK_AGAIN_MS);
   }

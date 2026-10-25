@@ -703,6 +703,7 @@ class Companion:
                 "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
                 "steps": rules.next_steps(snap, self.config["rules"], open_cards),
+                "updated": snap.get("updated"),
                 "snoozedUntil": self.db.snooze(key),
                 "cards": open_cards,
                 "handled": [c for c in cards if c["status"] == "handled"],
