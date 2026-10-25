@@ -2701,15 +2701,14 @@
     const comments = pr.comments?.totalCount || 0;
     const size = pr.additions != null
       ? `<span><span class="f-add">+${pr.additions}</span> <span class="f-del">−${pr.deletions}</span> · ${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}</span>` : "";
-    let launch = "";
+    let launch = `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}<span>Open on GitHub</span></a>`;
     if (state.companion) {
-      const checkout = wt || (cp?.path ? { path: cp.path, workspace: null, main: false } : null);
-      if (checkout) launch += openCheckoutButton(checkout, `Open in ${state.launcher.name || "app"}`);
       const target = continueTarget(pr);
       const icon = AGENT_ICONS[state.agent?.sessions] || DEFAULT_AGENT_ICON;
       if (target) launch += sessionLink(target.path, target.session, `${icon}<span>Open in ${esc(agentName())}</span>`, "wt-link wt-agent", key);
+      const checkout = wt || (cp?.path ? { path: cp.path, workspace: null, main: false } : null);
+      if (checkout) launch += openCheckoutButton(checkout, `Open in ${state.launcher.name || "app"}`);
     }
-    launch += `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}<span>Open on GitHub</span></a>`;
     return `
       <div class="sb-top">
         <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
