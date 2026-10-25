@@ -81,6 +81,8 @@ const REVIEWED = [pr(202, { author: "bob", title: "Export to CSV", requested: ["
 const MERGED = [pr(99, { title: "Old feature", branch: "me/old-feature", mergedAt: ago(20) }),
   pr(98, { title: "Auto-merged on approval", decision: "APPROVED", mergedAt: ago(10),
     reviews: [["APPROVED", "jm", "Approving, though I'd prefer a Map here."]] })];
+const REVIEWED_MERGED = [pr(97, { author: "cy", title: "Merged with a reply", mergedAt: ago(5), threads: [["me", "cy"]],
+  myReview: { state: "APPROVED", commit: { oid: "h97" }, onBehalfOf: { nodes: [] } } })];
 
 function answer(body) {
   const q = body.variables?.q || "";
@@ -95,7 +97,7 @@ function answer(body) {
     } };
   }
   let nodes = [];
-  if (q.includes("is:merged")) nodes = q.includes("author:@me") ? MERGED : [];
+  if (q.includes("is:merged")) nodes = q.includes("reviewed-by:@me") ? REVIEWED_MERGED : MERGED;
   else if (q.includes("review-requested:@me")) nodes = REQUESTED;
   else if (q.includes("reviewed-by:@me")) nodes = REVIEWED;
   else if (q.includes("author:@me")) nodes = MINE;
@@ -256,6 +258,8 @@ try {
   check((await chipText(page, 203))?.includes("Checking"), "a PR the companion hasn't seen yet shows Checking…");
   check((await page.locator('.card[data-key="o/r#203"] .review-badge').allTextContents()).some((t) => t.includes("Author replied · 1 of 2")),
     "a reply from the author on your thread shows Author replied");
+  check((await page.locator('.card.merged[data-key="o/r#97"] .review-badge').allTextContents()).some((t) => t.includes("Author replied")),
+    "an author's reply after merge shows Author replied on the Recently merged card");
   check(await page.locator('.card[data-key="o/r#204"]').count() === 0, "a comment-only review doesn't add the PR to Reviews");
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
