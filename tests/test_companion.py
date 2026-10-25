@@ -345,6 +345,19 @@ class Reviews(CompanionCase):
         self.assertEqual(self.agent.runs[0]["cwd"], self.checkout)
         self.assertEqual(pr["cards"][0]["kind"], "pass")
 
+    def test_re_review_drafts_unresolved_comment_as_pending_review(self):
+        self.agent.answers = {"re-review": {"summary": "one left", "proposals": [
+            {"action": "comment_unresolved", "confidence": "medium", "reason": "README", "payload": {"body": "Fix README"}},
+            {"action": "approve", "confidence": "low", "reason": "minor", "payload": {"body": "ok"}}]}}
+        review = {"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-19T00:00:00Z",
+                  "commit": {"oid": "old"}}
+        self.gh.put(pr_node(number=6, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
+        pr = self.poll()["o/r#6"]
+        method, path, body = self.gh.calls[-1]
+        self.assertEqual((path, body.get("body")), ("/repos/o/r/pulls/6/reviews", "Fix README"))
+        self.assertNotIn("event", body)
+        self.assertEqual([p["action"] for p in pr["cards"][0]["proposals"]], ["finish_on_github"])
+
 
     def test_trusted_approve_only_from_re_review_and_without_agent_text(self):
         self.comp.set_trust("approve_rereview", True)

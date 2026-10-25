@@ -366,7 +366,7 @@ class Companion:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
                     f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
-        if name == "pre_review":
+        if name in ("pre_review", "re_review"):
             answer["proposals"] = self.draft_on_github(snap, answer["proposals"])
         kind = "answer" if name == "ask" else "pass"
         for proposal in answer["proposals"]:
@@ -388,22 +388,28 @@ class Companion:
         """A clean, confident approval stays a button; any other review is drafted as a
         pending review, so it is edited and submitted on GitHub next to the diff."""
         out = []
+        drafted = False
         for p in proposals:
             payload = p["payload"]
-            if p["action"] != "submit_review":
+            if p["action"] == "comment_unresolved":
+                payload = {"event": "COMMENT", "body": payload.get("body") or ""}
+            elif p["action"] != "submit_review":
                 out.append(p)
+                continue
             elif payload.get("event") == "APPROVE" and p["confidence"] == "high" and not payload.get("comments"):
                 out.append({**p, "action": "approve", "payload": {"body": payload.get("body") or ""}})
-            else:
-                try:
-                    result = actions.run(self.github, "draft_review", snap, payload)
-                    self.db.log(snap["key"], result)
-                    error = None
-                except Exception as e:
-                    error = str(e)
-                out.append({**p, "action": "finish_on_github",
-                            "payload": {"event": payload.get("event"), "error": error}})
-        return out
+                continue
+            try:
+                result = actions.run(self.github, "draft_review", snap, payload)
+                self.db.log(snap["key"], result)
+                error = None
+                drafted = True
+            except Exception as e:
+                error = str(e)
+            out.append({**p, "action": "finish_on_github",
+                        "payload": {"event": payload.get("event"), "error": error}})
+        # GitHub allows one pending review, so an Approve button would fail; approve it there.
+        return [p for p in out if p["action"] != "approve"] if drafted else out
 
     # ---------- trust ladder
     def maybe_auto(self, card_id, action, payload, confidence, reason, source):
