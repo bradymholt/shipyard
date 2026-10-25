@@ -26,7 +26,14 @@ CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY, key TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS clicks (action TEXT PRIMARY KEY, count INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS auto_runs (key TEXT NOT NULL, action TEXT NOT NULL, count INTEGER NOT NULL,
   PRIMARY KEY (key, action));
+CREATE INDEX IF NOT EXISTS cards_key ON cards (key, status);
+CREATE INDEX IF NOT EXISTS passes_key ON passes (key);
+CREATE INDEX IF NOT EXISTS activity_key ON activity (key, id);
 """
+# Rows that belong to one PR, dropped with it.
+PER_PR_TABLES = ("events", "cards", "passes", "activity", "pins", "snoozes", "auto_runs")
+KEEP_DAYS = 14
+ACTIVITY_PER_PR = 100
 
 
 def now_iso():
@@ -83,23 +90,34 @@ class State:
 
     def open_node_ids(self):
         """Open PRs still on one of your lists; a PR that dropped off every list (say a
-        review request was withdrawn) is read once more, then left alone. A merged PR
-        whose approval comments still hold a card keeps being read until you answer."""
+        review request was withdrawn) is read once more, then left alone. A recently
+        merged PR whose approval comments still hold a card keeps being read until you
+        answer."""
         out = set()
+        since = datetime.fromtimestamp(time.time() - KEEP_DAYS * 86400, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         for r in self._rows("SELECT key, snapshot FROM prs"):
             snap = json.loads(r["snapshot"])
             if snap.get("state") == "OPEN" and not snap.get("dropped"):
                 out.add(snap["id"])
-            elif snap.get("state") == "MERGED" and any(c.get("pass") == "changes_requested"
-                                                       for c in self.cards(r["key"], ("open",))):
+            elif (snap.get("state") == "MERGED" and (snap.get("merged_at") or "") > since and
+                  any(c.get("pass") == "changes_requested" for c in self.cards(r["key"], ("open",)))):
                 out.add(snap["id"])
         return out
 
-    def forget_old_prs(self, days=14):
-        """Closed or dropped PRs stay a while for Recently Merged cleanup, then go."""
+    def prune(self, days=KEEP_DAYS):
+        """Closed or dropped PRs stay a while for Recently Merged cleanup, then go with
+        everything kept about them. Finished cards and old activity go sooner."""
         cutoff = time.time() - days * 86400
-        self._exec("DELETE FROM prs WHERE seen < ? AND (json_extract(snapshot, '$.state') != 'OPEN' "
-                   "OR json_extract(snapshot, '$.dropped'))", (cutoff,))
+        cutoff_iso = datetime.fromtimestamp(cutoff, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self.lock:
+            self.db.execute("DELETE FROM prs WHERE seen < ? AND (json_extract(snapshot, '$.state') != 'OPEN' "
+                            "OR json_extract(snapshot, '$.dropped'))", (cutoff,))
+            for table in PER_PR_TABLES:
+                self.db.execute(f"DELETE FROM {table} WHERE key NOT IN (SELECT key FROM prs)")
+            self.db.execute("DELETE FROM cards WHERE status IN ('done', 'dismissed') AND updated < ?", (cutoff_iso,))
+            self.db.execute("DELETE FROM activity WHERE id NOT IN (SELECT id FROM activity AS a WHERE "
+                            "a.key = activity.key ORDER BY id DESC LIMIT ?)", (ACTIVITY_PER_PR,))
+            self.db.commit()
 
     # ---- events
     def record_event(self, key, event):
