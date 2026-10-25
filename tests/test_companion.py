@@ -327,9 +327,9 @@ class Reviews(CompanionCase):
         self.assertEqual(body["comments"][0]["side"], "RIGHT")
         self.assertEqual(pr["cards"][0]["proposals"][0]["action"], "finish_on_github")
 
-    def test_confident_clean_approval_stays_a_button(self):
+    def test_clean_approval_stays_a_button_at_any_confidence(self):
         self.agent.answers["first-pass code review"] = {"summary": "Fine.", "proposals": [
-            {"action": "submit_review", "confidence": "high", "reason": "tiny and tested",
+            {"action": "submit_review", "confidence": "medium", "reason": "tiny and tested",
              "payload": {"event": "APPROVE", "body": "LGTM"}}]}
         self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
         pr = self.poll()["o/r#5"]
