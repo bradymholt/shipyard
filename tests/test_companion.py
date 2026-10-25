@@ -2,6 +2,7 @@ import copy
 import tempfile
 import time
 import unittest
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -380,7 +381,8 @@ class Reviews(CompanionCase):
         review = {"databaseId": 9, "state": "APPROVED", "submittedAt": "2026-10-19T00:00:00Z",
                   "commit": {"oid": "old"}}
         self.gh.put(pr_node(number=7, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
-        self.poll()
+        with mock.patch("shipyard.companion.APPROVE_MIN_WAIT", timedelta(0)):
+            self.poll()
         posted = [c for c in self.gh.calls if c[1] == "/repos/o/r/pulls/7/reviews"]
         self.assertEqual(len(posted), 1)
         self.assertEqual(posted[0][2]["event"], "APPROVE")
@@ -388,7 +390,8 @@ class Reviews(CompanionCase):
         self.assertIn("approved automatically: threads fixed",
                       [a["text"] for a in self.comp.page_state()["prs"]["o/r#7"]["activity"]])
 
-    def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None, auto_approve=None):
+    def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None, auto_approve=None,
+                                 wait=timedelta(0)):
         self.trust("approve_rereview")
         if auto_approve is not None:
             self.comp.db.set_auto_approve("o/r#7", auto_approve, "you")
@@ -402,12 +405,23 @@ class Reviews(CompanionCase):
             node["timelineItems"]["nodes"].append({"__typename": "ReviewDismissedEvent",
                                                    "previousReviewState": dismissed_from, "review": {"databaseId": 9}})
         self.gh.put(node, "review-requested:@me")
-        self.poll()
+        with mock.patch("shipyard.companion.APPROVE_MIN_WAIT", wait):
+            self.poll()
         return any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls)
 
     def test_trusted_approve_fires_on_a_small_change(self):
         self.assertTrue(self.rereview_approval_posted(
             [{"filename": "a.py", "status": "modified", "additions": 20, "deletions": 10}]))
+
+    def test_trusted_approve_waits_a_few_minutes_after_the_push(self):
+        files = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]
+        self.assertFalse(self.rereview_approval_posted(files, wait=timedelta(minutes=3)))
+        card = self.comp.db.cards("o/r#7", ("open",))[-1]
+        self.assertIn("until", card["auto_wait"])
+        self.comp.db._exec("UPDATE events SET at = '2000-01-01T00:00:00Z' WHERE key = 'o/r#7'")
+        self.comp.db.update_card(card["id"], auto_wait={**card["auto_wait"], "until": "2000-01-01T00:03:00Z"})
+        self.poll()
+        self.assertTrue(any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls))
 
     def test_trusted_approve_holds_back_unless_you_approved_before(self):
         self.assertFalse(self.rereview_approval_posted(

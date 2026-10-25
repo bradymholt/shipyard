@@ -2888,7 +2888,8 @@
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
     const vi = verdictProposal(card);
     const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
-    const held = card.auto_held ? `<p class="nc-held">Auto-approve is on, but this one waits for you: ${esc(card.auto_held)}.</p>` : "";
+    const held = card.auto_held ? `<p class="nc-held">Auto-approve is on, but this one waits for you: ${esc(card.auto_held)}.</p>`
+      : card.auto_wait ? `<p class="nc-held">Auto-approves at ${esc(new Date(card.auto_wait.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}, a few minutes after the push.</p>` : "";
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
       ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${esc(card.summary || "")}</p>${proposals}
