@@ -782,6 +782,7 @@
     targetedFresh: false,
     reviewHistoryFresh: false,
     githubUpdatedAt: null,
+    historyFetchedAt: null,  // when the merged feeds were last searched
     githubRefreshFailed: false,
   };
 
@@ -800,6 +801,7 @@
     state.targetedFresh = false;
     state.reviewHistoryFresh = false;
     state.githubUpdatedAt = null;
+    state.historyFetchedAt = null;
     state.githubRefreshFailed = false;
     stopGitHubAgeTimer();
     $("#viewer-info").textContent = "";
@@ -881,8 +883,10 @@
   function updateGitHubStatus(refreshing = false) {
     const el = $("#last-updated");
     const failed = state.githubRefreshFailed && !refreshing;
-    const stale = !failed && !!state.githubUpdatedAt &&
-      Date.now() - state.githubUpdatedAt > STALE_AFTER;
+    // The companion's poll counts as a check: the page re-reads whatever it saw change.
+    const checkedAt = Math.max(state.githubUpdatedAt || 0,
+      companionLive() ? Date.parse(state.companionState.status?.lastPoll || "") || 0 : 0);
+    const stale = !failed && !!state.githubUpdatedAt && Date.now() - checkedAt > STALE_AFTER;
     const status = $("#github-status");
     status.classList.toggle("hidden", refreshing || !state.githubUpdatedAt);
     status.classList.toggle("failed", failed);
@@ -893,7 +897,7 @@
         ? `Refresh failed · ${githubAge(state.githubUpdatedAt)}`
         : "Refresh failed";
     } else {
-      el.textContent = state.githubUpdatedAt ? `Updated ${githubAge(state.githubUpdatedAt)}` : "";
+      el.textContent = state.githubUpdatedAt ? `Updated ${githubAge(checkedAt)}` : "";
     }
     el.title = failed ? state.loadError || "The last refresh failed." : "";
     renderStaleBanner(refreshing);
@@ -1002,12 +1006,16 @@
     latestReviews(first: 10) {
       nodes { state author { login avatarUrl } commit { oid } }
     }
-    reviewThreads(first: 30) { nodes { isResolved opener: comments(first: 1) { nodes { author { login } } } comments(last: 1) { nodes { author { login } } } } }
     commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
       __typename
       ... on CheckRun { name conclusion detailsUrl }
       ... on StatusContext { context state targetUrl }
     } } } } } }`;
+
+  // Two comment lists per thread make this the costliest part of a search (GitHub bills
+  // each nested list per parent), so only the review searches ask for it.
+  const THREAD_FIELDS = `
+    reviewThreads(first: 20) { nodes { isResolved opener: comments(first: 1) { nodes { author { login } } } comments(last: 1) { nodes { author { login } } } } }`;
 
   // Smaller pages keep each query under GitHub's timeout (large repos otherwise 502);
   // we page up to MAX_PRS to preserve the "most recent 100" behavior.
@@ -1021,6 +1029,7 @@
   const MERGED_MAX_PAGES_PER_CLICK = 4;
   // Persisting the whole walked-back history would blow the cache budget.
   const MERGED_CACHE_CAP = 50;
+  const HISTORY_EVERY_MS = 15 * 60 * 1000;
   let mergedExtra = 0;
   let mergedLoading = false;
 
@@ -1078,6 +1087,7 @@
             commits(last: 1) { nodes { commit { oid } } }
             pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
             recentComments: comments(last: 10) { nodes { author { login } createdAt } }
+            ${THREAD_FIELDS}
           }
         }
       }
@@ -1210,12 +1220,12 @@
 
   // The cheap default: only my PRs and PRs awaiting my review, plus my last
   // couple of merged PRs (shown as recently-merged context) - not every open PR.
-  async function fetchTargeted() {
+  async function fetchTargeted(withHistory) {
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [mine, review, merged] = await Promise.all([
       searchPRs(`${base} is:open author:@me`),
       searchPRs(`${base} is:open review-requested:@me`, MAX_PRS, REQUESTED_REVIEW_QUERY),
-      fetchMergedPage("mine", null),
+      withHistory ? fetchMergedPage("mine", null) : { prs: [], after: null },
     ]);
     const seen = new Set();
     const prs = [];
@@ -1233,11 +1243,11 @@
     };
   }
 
-  async function fetchReviewHistory() {
+  async function fetchReviewHistory(withHistory) {
     const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
     const [reviewed, reviewedMerged] = await Promise.all([
       searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
-      fetchMergedPage("review", null),
+      withHistory ? fetchMergedPage("review", null) : { prs: [], after: null },
     ]);
     const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
     return {
@@ -1245,6 +1255,45 @@
       merged: byMergedAt(reviewedMerged.prs.filter(notAuthoredByViewer)),
       mergedCursor: reviewedMerged.after,
     };
+  }
+
+  // One PR by id carries every list's fields, so a re-read can stand in for any copy.
+  const NODES_QUERY = `
+    query($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on PullRequest {
+          ${PR_FIELDS}
+          state
+          viewerLatestReview { state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
+          latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
+          pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
+          recentComments: comments(last: 10) { nodes { author { login } createdAt } }
+          ${THREAD_FIELDS}
+        }
+      }
+    }`;
+
+  // Re-read PRs and put each where it now belongs: an open one replaces its copies, a
+  // merged one moves to the merged feeds, a closed one drops out.
+  async function refreshPrs(ids, wasReviewed = new Set(state.reviewedPrs.map(prKey))) {
+    const nodes = [];
+    for (let i = 0; i < ids.length; i += 25) {
+      nodes.push(...(await gql(NODES_QUERY, { ids: ids.slice(i, i + 25) })).nodes.filter((n) => n?.number));
+    }
+    for (const node of nodes) {
+      const key = prKey(node);
+      if (node.state === "OPEN") {
+        const swap = (list) => list.map((p) => (prKey(p) === key ? node : p));
+        state.prs = swap(state.prs);
+        state.reviewedPrs = swap(state.reviewedPrs);
+        continue;
+      }
+      state.prs = state.prs.filter((p) => prKey(p) !== key);
+      state.reviewedPrs = state.reviewedPrs.filter((p) => prKey(p) !== key);
+      if (!node.mergedAt) continue;
+      if (node.author?.login === state.viewer) state.merged = mergeMergedLists([node], state.merged);
+      else if (wasReviewed.has(key)) state.reviewedMerged = mergeMergedLists([node], state.reviewedMerged);
+    }
   }
 
   // ---------- rendering ----------
@@ -1905,12 +1954,38 @@
       companionCall("companion/check-now").catch(() => {});
       setTimeout(render, CHECK_AGAIN_MS);
     }
-    const stale = prs.filter((pr) => pageBehind(pr) && !refreshedFor.has(`${prKey(pr)}@${companionPr(pr).updated}@${companionPr(pr).ci}`));
-    if (stale.length && !state.loading && now - lastRefresh >= REFRESH_EVERY_MS) {
-      for (const pr of stale) refreshedFor.add(`${prKey(pr)}@${companionPr(pr).updated}@${companionPr(pr).ci}`);
+    const seenKey = (key, cp) => `${key}@${cp.updated}@${cp.ci}@${cp.state}`;
+    const stale = prs.filter((pr) => (pageBehind(pr) || (companionPr(pr)?.state && companionPr(pr).state !== "OPEN")) &&
+      !refreshedFor.has(seenKey(prKey(pr), companionPr(pr))));
+    // A PR the companion follows that the page has never listed (a new review request,
+    // say) needs a search; one it already lists only needs re-reading.
+    const listed = new Set([...state.prs, ...state.reviewedPrs, ...state.merged, ...state.reviewedMerged].map(prKey));
+    const unlisted = Object.entries(state.companionState.prs || {}).filter(([key, cp]) =>
+      cp.state === "OPEN" && !cp.dropped && !listed.has(key) && inScope(key) && !refreshedFor.has(seenKey(key, cp)));
+    if ((stale.length || unlisted.length) && !state.loading && now - lastRefresh >= REFRESH_EVERY_MS) {
+      for (const pr of stale) refreshedFor.add(seenKey(prKey(pr), companionPr(pr)));
+      for (const [key, cp] of unlisted) refreshedFor.add(seenKey(key, cp));
       lastRefresh = now;
-      load(true);
+      if (unlisted.length) load(true);
+      else refreshStale(stale);
     }
+  }
+
+  async function refreshStale(prs) {
+    try {
+      await refreshPrs(prs.map((pr) => pr.id));
+    } catch (err) {
+      console.warn("Shipyard: re-reading changed PRs failed —", err.message);
+      return;
+    }
+    saveDashboardCache();
+    render();
+  }
+
+  function inScope(key) {
+    const repo = key.split("#")[0].toLowerCase();
+    return viewTargets(getCurrentRepo() || "").some((t) =>
+      t.includes("/") ? t.toLowerCase() === repo : repo.split("/")[0] === t.toLowerCase());
   }
 
   function renderBoard() {
@@ -2057,11 +2132,17 @@
     return `<div class="error-box">${esc(state.loadError + hint)}</div>`;
   }
 
-  async function load(force = false) {
+  // `history` also re-searches the merged feeds, which otherwise refresh every
+  // HISTORY_EVERY_MS: a PR that merges in between is re-read on its own when it leaves
+  // the open lists.
+  async function load(force = false, history = false) {
     if (state.loading) return;
     const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
     const needReviewHistory = force || !state.reviewHistoryLoaded || !state.reviewHistoryFresh;
     if (!needTargeted && !needReviewHistory) { render(); return; }
+    const withHistory = history || !state.historyFetchedAt || Date.now() - state.historyFetchedAt >= HISTORY_EVERY_MS;
+    const before = [...state.prs, ...state.reviewedPrs];
+    const wasReviewed = new Set(state.reviewedPrs.map(prKey));
     state.loading = true;
     state.loadError = null;
     state.loadErrorAuth = false;
@@ -2074,7 +2155,7 @@
     try {
       const requests = [];
       if (needTargeted) {
-        requests.push(fetchTargeted().then(({ viewer, prs, merged, mergedCursor }) => {
+        requests.push(fetchTargeted(withHistory).then(({ viewer, prs, merged, mergedCursor }) => {
           state.viewer = viewer;
           state.prs = prs;
           state.merged = mergeMergedLists(merged, state.merged);
@@ -2084,7 +2165,7 @@
         }));
       }
       if (needReviewHistory) {
-        requests.push(fetchReviewHistory().then(({ prs, merged, mergedCursor }) => {
+        requests.push(fetchReviewHistory(withHistory).then(({ prs, merged, mergedCursor }) => {
           state.reviewedPrs = prs;
           state.reviewedMerged = mergeMergedLists(merged, state.reviewedMerged);
           if (!state.reviewedMergedCursor) state.reviewedMergedCursor = mergedCursor;
@@ -2093,6 +2174,13 @@
         }));
       }
       await Promise.all(requests);
+      if (withHistory) state.historyFetchedAt = Date.now();
+      const listed = new Set([...state.prs, ...state.reviewedPrs].map(prKey));
+      const left = before.filter((pr) => !listed.has(prKey(pr)));
+      if (left.length) {
+        await refreshPrs(left.map((pr) => pr.id), wasReviewed)
+          .catch((err) => console.warn("Shipyard: re-reading PRs that left the lists failed —", err.message));
+      }
       state.githubUpdatedAt = Date.now();
       state.githubRefreshFailed = false;
       restartGitHubAgeTimer();
@@ -2170,8 +2258,8 @@
 
   $("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#settings-dialog").showModal(); });
   $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
-  $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
-  $("#stale-retry-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
+  $("#refresh-btn").addEventListener("click", () => { load(true, true); loadWorktrees(); });
+  $("#stale-retry-btn").addEventListener("click", () => { load(true, true); loadWorktrees(); });
   $("#stale-token-btn").addEventListener("click", () => {
     renderViewsList();
     renderTokenStatus();
@@ -2868,7 +2956,7 @@
       body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
       actionsHtml = rerequest + continueButton(pr);
     } else if (chip.kind === "address_feedback") {
-      const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved).length;
+      const open = companionPr(pr)?.openThreads || 0;
       const verb = chip.approval ? "approved with comments"
         : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
       body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
@@ -3179,6 +3267,7 @@
   // The companion pushes its whole state (chips, cards, sessions, activity) over SSE
   // whenever something changes; EventSource reconnects on its own if it restarts.
   let companionEvents = null;
+  const companionLive = () => !!state.companionState && companionEvents?.readyState === EventSource.OPEN;
   function connectCompanionEvents() {
     if (!state.orchestrator || companionEvents || typeof EventSource === "undefined") return;
     companionEvents = new EventSource("companion/events");
@@ -3204,6 +3293,17 @@
     return `<span class="dot ok"></span>Companion connected · watching your PRs${agent}`;
   }
 
+  // With the companion connected, its poll stands in for the page's: the page re-reads
+  // what it reports changed (hidden or not) and searches again only as a safety net.
+  // Without it, the page polls while visible and catches up when shown again.
+  const COMPANION_SAFETY_MS = 15 * 60 * 1000;
+  const HOSTED_EVERY_MS = 50 * 1000;
+  function refreshIfDue() {
+    if (!getToken() || !getCurrentRepo()) return;
+    const age = Date.now() - (state.githubUpdatedAt || 0);
+    if (companionLive() ? age >= COMPANION_SAFETY_MS : !document.hidden && age >= HOSTED_EVERY_MS) load(true);
+  }
+
   // ---------- init ----------
   renderRepoSelect();
   renderViewsList();
@@ -3217,13 +3317,11 @@
   }
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
-  setInterval(() => {
-    if (getToken() && getCurrentRepo()) load(true);
-  }, 60 * 1000);
+  setInterval(refreshIfDue, 60 * 1000);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
     pollWorktrees();
-    if (getToken() && getCurrentRepo()) load(true);
+    refreshIfDue();
   });
 
   window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees, openSidebar, closeSidebar };

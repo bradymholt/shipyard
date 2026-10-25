@@ -752,6 +752,8 @@ class Companion:
                 "steps": rules.next_steps(snap, self.config["rules"], open_cards),
                 # What the companion last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
+                "state": snap.get("state"), "dropped": bool(snap.get("dropped")),
+                "openThreads": sum(1 for t in snap.get("threads") or [] if not t.get("resolved")),
                 "snoozedUntil": self.db.snooze(key),
                 "cards": open_cards,
                 "handled": [c for c in cards if c["status"] == "handled"],
