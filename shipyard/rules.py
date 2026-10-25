@@ -1,9 +1,10 @@
 """Rules: what an event or a PR's state turns into. Pure functions over snapshots and
 the "rules" config, so they are unit-tested against fixture PR states.
 
-Two outputs:
-  memory_chip()  the chip a PR earns from time or memory (waiting, snoozed);
-                 chips that are a pure function of GitHub data live in the page.
+Three outputs:
+  next_steps()   the next steps a PR's GitHub state calls for; the page shows the
+                 first as the card's chip and draws nothing of its own.
+  memory_chip()  the chip a PR earns from time or memory (waiting, snoozed).
   reactions()    what an event sets in motion: a pass, a proposed card, a pin, a
                  review worktree, or a cleanup. Rules never call an agent directly;
                  they hand back a pass for the queue.
@@ -19,6 +20,15 @@ EVENT_PASSES = {
     "review_requested_of_me": ("pre_review", "review"),
     "review_rerequested": ("re_review", "re_review"),
     "review_dismissed": ("re_review", "re_review"),
+}
+
+
+# The steps that keep each pass's card current; with none of them left, the card is done.
+STEPS_FOR_PASS = {
+    "feedback": ("address_feedback", "rerequest_review"),
+    "ci_failed": ("fix_ci",),
+    "pre_review": ("review",),
+    "re_review": ("re_review",),
 }
 
 
@@ -67,6 +77,67 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
     return None
 
 
+def _clip(text, n):
+    return f"{text[:n - 1]}…" if len(text) > n else text
+
+
+def _approval_step(snap, rules):
+    approvers = [r["author"] for r in events.approval_feedback(snap)]
+    if approvers and rules.get("address_feedback"):
+        return {"kind": "address_feedback", "label": f"Reply to approval · {len(approvers)}", "tone": "gold",
+                "reviewers": approvers, "approval": True}
+    return None
+
+
+def next_steps(snap, rules, cards=()):
+    """Every next step the PR's GitHub state calls for, most urgent first. Each rule
+    gates its own step; `cards` lends the re-review its progress."""
+    if snap.get("dropped"):
+        return []
+    if snap.get("state") == "MERGED":
+        step = snap.get("mine") and _approval_step(snap, rules)
+        return [step] if step else []
+    if snap.get("state") != "OPEN":
+        return []
+    out = []
+    if not snap.get("mine"):
+        review = snap.get("my_review")
+        requested = snap.get("requested_me")
+        if requested and not review and rules.get("review"):
+            out.append({"kind": "review", "label": "Review", "tone": "gold"})
+        if ((requested and review) or (review or {}).get("state") == "DISMISSED") and rules.get("re_review"):
+            card = next((c for c in cards if c.get("pass") == "re_review" and c.get("total")), None)
+            out.append({"kind": "re_review", "tone": "gold",
+                        "label": f"Re-review · {card['addressed']} of {card['total']} addressed" if card else "Re-review"})
+        return out
+    pending = set(snap.get("requested") or [])
+    waiting = [a for a in dict.fromkeys(events.requesters(snap)) if a not in pending]
+    if waiting:
+        commits = {r["author"]: r.get("commit") for r in snap.get("reviews") or []}
+        pushed = all(commits.get(a) and commits[a] != snap.get("head") for a in waiting)
+        open_threads = [t for t in snap.get("threads") or [] if not t.get("resolved")]
+        replied = bool(open_threads) and all((t.get("comments") or [{}])[-1].get("author") == snap.get("viewer")
+                                             for t in open_threads)
+        if (pushed or replied) and rules.get("rerequest_review"):
+            out.append({"kind": "rerequest_review", "label": f"Re-request review · {len(waiting)}", "tone": "gold",
+                        "reviewers": waiting,
+                        "title": "You pushed since the review" if pushed else "You replied last on every open thread"})
+        elif rules.get("address_feedback"):
+            out.append({"kind": "address_feedback", "label": f"Address feedback · {len(waiting)}", "tone": "red",
+                        "reviewers": waiting})
+    approval = _approval_step(snap, rules)
+    if approval:
+        out.append(approval)
+    if snap.get("ci") in events.FAILING and rules.get("fix_ci"):
+        names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
+        out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
+                    "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
+    if (snap.get("decision") == "APPROVED" and snap.get("ci") in (None, "SUCCESS") and not snap.get("auto_merge")
+            and not snap.get("draft") and rules.get("merge")):
+        out.append({"kind": "merge", "label": "Merge", "tone": "green"})
+    return out
+
+
 def pass_mode(event_name, rules):
     """("pass name", "auto" | "ask") for an event, or None when the rule is off."""
     entry = EVENT_PASSES.get(event_name)
@@ -105,24 +176,15 @@ def reactions(event, snap, rules):
     return out
 
 
-def card_is_stale(card, snap):
-    """A Next card stops applying once the condition that raised it is gone."""
-    kind = card.get("pass")
-    if snap.get("state") == "MERGED" and kind == "feedback":
-        return not events.approval_feedback(snap)
+def card_is_stale(card, snap, rules):
+    """A Next card stops applying once no next step calls for it."""
+    kinds = STEPS_FOR_PASS.get(card.get("pass"))
+    if kinds:
+        if card.get("pass") == "ci_failed" and card.get("head") != snap.get("head"):
+            return True
+        return not any(s["kind"] in kinds for s in next_steps(snap, rules))
     if snap.get("state") != "OPEN":
         return True
-    if kind == "feedback":
-        asked = set(events.requesters(snap))
-        return not events.needs_changes(snap) or bool(asked) and asked <= set(snap.get("requested") or [])
-    if kind == "ci_failed":
-        return snap.get("ci") == "SUCCESS" or card.get("head") != snap.get("head")
-    if kind == "pre_review":
-        return not snap.get("requested_me") and bool(snap.get("my_review"))
-    if kind == "re_review":
-        review = snap.get("my_review") or {}
-        return bool(review.get("submitted") and card.get("created") and
-                    review["submitted"] > card["created"] and not snap.get("requested_me"))
     if card.get("action") == "rerequest_review":
         wanted = set((card.get("payload") or {}).get("reviewers") or [])
         return bool(wanted) and wanted <= set(snap.get("requested") or [])

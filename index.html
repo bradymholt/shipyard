@@ -965,7 +965,7 @@
     repository { nameWithOwner }
     author { login avatarUrl }
     reviewDecision
-    comments(last: 10) { totalCount nodes { createdAt author { login } } }
+    comments { totalCount }
     reviewRequests(first: 10) {
       nodes {
         requestedReviewer {
@@ -976,11 +976,9 @@
       }
     }
     latestReviews(first: 10) {
-      nodes { state body submittedAt author { login avatarUrl } commit { oid } }
+      nodes { state author { login avatarUrl } commit { oid } }
     }
-    reviewThreads(first: 30) { nodes { isResolved
-      opener: comments(first: 1) { nodes { author { login } } }
-      comments(last: 1) { nodes { createdAt author { login } } } } }
+    reviewThreads(first: 30) { nodes { isResolved comments(last: 1) { nodes { author { login } } } } }
     commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
       __typename
       ... on CheckRun { name conclusion detailsUrl }
@@ -1603,7 +1601,7 @@
         <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
         <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)}</div>
         ${mergedWorktreeLinks(pr)}
-        ${nextRowHtml(pr, false)}
+        ${nextRowHtml(pr)}
       </div>`;
   }
 
@@ -1757,12 +1755,12 @@
     const labels = (pr.labels?.nodes || [])
       .map((l) => `<span class="label-pill" style="${labelColors(l.color)}">${esc(l.name)}</span>`)
       .join("");
-    const chip = nextRowHtml(pr, reviewMode);
+    const chip = nextRowHtml(pr);
     // The Next row names the next step for changes requested or approved-but-red, so the
     // state badge would only repeat it. Once review is re-requested, the PR is waiting on
     // the reviewer, and "Changes requested" would read as yours to act on.
     const awaitingReview = (pr.reviewRequests?.nodes || []).length > 0;
-    const nextKind = nextChip(pr, reviewMode)?.kind;
+    const nextKind = nextChip(pr)?.kind;
     const badge = reviewMode
       ? nextKind === "review" || nextKind === "re_review" ? "" : viewerReviewBadge(pr)
       : !chip && ((pr.reviewDecision === "CHANGES_REQUESTED" && !awaitingReview) ||
@@ -2385,15 +2383,12 @@
 
 
   // ---------- next-action chips ----------
-  // A card gets one chip, only when there is a next step. Chips that are a pure function
-  // of GitHub data are computed here, so they work hosted too; the companion adds the ones
-  // that need memory (waiting on a reviewer, snoozed).
+  // A card gets one chip, only when there is a next step. The companion decides every
+  // one, so a page without it shows none.
   const FAILING_CONCLUSIONS = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
-  const ruleOn = (name) => !state.rules || state.rules[name] !== false;
   const companionPr = (pr) => state.companionState?.prs?.[prKey(pr)] || null;
   const agentName = () => state.agent?.name || "your agent";
   const rollupState = (pr) => pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state;
-  const ciFailing = (pr) => rollupState(pr) === "FAILURE" || rollupState(pr) === "ERROR";
   const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
   function failingChecks(pr) {
@@ -2406,34 +2401,6 @@
   // The Reviews tab's copy of a PR carries viewerLatestReview; the targeted copy doesn't.
   const reviewedCopy = (pr) => state.reviewedPrs.find((r) => prKey(r) === prKey(pr)) || pr;
 
-  // GitHub keeps a PR at CHANGES_REQUESTED until that reviewer approves, but a later comment-only
-  // review replaces theirs in latestReviews; then whoever hasn't approved is the one to answer.
-  // Without that decision, a comment-only review counts while its threads are open.
-  function changesRequestedBy(pr) {
-    const reviews = (pr.latestReviews?.nodes || []).filter((r) => r.author && r.author.login !== pr.author?.login);
-    if (pr.reviewDecision !== "CHANGES_REQUESTED") {
-      const open = (pr.reviewThreads?.nodes || []).some((t) => !t.isResolved);
-      return open ? reviews.filter((r) => r.state === "COMMENTED") : [];
-    }
-    const asked = reviews.filter((r) => r.state === "CHANGES_REQUESTED");
-    return asked.length ? asked : reviews.filter((r) => r.state !== "APPROVED");
-  }
-  // Mirrors approval_feedback in shipyard/events.py: an approval still waiting on your answer.
-  const SIGN_OFF = /^(lgtm|looks good( to me)?|ship ?it|:shipit:|approved?|nice( work| one)?|great( work)?|thanks?( you)?|ty)?[\s!.,:;)\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]*$/iu;
-  function approvalFeedback(pr) {
-    const head = pr.commits?.nodes?.[0]?.commit?.oid;
-    const threads = pr.reviewThreads?.nodes || [];
-    const mine = [...(pr.comments?.nodes || []), ...threads.map((t) => t.comments?.nodes?.[0])]
-      .filter((c) => c?.author?.login === state.viewer && c.createdAt);
-    return (pr.latestReviews?.nodes || []).filter((r) => {
-      if (r.state !== "APPROVED" || !r.author || r.author.login === pr.author?.login) return false;
-      if (threads.some((t) => !t.isResolved && t.opener?.nodes?.[0]?.author?.login === r.author.login &&
-          t.comments?.nodes?.[0]?.author?.login !== state.viewer)) return true;
-      if (SIGN_OFF.test((r.body || "").trim())) return false;
-      const pushed = r.commit?.oid && head && r.commit.oid !== head;
-      return !pushed && !mine.some((c) => c.createdAt > (r.submittedAt || ""));
-    });
-  }
   const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
   // Show a re-request right away, so the card moves to Waiting before GitHub's data catches up.
@@ -2455,81 +2422,26 @@
     if (reviewed) state.reviewedMerged = mergeMergedLists([{ ...reviewed, mergedAt }], state.reviewedMerged);
   }
 
-  function approvalChip(pr) {
-    const approvers = approvalFeedback(pr).map((r) => r.author.login);
-    return approvers.length && ruleOn("address_feedback")
-      ? { kind: "address_feedback", label: `Reply to approval · ${approvers.length}`, tone: "gold", reviewers: approvers, approval: true }
-      : null;
+  // The companion works out every next step; a merged PR keeps only an unanswered approval.
+  function companionSteps(pr) {
+    const steps = companionPr(pr)?.steps || [];
+    return pr.mergedAt ? steps.filter((s) => s.approval) : steps;
   }
 
-  // Every next step the PR's GitHub data supports, most urgent first; the chip shows the first.
-  function githubChips(pr, reviewMode) {
-    const out = [];
-    if (pr.mergedAt) {
-      const approval = !reviewMode && pr.author?.login === state.viewer && approvalChip(pr);
-      return approval ? [approval] : out;
-    }
-    if (reviewMode) {
-      const mine = reviewedCopy(pr).viewerLatestReview;
-      const requested = reviewRequestedForViewer(pr);
-      if (requested && !mine && ruleOn("review")) out.push({ kind: "review", label: "Review", tone: "gold" });
-      if (((requested && mine) || viewerReviewDismissed(reviewedCopy(pr))) && ruleOn("re_review")) {
-        const card = (companionPr(pr)?.cards || []).find((c) => c.pass === "re_review" && c.total);
-        out.push({ kind: "re_review", tone: "gold",
-          label: card ? `Re-review · ${card.addressed} of ${card.total} addressed` : "Re-review" });
-      }
-      return out;
-    }
-    if (pr.author?.login !== state.viewer) return out;
-    const waitingOn = changesRequestedBy(pr).filter((r) => !reviewRequested(pr, r.author?.login));
-    if (waitingOn.length) {
-      const reviewers = waitingOn.map((r) => r.author.login);
-      const pushed = waitingOn.every((r) => r.commit?.oid && r.commit.oid !== pr.commits?.nodes?.[0]?.commit?.oid);
-      const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved);
-      const replied = open.length > 0 && open.every((t) => t.comments?.nodes?.[0]?.author?.login === state.viewer);
-      if ((pushed || replied) && ruleOn("rerequest_review"))
-        out.push({ kind: "rerequest_review", label: `Re-request review · ${reviewers.length}`, tone: "gold", reviewers,
-          title: pushed ? "You pushed since the review" : "You replied last on every open thread" });
-      else if (ruleOn("address_feedback"))
-        out.push({ kind: "address_feedback", label: `Address feedback · ${reviewers.length}`, tone: "red", reviewers });
-    }
-    const approval = approvalChip(pr);
-    if (approval) out.push(approval);
-    if (ciFailing(pr) && ruleOn("fix_ci")) {
-      const failing = failingChecks(pr);
-      out.push({ kind: "fix_ci", tone: "red", label: failing[0] ? `Fix CI · ${clip(failing[0].name, 18)}` : "Fix CI",
-        title: failing.map((c) => c.name).join(", ") });
-    }
-    if (pr.reviewDecision === "APPROVED" && ciOk(pr) && !pr.autoMergeRequest && !pr.isDraft && ruleOn("merge"))
-      out.push({ kind: "merge", label: "Merge", tone: "green" });
-    return out;
-  }
-
-  const githubChip = (pr, reviewMode) => githubChips(pr, reviewMode)[0] || null;
-
-  function nextChip(pr, reviewMode) {
+  function nextChip(pr) {
     const cp = companionPr(pr);
     if (cp?.chip?.kind === "snoozed") return { ...cp.chip, tone: "muted" };
-    const chip = githubChip(pr, reviewMode);
+    const chip = companionSteps(pr)[0];
     if (chip) return chip;
     if (cp?.chip) return { ...cp.chip, tone: cp.chip.kind === "nudge" ? "gold" : "muted" };
     return null;
   }
 
-  // The companion retires a card on its next poll; the page sees what ended it (a review
-  // submitted, CI green, feedback answered) first. Cards for other passes always show.
-  const CHIPS_FOR_PASS = { feedback: ["address_feedback", "rerequest_review"], ci_failed: ["fix_ci"],
-    pre_review: ["review"], re_review: ["re_review"] };
-  function staleCard(pr, card, reviewMode) {
-    const kinds = CHIPS_FOR_PASS[card.pass];
-    return !!kinds && card.kind !== "running" && !githubChips(pr, reviewMode).some((c) => kinds.includes(c.kind));
-  }
-
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
-  function nextRowHtml(pr, reviewMode) {
-    const chip = nextChip(pr, reviewMode);
+  function nextRowHtml(pr) {
+    const chip = nextChip(pr);
     const cp = companionPr(pr);
-    const ready = (cp?.cards || []).find((c) => (c.kind === "pass" || c.kind === "answer") && !staleCard(pr, c, reviewMode));
+    const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
     const dot = cp?.running
       ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
       : cp?.planReady && ready ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
@@ -2803,7 +2715,8 @@
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
           <button type="button" data-dismiss="${card.id}">Dismiss</button></div>${trustToggles(card)}</div>`;
     }
-    const chip = card.pass === "feedback" ? githubChip(pr) : null;
+    const chip = card.pass === "feedback"
+      ? companionSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
     const rerequest = card.pass === "feedback" ? respondButton(pr) + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
@@ -2865,12 +2778,9 @@
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
     // Your own asks and new sessions show under PR session.
-    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask" && !staleCard(pr, c, isReviewPr(pr)));
+    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
-    if (!html && (open || githubChip(pr, isReviewPr(pr)))) {
-      const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);
-      html = cp ? derivedCardHtml(pr, chip) : "";
-    }
+    if (!html && cp) html = derivedCardHtml(pr, companionSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
     if (!html) {
       html = !cp && open
         ? `<div class="sb-empty">The companion follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`

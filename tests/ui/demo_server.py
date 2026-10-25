@@ -61,6 +61,13 @@ def main():
                    updated=ago(days=5)), "author:@me")
     gh.put(pr_node(105, head="h105", branch="me/auth", requested=["jm"], requested_at={"jm": ago(hours=30)},
                    updated=ago(hours=30)), "author:@me")
+    gh.put(pr_node(106, head="h106", branch="me/readme", decision="CHANGES_REQUESTED",
+                   reviews=[{"state": "CHANGES_REQUESTED", "author": "rev"}], threads=[{"body": "Typo", "author": "me"}]),
+           "author:@me")
+    gh.put(pr_node(107, head="h107", branch="me/typo", decision="CHANGES_REQUESTED",
+                   reviews=[{"state": "COMMENTED", "author": "rev"}],
+                   threads=[{"body": "Done?", "author": "me"}, {"body": "Not yet", "author": "rev"}]), "author:@me")
+    gh.put(pr_node(108, head="h108", branch="me/flag", decision="CHANGES_REQUESTED", requested=["rev"]), "author:@me")
     gh.put(pr_node(201, author="alice", head="h201", branch="alice/search", requested=["me"],
                    updated=ago(hours=4)), "review-requested:@me")
     gh.put(pr_node(202, author="bob", head="h202", branch="bob/export", requested=["me"],

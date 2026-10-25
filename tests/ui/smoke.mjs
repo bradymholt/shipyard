@@ -238,34 +238,6 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-review.png` });
   await page.keyboard.press("Escape");
   check(!(await sb.isVisible()), "Esc closes the sidebar");
-  await page.evaluate(() => {
-    const { state, render } = window.__dashboard;
-    const pr = state.prs.find((p) => p.number === 201) || state.reviewedPrs.find((p) => p.number === 201);
-    const done = { ...pr, reviewRequests: { nodes: [] },
-      viewerLatestReview: { state: "APPROVED", commit: { oid: "h201" }, onBehalfOf: { nodes: [] } } };
-    state.prs = state.prs.map((p) => p.number === 201 ? done : p);
-    state.reviewedPrs = [...state.reviewedPrs.filter((p) => p.number !== 201), done];
-    render();
-  });
-  check(await page.locator('.card[data-key="o/r#201"] .next-row').count() === 0, "a submitted review drops the leftover Pre-review");
-  await page.evaluate(() => {
-    const { state, render } = window.__dashboard;
-    const pr = state.reviewedPrs.find((p) => p.number === 201);
-    pr.viewerLatestReview = { ...pr.viewerLatestReview, state: "CHANGES_REQUESTED", submittedAt: "2026-10-25T04:42:27Z" };
-    const cp = state.companionState.prs["o/r#201"];
-    cp.cards = [{ id: 901, kind: "pass", pass: "re_review", title: "Re-review", created: "2026-10-25T04:40:01Z", proposals: [] }];
-    cp.planReady = true;
-    render();
-  });
-  check(await page.locator('.card[data-key="o/r#201"] .next-row').count() === 0, "a submitted review drops the leftover Re-review");
-  await page.locator('.tab[data-filter="mine"]').click();
-  await page.evaluate(() => {
-    const { state, render } = window.__dashboard;
-    const pr = state.prs.find((p) => p.number === 102);
-    pr.commits.nodes[0].commit.statusCheckRollup = { state: "SUCCESS", contexts: { nodes: [] } };
-    render();
-  });
-  check(await page.locator('.card[data-key="o/r#102"] .plan-dot').count() === 0, "green CI drops the leftover Fix CI card");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
   console.log("narrow window");
@@ -281,10 +253,8 @@ try {
 
   console.log("hosted mode (no companion)");
   const hosted = await openPage(browser, STATIC_PORT);
-  await hosted.page.waitForSelector('.card[data-key="o/r#101"] .next-row');
-  check((await chipText(hosted.page, 101))?.includes("Address feedback"), "GitHub-derived chips work hosted");
-  check((await chipText(hosted.page, 103))?.trim() === "Merge", "Merge chip works hosted");
-  check(await hosted.page.locator('.card[data-key="o/r#105"] .next-row').count() === 0, "memory chips are absent hosted, not broken");
+  await hosted.page.waitForSelector('.card[data-key="o/r#101"]');
+  check(await hosted.page.locator(".next-row").count() === 0, "no Next rows hosted");
   await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await hosted.page.waitForSelector("#sidebar .sb-activity li");
   check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Next" }).count() === 0, "hosted sidebar has no Next section");

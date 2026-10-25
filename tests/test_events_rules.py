@@ -11,6 +11,10 @@ RULES = validate_rules({})
 NOW = datetime(2026, 10, 24, 12, 0, tzinfo=timezone.utc)
 
 
+def stale(card, s):
+    return rules.card_is_stale(card, s, RULES)
+
+
 def names(events):
     return [e["name"] for e in events]
 
@@ -189,41 +193,68 @@ class Reactions(unittest.TestCase):
         self.assertEqual([o["do"] for o in out], ["close_cards"])
 
 
+class NextSteps(unittest.TestCase):
+    def test_each_state_gets_its_steps_in_order(self):
+        red = dict(ci="FAILURE", contexts=[check_run("rspec", "FAILURE")])
+        cr = dict(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED")])
+        approved = dict(decision="APPROVED", reviews=[review("APPROVED", body="I'd prefer a Map")])
+        cases = [
+            (snap(**cr), ["Address feedback · 1"]),
+            (snap(**red), ["Fix CI · rspec"]),
+            (snap(**cr, **red), ["Address feedback · 1", "Fix CI · rspec"]),
+            (snap(decision="APPROVED"), ["Merge"]),
+            (snap(**cr, threads=[{"body": "Typo", "author": "me"}]), ["Re-request review · 1"]),
+            (snap(**cr, requested=["rev"]), []),
+            (snap(**approved), ["Reply to approval · 1", "Merge"]),
+            (snap(**approved, state="MERGED"), ["Reply to approval · 1"]),
+            (snap(decision="APPROVED", state="MERGED"), []),
+            (snap(decision="APPROVED", draft=True), []),
+            (snap(author="alice", requested=["me"]), ["Review"]),
+            (snap(author="alice", requested=["me"], my_review=mine_review("CHANGES_REQUESTED")), ["Re-review"]),
+            (snap(author="alice", my_review=mine_review("DISMISSED")), ["Re-review"]),
+        ]
+        for s, labels in cases:
+            self.assertEqual([step["label"] for step in rules.next_steps(s, RULES)], labels)
+
+    def test_a_rule_turned_off_drops_its_step(self):
+        self.assertEqual(rules.next_steps(snap(decision="APPROVED"), validate_rules({"merge": False})), [])
+
+
 class StaleCards(unittest.TestCase):
     def test_changes_card_goes_when_decision_changes(self):
         card = {"pass": "feedback", "head": "aaa"}
-        self.assertFalse(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED")))
-        self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED")))
+        self.assertFalse(stale(card, snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED")])))
+        self.assertTrue(stale(card, snap(decision="APPROVED")))
         rev = [{"author": "rev", "state": "CHANGES_REQUESTED"}]
-        self.assertTrue(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED", reviews=rev, requested=["rev"])))
+        self.assertTrue(stale(card, snap(decision="CHANGES_REQUESTED", reviews=rev, requested=["rev"])))
 
     def test_comment_feedback_card_goes_when_threads_resolve(self):
         card = {"pass": "feedback", "head": "aaa"}
         rev = [{"author": "rev", "state": "COMMENTED"}]
-        self.assertFalse(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?"}])))
-        self.assertTrue(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?", "resolved": True}])))
+        self.assertFalse(stale(card, snap(reviews=rev, threads=[{"body": "Why?"}])))
+        self.assertTrue(stale(card, snap(reviews=rev, threads=[{"body": "Why?", "resolved": True}])))
 
     def test_approval_feedback_card_goes_once_answered(self):
         card = {"pass": "feedback", "head": "aaa"}
         rev = [{"author": "rev", "state": "APPROVED", "body": "Prefer a map", "at": "2026-10-20T10:00:00Z"}]
-        self.assertFalse(rules.card_is_stale(card, snap(decision="APPROVED", reviews=rev)))
-        self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED", reviews=rev,
+        self.assertFalse(stale(card, snap(decision="APPROVED", reviews=rev)))
+        self.assertTrue(stale(card, snap(decision="APPROVED", reviews=rev,
                                                        comments=[{"author": "me", "at": "2026-10-20T11:00:00Z"}])))
         threads = [{"body": "Use a map", "replies": ["me"]}]
-        self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED",
+        self.assertTrue(stale(card, snap(decision="APPROVED",
                                                        reviews=[{"author": "rev", "state": "APPROVED"}],
                                                        threads=threads)))
 
     def test_ci_card_goes_on_green_or_new_head(self):
         card = {"pass": "ci_failed", "head": "aaa"}
-        self.assertFalse(rules.card_is_stale(card, snap(ci="FAILURE")))
-        self.assertTrue(rules.card_is_stale(card, snap(ci="SUCCESS")))
-        self.assertTrue(rules.card_is_stale(card, snap(head="bbb", ci="FAILURE")))
+        self.assertFalse(stale(card, snap(ci="FAILURE")))
+        self.assertTrue(stale(card, snap(ci="SUCCESS")))
+        self.assertTrue(stale(card, snap(head="bbb", ci="FAILURE")))
 
     def test_rerequest_card_goes_once_requested(self):
         card = {"action": "rerequest_review", "payload": {"reviewers": ["jm"]}}
-        self.assertFalse(rules.card_is_stale(card, snap()))
-        self.assertTrue(rules.card_is_stale(card, snap(requested=["jm"])))
+        self.assertFalse(stale(card, snap()))
+        self.assertTrue(stale(card, snap(requested=["jm"])))
 
 
 if __name__ == "__main__":

@@ -242,7 +242,7 @@ class Companion:
         for card in self.db.cards(snap["key"], ("open",)):
             if card.get("kind") in ("running",):
                 continue
-            if rules.card_is_stale(card, snap):
+            if rules.card_is_stale(card, snap, self.config["rules"]):
                 self.db.update_card(card["id"], status="done")
 
     # ---------- passes
@@ -517,6 +517,11 @@ class Companion:
             self.db.log(key, "continued in " + self.config["agent"]["name"])
             return {"ok": True}
         result = actions.run(self.github, action, snap, payload, self.action_context(snap))
+        if action == "rerequest_review":
+            # Next steps come from the snapshot, so record the request before the poll sees it.
+            requested = snap.get("requested") or []
+            snap["requested"] = requested + [r for r in payload.get("reviewers") or [] if r not in requested]
+            self.db.save_pr(snap)
         self.db.click(action)
         self.db.log(key, result)
         if card_id:
@@ -705,6 +710,7 @@ class Companion:
                     session["shipyardTurns"] = self.db.shipyard_turns(pin["session_id"])
                     session["how"] = pin.get("how")
             cards = [self.card_view(c) for c in self.db.cards(key)]
+            open_cards = [c for c in cards if c["status"] == "open"]
             # Your own asks and new sessions show in the sidebar where you started them, not as a chip.
             next_cards = [c for c in cards if c["status"] == "open" and c.get("pass") not in ("ask", "new_session")]
             done = [p for p in self.db.passes(key) if p["status"] == "done"]
@@ -713,8 +719,9 @@ class Companion:
             prs[key] = {
                 "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
+                "steps": rules.next_steps(snap, self.config["rules"], open_cards),
                 "snoozedUntil": self.db.snooze(key),
-                "cards": [c for c in cards if c["status"] == "open"],
+                "cards": open_cards,
                 "handled": [c for c in cards if c["status"] == "handled"],
                 "planReady": any(c["kind"] in ("pass", "answer") for c in next_cards),
                 "running": any(c["kind"] == "running" for c in next_cards),
