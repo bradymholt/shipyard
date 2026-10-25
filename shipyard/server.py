@@ -28,7 +28,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # Older Pythons don't know this extension; Chrome expects the manifest MIME type.
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".webmanifest": "application/manifest+json"}
-    BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/move-to-worktree",
+    BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main",
                       "/open-default-main", "/open-app", "/open-agent"}
     COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
@@ -168,8 +168,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result = worktrees.new_branch_in_main(arg("repo"), arg("branch"), self.roots)
         elif parsed.path == "/open-in-main":
             result = worktrees.open_in_main(arg("repo"), arg("branch"), self.roots)
-        elif parsed.path == "/move-to-worktree":
-            result = worktrees.move_to_worktree(arg("repo"), arg("branch"), self.roots)
         elif parsed.path == "/open-default-main":
             result = worktrees.open_default_in_main(arg("repo"), self.roots)
         elif parsed.path == "/open-app":
