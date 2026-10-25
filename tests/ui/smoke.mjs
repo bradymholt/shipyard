@@ -43,7 +43,8 @@ function pr(number, extra = {}) {
     reviewDecision: extra.decision || null, comments: { totalCount: extra.comments || 0 },
     reviewRequests: { nodes: (extra.requested || []).map((l) => ({ requestedReviewer: user(l) })) },
     latestReviews: { nodes: (extra.reviews || []).map(([state, login, body]) => ({ state, body, author: { login, avatarUrl: null } })) },
-    reviewThreads: { nodes: (extra.threads || []).map((login) => ({ isResolved: false, comments: { nodes: [{ author: { login } }] } })) },
+    reviewThreads: { nodes: (extra.threads || []).map((t) => [].concat(t)).map((c) => ({ isResolved: false,
+      opener: { nodes: [{ author: { login: c[0] } }] }, comments: { nodes: [{ author: { login: c.at(-1) } }] } })) },
     commits: { nodes: [{ commit: { oid: `h${number}`, statusCheckRollup: extra.ci === null ? null : {
       state: extra.ci || "SUCCESS",
       contexts: { nodes: (extra.failing || []).map((name) => ({ __typename: "CheckRun", name, conclusion: "FAILURE",
@@ -73,7 +74,7 @@ const REQUESTED = [
 ];
 const REVIEWED = [pr(202, { author: "bob", title: "Export to CSV", requested: ["me"],
   myReview: { state: "CHANGES_REQUESTED", commit: { oid: "old" }, onBehalfOf: { nodes: [] } } }),
-  pr(203, { author: "cy", title: "Follow-up after changes", standing: [["CHANGES_REQUESTED", "me"]],
+  pr(203, { author: "cy", title: "Follow-up after changes", standing: [["CHANGES_REQUESTED", "me"]], threads: [["me", "cy"], ["me"]],
     myReview: { state: "COMMENTED", commit: { oid: "h203" }, onBehalfOf: { nodes: [] } } }),
   pr(204, { author: "di", title: "Drive-by comment",
     myReview: { state: "COMMENTED", commit: { oid: "h204" }, onBehalfOf: { nodes: [] } } })];
@@ -253,6 +254,8 @@ try {
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
   check(await page.locator('.card[data-key="o/r#203"]').count() === 1, "a comment after your changes request keeps the PR on Reviews");
   check((await chipText(page, 203))?.includes("Checking"), "a PR the companion hasn't seen yet shows Checking…");
+  check((await page.locator('.card[data-key="o/r#203"] .review-badge').allTextContents()).some((t) => t.includes("Author replied · 1 of 2")),
+    "a reply from the author on your thread shows Author replied");
   check(await page.locator('.card[data-key="o/r#204"]').count() === 0, "a comment-only review doesn't add the PR to Reviews");
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
