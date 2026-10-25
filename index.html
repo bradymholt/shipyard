@@ -1823,40 +1823,62 @@
   function render() {
     renderBoard();
     renderSidebar();
-    checkNewPrs();
+    syncWithCompanion();
   }
 
-  // The page refreshes on its own and can see a new PR, a re-request or any other change
-  // before the companion's next poll; ask it to look now rather than up to a minute later.
-  // GitHub's search can trail a change by a few seconds, so keep asking for a while.
+  // The page and the companion each poll GitHub about once a minute, so either can see a
+  // change first: a new PR, a re-request, a push, a finished CI run. Whichever is behind
+  // catches up at once. A finished check doesn't move updatedAt, so for the same head a
+  // settled CI state counts as newer than a pending one.
   const CHECK_AGAIN_MS = 15000;
   const CHECKING_MS = 120000;
-  const checks = new Map();  // "key@updatedAt" -> { first, last } times the page asked the companion to look
+  const REFRESH_EVERY_MS = 20000;
+  const SETTLED = new Set(["SUCCESS", "FAILURE", "ERROR"]);
+  const checks = new Map();  // what the page saw of a PR -> { first, last } times it asked the companion to look
+  const refreshedFor = new Set();  // what the companion saw that the page already refreshed to catch
+  let lastRefresh = 0;
   const companionFollows = (pr) => !pr.mergedAt && (pr.author?.login === state.viewer || reviewItem(pr));
+  const pageSeen = (pr) => `${prKey(pr)}@${pr.updatedAt}@${rollupState(pr) || ""}`;
   function companionBehind(pr) {
     const cp = companionPr(pr);
-    return !cp || (!!pr.updatedAt && !!cp.updated && pr.updatedAt > cp.updated);
+    if (!cp) return true;
+    if (!pr.updatedAt || !cp.updated) return false;
+    if (pr.updatedAt !== cp.updated) return pr.updatedAt > cp.updated;
+    const ci = rollupState(pr) || null;
+    return pr.headRefOid === cp.head && ci !== cp.ci && SETTLED.has(ci) && !SETTLED.has(cp.ci);
+  }
+  function pageBehind(pr) {
+    const cp = companionPr(pr);
+    if (!cp?.updated || !pr.updatedAt) return false;
+    if (pr.updatedAt !== cp.updated) return cp.updated > pr.updatedAt;
+    const ci = rollupState(pr) || null;
+    return pr.headRefOid === cp.head && ci !== cp.ci && SETTLED.has(cp.ci) && !SETTLED.has(ci);
   }
   function checkingPr(pr) {
-    const c = checks.get(`${prKey(pr)}@${pr.updatedAt}`);
+    const c = checks.get(pageSeen(pr));
     return !!c && Date.now() - c.first < CHECKING_MS && companionBehind(pr) &&
       !companionSteps(pr).length && !companionPr(pr)?.running;
   }
-  function checkNewPrs() {
+  function syncWithCompanion() {
     if (!state.orchestrator || !state.companionState) return;
     const now = Date.now();
-    const due = [...state.prs, ...state.reviewedPrs].filter((pr) => {
-      if (!companionFollows(pr) || !companionBehind(pr)) return false;
-      const c = checks.get(`${prKey(pr)}@${pr.updatedAt}`);
+    const prs = [...state.prs, ...state.reviewedPrs].filter(companionFollows);
+    const due = prs.filter((pr) => {
+      if (!companionBehind(pr)) return false;
+      const c = checks.get(pageSeen(pr));
       return !c || (now - c.first < CHECKING_MS && now - c.last >= CHECK_AGAIN_MS);
     });
-    if (!due.length) return;
-    for (const pr of due) {
-      const key = `${prKey(pr)}@${pr.updatedAt}`;
-      checks.set(key, { first: checks.get(key)?.first || now, last: now });
+    if (due.length) {
+      for (const pr of due) checks.set(pageSeen(pr), { first: checks.get(pageSeen(pr))?.first || now, last: now });
+      companionCall("companion/check-now").catch(() => {});
+      setTimeout(render, CHECK_AGAIN_MS);
     }
-    companionCall("companion/check-now").catch(() => {});
-    setTimeout(render, CHECK_AGAIN_MS);
+    const stale = prs.filter((pr) => pageBehind(pr) && !refreshedFor.has(`${prKey(pr)}@${companionPr(pr).updated}@${companionPr(pr).ci}`));
+    if (stale.length && !state.loading && now - lastRefresh >= REFRESH_EVERY_MS) {
+      for (const pr of stale) refreshedFor.add(`${prKey(pr)}@${companionPr(pr).updated}@${companionPr(pr).ci}`);
+      lastRefresh = now;
+      load(true);
+    }
   }
 
   function renderBoard() {

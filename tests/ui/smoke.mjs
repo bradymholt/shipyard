@@ -35,7 +35,7 @@ function pr(number, extra = {}) {
   const author = extra.author || "me";
   return {
     id: `PR_o/r_${number}`, number, title: extra.title || `PR ${number}`, url: `https://github.com/o/r/pull/${number}`,
-    isDraft: !!extra.draft, createdAt: ago(100), updatedAt: extra.updated || ago(1), mergedAt: extra.mergedAt || null,
+    isDraft: !!extra.draft, createdAt: ago(100), updatedAt: extra.updated || "2026-10-20T10:00:00Z", mergedAt: extra.mergedAt || null,
     headRefName: extra.branch || `me/pr-${number}`, baseRefName: "main", headRefOid: `h${number}`,
     additions: 40, deletions: 12, changedFiles: 3, autoMergeRequest: null, labels: { nodes: [] },
     viewerCanEnableAutoMerge: true, viewerCanDisableAutoMerge: false, ...(extra.autoMerge && { autoMergeRequest: { enabledAt: ago(5) } }),
@@ -160,6 +160,22 @@ try {
     render();
   });
   check((await chipText(page, 108))?.includes("Checking"), "a change the companion hasn't seen yet shows Checking…");
+  await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    const pr = state.prs.find((p) => p.number === 108);
+    const cp = state.companionState.prs["o/r#108"];
+    pr.updatedAt = cp.updated;
+    pr.commits.nodes[0].commit.statusCheckRollup = { state: "FAILURE", contexts: { nodes: [] } };
+    cp.ci = "PENDING";
+    render();
+  });
+  check((await chipText(page, 108))?.includes("Checking"), "a CI result the companion hasn't seen yet shows Checking…");
+  check(await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    state.companionState.prs["o/r#108"].updated = "2099-01-01T00:00:00Z";
+    render();
+    return state.loading;
+  }), "a change the companion saw first refreshes the page's GitHub data");
   check(await page.locator('.card[data-key^="o/r#10"] .review-badge.changes').count() === 0, "no standalone Changes requested badge");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
