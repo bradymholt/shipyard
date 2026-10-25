@@ -91,6 +91,13 @@ const REVIEWED_MERGED = [pr(97, { author: "cy", title: "Merged with a reply", me
 
 function answer(body) {
   const q = body.variables?.q || "";
+  if (body.query.includes("nodes(ids:")) {
+    const all = [...MINE, ...REQUESTED, ...REVIEWED, ...MERGED, ...REVIEWED_MERGED];
+    return { nodes: body.variables.ids.map((id) => {
+      const found = all.find((p) => p.id === id);
+      return found && { ...found, state: found.mergedAt ? "MERGED" : "OPEN" };
+    }) };
+  }
   if (body.query.includes("node(id:")) {
     return { node: {
       files: { totalCount: 3, nodes: [{ path: "app/webhooks/sender.py", additions: 30, deletions: 8 },
@@ -133,8 +140,12 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }) 
     localStorage.setItem("ghpr.repos", JSON.stringify(["o/r"]));
     localStorage.setItem("ghpr.currentRepo", "o/r");
   });
-  await context.route("https://api.github.com/graphql", (route) =>
-    route.fulfill({ json: { data: answer(JSON.parse(route.request().postData())) } }));
+  const queries = [];
+  await context.route("https://api.github.com/graphql", (route) => {
+    const body = JSON.parse(route.request().postData());
+    queries.push(body);
+    return route.fulfill({ json: { data: answer(body) } });
+  });
   await context.route("https://avatars.example/**", (route) => route.fulfill({ status: 404, body: "" }));
   await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ body: "" }));
   const page = await context.newPage();
@@ -143,7 +154,7 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }) 
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto(`http://localhost:${port}/`);
   await page.waitForSelector(".card[data-key]");
-  return { page, errors, context };
+  return { page, errors, context, queries };
 }
 
 const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row .next-label`).first().textContent().catch(() => null);
@@ -155,7 +166,7 @@ try {
   const browser = await chromium.launch();
 
   console.log("companion mode");
-  const { page, errors } = await openPage(browser, COMPANION_PORT);
+  const { page, errors, queries } = await openPage(browser, COMPANION_PORT);
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
@@ -178,12 +189,15 @@ try {
     render();
   });
   check((await chipText(page, 108))?.includes("Checking"), "a CI result the companion hasn't seen yet shows Checking…");
-  check(await page.evaluate(() => {
+  await page.evaluate(() => {
     const { state, render } = window.__dashboard;
     state.companionState.prs["o/r#108"].updated = "2099-01-01T00:00:00Z";
     render();
-    return state.loading;
-  }), "a change the companion saw first refreshes the page's GitHub data");
+  });
+  const reread = () => queries.some((b) => b.variables?.ids?.includes("PR_o/r_108"));
+  for (let i = 0; i < 250 && !reread(); i++) await new Promise((r) => setTimeout(r, 100));
+  check(reread(), "a change the companion saw first refreshes the page's GitHub data");
+  check(queries.filter((b) => b.variables?.q).length === 5, "and re-reads it by id instead of searching again");
   check(await page.locator('.card[data-key^="o/r#10"] .review-badge.changes').count() === 0, "no standalone Changes requested badge");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");

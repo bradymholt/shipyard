@@ -135,6 +135,13 @@ class CompanionCase(unittest.TestCase):
         self.fail("passes did not finish")
 
 
+class PageState(CompanionCase):
+    def test_carries_pr_state_and_open_thread_count_for_the_page(self):
+        self.gh.put(pr_node(threads=[{"body": "a"}, {"body": "b", "resolved": True}]), "author:@me")
+        pr = self.poll()["o/r#1"]
+        self.assertEqual((pr["state"], pr["dropped"], pr["openThreads"]), ("OPEN", False, 1))
+
+
 class ChangesRequested(CompanionCase):
     def setUp(self):
         super().setUp()
