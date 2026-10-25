@@ -494,7 +494,7 @@ class Companion:
             self.db.log(snap["key"], f"tried to {action.replace('_', ' ')} automatically: {e}")
             return False
         self.db.count_auto_run(snap["key"], action)
-        self.db.log(snap["key"], f"{result}: {reason}" if reason else result)
+        self.db.log(snap["key"], f"{result} automatically: {reason}" if reason else f"{result} automatically")
         self.db.update_card(card_id, status="handled", handled={
             "action": action, "result": result, "reason": reason, "payload": payload,
             "undoable": action in actions.UNDOABLE, "flag": flag})
