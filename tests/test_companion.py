@@ -205,6 +205,19 @@ class ChangesRequested(CompanionCase):
         node["updatedAt"] = "2026-10-21T00:00:00Z"
         self.assertEqual(self.poll()["o/r#1"]["cards"], [])
 
+    def test_approval_comments_outlast_an_auto_merge_until_answered(self):
+        node = pr_node(requested=["rev"])
+        self.gh.put(node, "author:@me")
+        self.poll()
+        node.update(state="MERGED", reviewDecision="APPROVED", updatedAt="2026-10-21T00:00:00Z",
+                    latestReviews={"nodes": [{"databaseId": 7, "state": "APPROVED", "body": "I'd prefer a Map here",
+                                              "submittedAt": "2026-10-21T00:00:00Z", "author": {"login": "rev"},
+                                              "commit": {"oid": "aaa"}}]})
+        self.gh.put(node)
+        self.assertEqual([c["pass"] for c in self.poll()["o/r#1"]["cards"]], ["changes_requested"])
+        node["comments"] = {"nodes": [{"createdAt": "2026-10-21T01:00:00Z", "author": {"login": "me"}}]}
+        self.assertEqual(self.poll()["o/r#1"]["cards"], [])
+
 
 class CiFailed(CompanionCase):
     def setUp(self):

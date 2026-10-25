@@ -133,7 +133,7 @@ def raw_event_text(name, snap):
     """What to paste into a session yourself when Shipyard can't run the pass."""
     head = f"{snap['repo']}#{snap['number']} {snap['url']}"
     if name == "changes_requested":
-        return f"Changes were requested on {head}. Feedback:\n{feedback_text(snap)}"
+        return f"Review feedback on {head}:\n{feedback_text(snap)}"
     if name == "ci_failed":
         checks = ", ".join(c["name"] for c in snap.get("failing") or []) or "checks"
         return f"CI failed on {head}: {checks}. Find the cause and fix it."

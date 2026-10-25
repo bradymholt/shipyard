@@ -141,8 +141,9 @@ class Companion:
                     self.db.update_card(card["id"], status="done")
             self.ingest(snap)
         for snap in self.db.prs():
-            if snap.get("state") == "OPEN" and not snap.get("dropped"):
+            if snap.get("state") == "MERGED" or snap.get("state") == "OPEN" and not snap.get("dropped"):
                 self.resolve_stale_cards(snap)
+            if snap.get("state") == "OPEN" and not snap.get("dropped"):
                 # A running pass's transcript would win the "latest session" fallback.
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
@@ -181,7 +182,8 @@ class Companion:
                                 reaction["reason"], source="rule")
         elif do == "close_cards":
             for card in self.db.cards(key, ("open",)):
-                if not reaction.get("kinds") or card.get("pass") in reaction["kinds"]:
+                if ((not reaction.get("kinds") or card.get("pass") in reaction["kinds"]) and
+                        card.get("pass") not in reaction.get("except", ())):
                     self.db.update_card(card["id"], status="done")
         elif do == "review_worktree":
             result = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots)

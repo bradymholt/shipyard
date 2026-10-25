@@ -55,6 +55,8 @@ def main():
     gh.put(pr_node(109, head="h109", branch="me/lookups", decision="APPROVED",
                    reviews=[{"state": "APPROVED", "author": "jm", "body": "Approving, though I'd prefer a Map here."}]),
            "author:@me")
+    lookups = pr_node(98, head="h98", branch="me/merge-on-approval", requested=["jm"])
+    gh.put(lookups, "author:@me")
     gh.put(pr_node(104, head="h104", branch="me/onboarding", draft=True, committed=ago(days=5),
                    updated=ago(days=5)), "author:@me")
     gh.put(pr_node(105, head="h105", branch="me/auth", requested=["jm"], requested_at={"jm": ago(hours=30)},
@@ -125,6 +127,12 @@ def main():
                                                                         if "." not in name else {})).start()
 
     comp = Companion(validate_config({"rules": {"passes": {"changes_requested": "auto"}}}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
+    comp.poll_once()
+    lookups.update(state="MERGED", reviewDecision="APPROVED", updatedAt=ago(minutes=10),
+                   latestReviews={"nodes": [{"databaseId": 98, "state": "APPROVED", "submittedAt": ago(minutes=10),
+                                             "body": "Approving, though I'd prefer a Map here.",
+                                             "author": {"login": "jm"}, "commit": {"oid": "h98"}}]})
+    gh.put(lookups)
     comp.poll_once()
     Handler.roots = [str(tmp / "dev")]
     Handler.config = comp.config

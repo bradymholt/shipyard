@@ -77,7 +77,9 @@ const REVIEWED = [pr(202, { author: "bob", title: "Export to CSV", requested: ["
     myReview: { state: "COMMENTED", commit: { oid: "h203" }, onBehalfOf: { nodes: [] } } }),
   pr(204, { author: "di", title: "Drive-by comment",
     myReview: { state: "COMMENTED", commit: { oid: "h204" }, onBehalfOf: { nodes: [] } } })];
-const MERGED = [pr(99, { title: "Old feature", branch: "me/old-feature", mergedAt: ago(20) })];
+const MERGED = [pr(99, { title: "Old feature", branch: "me/old-feature", mergedAt: ago(20) }),
+  pr(98, { title: "Auto-merged on approval", decision: "APPROVED", mergedAt: ago(10),
+    reviews: [["APPROVED", "jm", "Approving, though I'd prefer a Map here."]] })];
 
 function answer(body) {
   const q = body.variables?.q || "";
@@ -159,6 +161,15 @@ try {
   check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
   check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
+  check((await chipText(page, 98))?.includes("Reply to approval · 1"), "merged before you answered the approval → Reply to approval");
+  check(await page.locator('.card[data-key="o/r#99"] .next-row').count() === 0, "a merged card without approval comments gets no chip");
+  await page.locator('.card[data-key="o/r#98"] .next-row').click();
+  await page.waitForSelector("#sidebar .next-card");
+  check((await page.locator("#sidebar").locator(".next-card").first().textContent()).includes("I'd prefer a Map") &&
+    await page.locator("#sidebar").locator('[data-pr-action="rerequest_review"]').count() === 0,
+    "a merged PR keeps its approval feedback card, without re-request");
+  if (shots) await page.screenshot({ path: `${shots}/sidebar-merged-approval.png` });
+  await page.keyboard.press("Escape");
   check((await page.locator("#companion-status").textContent()).includes("watching your PRs"), "footer shows the companion watching");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
