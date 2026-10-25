@@ -378,6 +378,8 @@ class Reviews(CompanionCase):
         self.assertEqual(len(posted), 1)
         self.assertEqual(posted[0][2]["event"], "APPROVE")
         self.assertNotIn("body", posted[0][2])
+        self.assertIn("approved automatically: threads fixed",
+                      [a["text"] for a in self.comp.page_state()["prs"]["o/r#7"]["activity"]])
 
     def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None, auto_approve=None):
         self.trust("approve_rereview")
