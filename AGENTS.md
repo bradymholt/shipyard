@@ -63,7 +63,9 @@ and size of nearby elements so new pieces don't outshout existing ones (e.g. row
 Ship each change end to end without being asked: commit to a feature branch, open a PR, and
 merge it with `gh pr merge --squash`. An unmerged PR is an unshipped change, and merging is the
 standing instruction, not something to ask about. There is no CI, so check the change yourself
-before merging: run the unit tests, and the browser smoke test for page changes. Keep
+before merging: run the unit tests, and the browser smoke test for page changes. Run the smoke test once, after the change is
+done; while a new check is failing, debug it with a short script that runs just that check, not
+the full suite. Keep
 unrelated work out of the commit, and stop rather than merge when something looks wrong.
 
 The local companion serves `index.html` from the main checkout, so a merge reaches it only
