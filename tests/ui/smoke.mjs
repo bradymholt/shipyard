@@ -239,7 +239,8 @@ try {
   check(steps > 0 && badge === String(steps) && lanes === steps, "the My PRs badge and lane headers count the Next steps on the board");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
-  await page.locator('.card[data-key="o/r#101"] .card-meta').click();
+  check(await page.locator('.card[data-key="o/r#101"] .wt-links a[title="Open on GitHub"]').count() === 1, "a card has an Open on GitHub icon");
+  await page.locator('.card[data-key="o/r#101"] .card-title').click();
   await page.waitForSelector("#sidebar .next-card");
   const sb = page.locator("#sidebar");
   check(await sb.isVisible(), "clicking a card opens the sidebar");

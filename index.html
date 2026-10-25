@@ -394,6 +394,7 @@
     border-radius: 0.5rem;
     padding: 0.5rem 0.625rem;
   }
+  .card[data-key] { cursor: pointer; }
   .card:has(.wt-link.current) { border: 1px solid var(--green); }
   .card.draft { background: var(--bg); border-style: dashed; border-color: var(--border-dashed); }
   .card.merged { background: var(--bg); opacity: .75; }
@@ -945,6 +946,7 @@
     comment: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
     changes: '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.72 3.22a.75.75 0 0 1 1.06 1.06L2.06 8l3.72 3.72a.75.75 0 1 1-1.06 1.06L.47 8.53a.75.75 0 0 1 0-1.06Zm6.56 0a.75.75 0 1 0-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 1 0 1.06 1.06l4.25-4.25a.75.75 0 0 0 0-1.06Z"/></svg>',
   };
+  const GITHUB_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>';
   const LAUNCH_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M9 1h6v6h-1.5V3.56L7.53 9.53 6.47 8.47 12.44 2.5H9V1ZM2.75 3.5H7V5H2.75a.25.25 0 0 0-.25.25v8c0 .138.112.25.25.25h8a.25.25 0 0 0 .25-.25V9H14.5v4.25A1.75 1.75 0 0 1 12.75 15h-8A1.75 1.75 0 0 1 3 13.25v-8A1.75 1.75 0 0 1 4.75 3.5Z"/></svg>';
   // A stylized tree — trunk, two limbs, three canopy nodes — for anything that lands a
   // branch in a worktree.
@@ -1604,21 +1606,24 @@
       : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${inner}</a>`;
   }
 
+  function githubLink(pr) {
+    return `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}</a>`;
+  }
+
   // A merged PR's branch may still be checked out locally, with a session worth
   // returning to for follow-up ideas left in review. Offer only what already exists:
   // no checking out or moving a branch that's done.
   function mergedWorktreeLinks(pr) {
-    if (!state.companion) return "";
-    const wt = worktreeFor(pr);
-    if (!wt) return "";
-    return `<div class="card-icons"><span class="wt-links">${agentButton(pr, wt)}${openCheckoutButton(wt)}</span></div>`;
+    const wt = state.companion ? worktreeFor(pr) : null;
+    const local = wt ? `${agentButton(pr, wt)}${openCheckoutButton(wt)}` : "";
+    return `<div class="card-icons"><span class="wt-links">${githubLink(pr)}${local}</span></div>`;
   }
 
   function worktreeLinks(pr) {
     // A single "Open" control; where it opens (and how it
     // looks) depends on where the branch is checked out. It runs through the
     // companion, so nothing shows without it.
-    if (!state.companion) return "";
+    if (!state.companion) return `<span class="wt-links">${githubLink(pr)}</span>`;
     const repoName = pr.repository?.nameWithOwner || "";
     const repo = esc(repoName);
     const branch = esc(pr.headRefName);
@@ -1627,13 +1632,13 @@
     // Already checked out somewhere → open that checkout directly. Green marks the
     // one that's the main repo's current branch.
     if (wt) {
-      return `<span class="wt-links">${agentButton(pr, wt)}${openCheckoutButton(wt)}</span>`;
+      return `<span class="wt-links">${githubLink(pr)}${agentButton(pr, wt)}${openCheckoutButton(wt)}</span>`;
     }
 
     // A review worktree is detached, so it has no branch entry in worktrees.json.
     const cp = companionPr(pr);
     if (cp?.path) {
-      return `<span class="wt-links">${agentButton(pr, null)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
+      return `<span class="wt-links">${githubLink(pr)}${agentButton(pr, null)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo
@@ -1643,7 +1648,7 @@
     const mainBtn = mainWt && mainWt.dirty
       ? `<button class="wt-link wt-main blocked" disabled title="${esc(`Can't check out here — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`)}">${LAUNCH_ICON}</button>`
       : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main clone and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
-    return `<span class="wt-links">${mainBtn}${agentButton(pr, null)}</span>`;
+    return `<span class="wt-links">${githubLink(pr)}${mainBtn}${agentButton(pr, null)}</span>`;
   }
 
   // Where the owner/repo link goes: on My PRs, your authored PRs; on Reviews, the
@@ -1672,7 +1677,7 @@
   function mergedCard(pr) {
     return `
       <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}">
-        <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
+        <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><span>${fmtTitle(pr.title)}</span></div>
         <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
         ${mergedWorktreeLinks(pr)}
         ${nextRowHtml(pr)}
@@ -1846,7 +1851,7 @@
     const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
     return `
       <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
-        <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}${labels}</div>
+        <div class="card-title">${fmtTitle(pr.title)}${draft}${labels}</div>
         <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
@@ -2630,7 +2635,6 @@
   let sessionChoices = null;      // { key, sessions } while the re-pin picker is open
   let lastSidebarHtml = "";
   const CLOSE_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>';
-  const GITHUB_ICON = '<svg viewBox="0 0 16 16" width="15" height="15"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>';
   const ACTION_LABELS = {
     rerun_checks: "Re-run failed jobs", apply_fix: "Apply fix and push", post_reply: "Post reply",
     approve: "Approve", comment_unresolved: "Comment on unresolved", submit_review: "Submit as review",
