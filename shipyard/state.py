@@ -140,6 +140,10 @@ class State:
         except sqlite3.IntegrityError:
             return False
 
+    def head_seen_at(self, key, head):
+        rows = self._rows("SELECT MIN(at) AS at FROM events WHERE key = ? AND head = ?", (key, head or ""))
+        return rows[0]["at"] if rows else None
+
     # ---- pins and snoozes
     def pin(self, key):
         rows = self._rows("SELECT * FROM pins WHERE key = ?", (key,))

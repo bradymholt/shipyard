@@ -29,6 +29,8 @@ AUTO_POLICY = {
     "approve": {"sources": {"re_review"}, "mine": False},
 }
 LIVE_CACHE_SECONDS = 15
+# An approval seconds after a push reads as one nobody looked at.
+APPROVE_MIN_WAIT = timedelta(minutes=3)
 
 PASS_ACTIVITY = {
     "feedback": "asked for a plan",
@@ -168,6 +170,7 @@ class Companion:
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
+        self.retry_waiting_approvals()
         self.db.prune()
         self.status = {"github": "ok", "lastPoll": now_iso()}
         self.publish()
@@ -484,6 +487,12 @@ class Companion:
                 self.db.update_card(card_id, auto_held=held)
             return False
         if action == "approve":
+            ready_at = self.approve_ready_at(snap)
+            if ready_at > datetime.now(timezone.utc):
+                self.db.update_card(card_id, auto_wait={
+                    "until": ready_at.strftime("%Y-%m-%dT%H:%M:%SZ"), "action": action,
+                    "confidence": confidence, "reason": reason, "source": source})
+                return False
             payload = {}  # an automatic approval carries no words you haven't read
         if not self.db.claim_card(card_id):
             return False
@@ -500,6 +509,19 @@ class Companion:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
+
+    def approve_ready_at(self, snap):
+        seen = self.db.head_seen_at(snap["key"], snap.get("head")) or now_iso()
+        return datetime.fromisoformat(seen.replace("Z", "+00:00")) + APPROVE_MIN_WAIT
+
+    def retry_waiting_approvals(self):
+        now = now_iso()
+        for card in self.db.cards(statuses=("open",)):
+            wait = card.get("auto_wait")
+            if wait and wait["until"] <= now:
+                self.db.update_card(card["id"], auto_wait=None)
+                self.maybe_auto(card["id"], wait["action"], {}, wait["confidence"],
+                                wait["reason"], wait["source"])
 
     def note_unapproved(self, card_id, snap, proposals):
         """With auto-approve on, a re-review that proposed no approval says so on its card."""
@@ -721,7 +743,7 @@ class Companion:
     def card_view(self, card):
         view = {k: card.get(k) for k in ("id", "status", "kind", "pass", "action", "title", "summary",
                                          "proposals", "payload", "raw", "error", "handled", "created",
-                                         "question", "addressed", "total", "result", "auto_held")}
+                                         "question", "addressed", "total", "result", "auto_held", "auto_wait")}
         view["kept"] = ({"path": card["kept_path"], "session": card.get("session_id"), "fork": card.get("mode") == "fork"}
                         if card.get("kept_path") else None)
         return view
