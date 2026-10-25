@@ -212,6 +212,16 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-review.png` });
   await page.keyboard.press("Escape");
   check(!(await sb.isVisible()), "Esc closes the sidebar");
+  await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    const pr = state.prs.find((p) => p.number === 201) || state.reviewedPrs.find((p) => p.number === 201);
+    const done = { ...pr, reviewRequests: { nodes: [] },
+      viewerLatestReview: { state: "APPROVED", commit: { oid: "h201" }, onBehalfOf: { nodes: [] } } };
+    state.prs = state.prs.map((p) => p.number === 201 ? done : p);
+    state.reviewedPrs = [...state.reviewedPrs.filter((p) => p.number !== 201), done];
+    render();
+  });
+  check(await page.locator('.card[data-key="o/r#201"] .next-row').count() === 0, "a submitted review drops the leftover Pre-review");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
   console.log("narrow window");
