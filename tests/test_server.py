@@ -82,7 +82,6 @@ class Endpoints(ServerCase):
         self.assertEqual(cfg["companionToken"], "tok")
         self.assertTrue(cfg["orchestrator"])
         self.assertEqual(cfg["rules"]["nudge"], {"after_hours": 24})
-        self.assertEqual(cfg["locked"], ["post_reply"])
 
     def test_state_and_host_check(self):
         status, state = self.request("GET", "/companion/state")

@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from shipyard.config import update_config, validate_auto, validate_config, validate_rules
+from shipyard.config import validate_auto, validate_config, validate_rules
 from shipyard.poll import Poller, signature, snapshot
 
 from fixtures import VIEWER, check_run, pr_node
@@ -52,22 +52,6 @@ class Config(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_config({"agent": {"prompt_url": "claude://code/new"}})
 
-    def test_update_config_keeps_other_settings_and_refuses_invalid(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "shipyard.config.json")
-            with open(path, "w") as fh:
-                json.dump({"roots": ["~/dev"]}, fh)
-            cfg = update_config("auto", "rerun_checks", {"when": "confidence >= high"}, path)
-            self.assertEqual(cfg["auto"]["rerun_checks"]["min_confidence"], "high")
-            update_config("rules", "passes.ci_failed", "ask", path)
-            with open(path) as fh:
-                saved = json.load(fh)
-            self.assertEqual(saved["roots"], ["~/dev"])
-            self.assertEqual(saved["rules"], {"passes": {"ci_failed": "ask"}})
-            with self.assertRaises(ValueError):
-                update_config("auto", "post_reply", True, path)
-            with open(path) as fh:
-                self.assertNotIn("post_reply", json.load(fh)["auto"])
 
 
 class Snapshot(unittest.TestCase):

@@ -1,6 +1,6 @@
 """The companion's memory, in one SQLite file next to shipyard.config.json: the last
 snapshot of each PR, events already handled, pins, snoozes, cards, passes, activity,
-and the click counts behind the trust ladder."""
+and how often each action ran automatically on each PR."""
 import json
 import sqlite3
 import threading
@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS passes (
   summary TEXT, created TEXT NOT NULL, finished TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS passes_once ON passes (key, name, head) WHERE name != 'ask';
 CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY, key TEXT NOT NULL, at TEXT NOT NULL, text TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS clicks (action TEXT PRIMARY KEY, count INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS auto_runs (key TEXT NOT NULL, action TEXT NOT NULL, count INTEGER NOT NULL,
   PRIMARY KEY (key, action));
 CREATE INDEX IF NOT EXISTS cards_key ON cards (key, status);
@@ -58,6 +57,7 @@ class State:
                                 "'Interrupted by a restart.') WHERE id = ? AND status = 'open' "
                                 "AND json_extract(data, '$.kind') = 'running'", (row[0],))
             self.db.execute("UPDATE cards SET status = 'open' WHERE status = 'acting'")
+            self.db.execute("DROP TABLE IF EXISTS clicks")
             # The feedback pass and its events were once named "changes_requested".
             for old, new in (("changes_requested", "feedback"), ("pushed_after_changes_requested", "pushed_after_feedback")):
                 for table in ("events", "passes"):
@@ -252,14 +252,6 @@ class State:
     def activity(self, key, limit=30):
         return list(reversed(self._rows("SELECT at, text FROM activity WHERE key = ? ORDER BY id DESC LIMIT ?",
                                         (key, limit))))
-
-    def click(self, action):
-        self._exec("INSERT INTO clicks (action, count) VALUES (?, 1) "
-                   "ON CONFLICT(action) DO UPDATE SET count = count + 1", (action,))
-
-    def clicks(self, action):
-        rows = self._rows("SELECT count FROM clicks WHERE action = ?", (action,))
-        return rows[0]["count"] if rows else 0
 
     def auto_runs(self, key, action):
         rows = self._rows("SELECT count FROM auto_runs WHERE key = ? AND action = ?", (key, action))

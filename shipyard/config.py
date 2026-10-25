@@ -28,7 +28,6 @@ import json
 import os
 import shutil
 import sys
-import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -285,38 +284,7 @@ def load_config(path=CONFIG_PATH):
     return cfg
 
 
-_write_lock = threading.Lock()
-
-
-def update_config(section, name, value, path=CONFIG_PATH):
-    """Set one entry of "rules" or "auto" (from a card's toggle) and return the
-    validated config. The file is rewritten only when the result still validates."""
-    with _write_lock:
-        try:
-            with open(path) as fh:
-                raw = json.load(fh)
-        except FileNotFoundError:
-            raw = {}
-        updated = dict(raw)
-        entries = dict(updated.get(section) or {})
-        if section == "rules" and name.startswith("passes."):
-            passes = dict(entries.get("passes") or {})
-            passes[name.split(".", 1)[1]] = value
-            entries["passes"] = passes
-        else:
-            entries[name] = value
-        updated[section] = entries
-        cfg = validate_config(updated)
-        tmp = f"{path}.tmp"
-        with open(tmp, "w") as fh:
-            json.dump(updated, fh, indent=2)
-            fh.write("\n")
-        os.replace(tmp, path)
-        return cfg
-
-
 def page_config(cfg):
-    """The parts of the config the page needs to render chips and toggles."""
+    """The parts of the config the page needs."""
     return {"launcher": cfg["launcher"], "agent": cfg["agent"], "rules": cfg["rules"],
-            "auto": {k: bool(v) for k, v in cfg["auto"].items()},
-            "locked": sorted(HARD_LOCKED)}
+            "auto": {k: bool(v) for k, v in cfg["auto"].items()}}
