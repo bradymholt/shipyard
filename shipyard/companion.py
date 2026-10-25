@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import actions, passes, rules, worktrees
 from .agents import AgentError, adapter_for, read_text
-from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config, update_config
+from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config
 from .events import derive
 from .github import GitHub, GitHubError
 from .poll import Poller
@@ -28,7 +28,6 @@ AUTO_POLICY = {
     "enable_auto_merge": {"sources": {"feedback", "ci_failed"}, "mine": True},
     "approve": {"sources": {"re_review"}, "mine": False},
 }
-TRUST_OFFER_AFTER = 3  # manual clicks on one action type before the card offers "do this automatically"
 LIVE_CACHE_SECONDS = 15
 
 PASS_ACTIVITY = {
@@ -527,7 +526,6 @@ class Companion:
             requested = snap.get("requested") or []
             snap["requested"] = requested + [r for r in payload.get("reviewers") or [] if r not in requested]
             self.db.save_pr(snap)
-        self.db.click(action)
         self.db.log(key, result)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
@@ -643,18 +641,6 @@ class Companion:
         self.publish()
         return {"ok": True}
 
-    def set_trust(self, flag, on):
-        if flag in HARD_LOCKED and on:
-            raise ValueError(f"{flag} posts under your name, so it stays manual.")
-        self.config = update_config("auto", flag, {"when": "confidence >= high", "max_per_pr": 2} if on else False)
-        self.publish()
-        return {"ok": True}
-
-    def set_rule(self, name, value):
-        self.config = update_config("rules", name, value)
-        self.publish()
-        return {"ok": True}
-
     # ---------- the page's view
     def is_live(self, path, session_id):
         now = time.time()
@@ -690,16 +676,6 @@ class Companion:
                                          "question", "addressed", "total", "result")}
         view["kept"] = ({"path": card["kept_path"], "session": card.get("session_id"), "fork": card.get("mode") == "fork"}
                         if card.get("kept_path") else None)
-        offers = []
-        for p in (card.get("proposals") or []) + ([{"action": card["action"], "payload": card.get("payload")}]
-                                                   if card.get("action") else []):
-            flag = actions.TRUST_FLAG.get(p["action"])
-            if (flag and flag not in HARD_LOCKED and not self.config["auto"].get(flag) and
-                    self.db.clicks(p["action"]) >= TRUST_OFFER_AFTER and
-                    (p["action"] != "apply_fix" or (p.get("payload") or {}).get("diff")) and
-                    (p["action"] != "approve" or card.get("pass") == "re_review")):
-                offers.append(flag)
-        view["trustOffers"] = sorted(set(offers))
         return view
 
     def page_state(self):

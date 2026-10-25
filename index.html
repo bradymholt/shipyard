@@ -553,7 +553,6 @@
   .nc-actions button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
   .nc-actions .nc-quiet { border: none; background: none; color: var(--fg-muted); padding: 0.1875rem 0.25rem; }
   .nc-actions .nc-quiet:hover { color: var(--fg); }
-  .nc-trust { display: flex; align-items: center; gap: 0.375rem; margin-top: 0.375rem; font-size: 0.6875rem; color: var(--fg-muted); }
   .nc-inline { list-style: none; margin: 0.25rem 0; padding: 0; font-size: 0.75rem; }
   .nc-inline li { margin: 0.125rem 0; }
   .nc-inline code { font: 500 0.6875rem var(--mono); color: var(--teal); }
@@ -2505,10 +2504,6 @@
   const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review", "nudge", "approve"]);
   const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
   const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
-  const TRUST_LABELS = {
-    rerun_checks: "re-run failed jobs when it looks flaky", 
-    enable_auto_merge: "enable auto-merge", approve_rereview: "approve a re-review", apply_fix: "apply small fixes",
-  };
   const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
     latest: "latest in the checkout", manual: "picked by you", shipyard: "started by Shipyard", review: "review worktree" };
 
@@ -2704,19 +2699,10 @@
       </div>`;
   }
 
-  function trustToggles(card) {
-    return (card.trustOffers || []).map((flag) =>
-      `<label class="nc-trust"><input type="checkbox" data-trust="${esc(flag)}"> Do this automatically when ${esc(agentName())} is confident: ${esc(TRUST_LABELS[flag] || flag)}</label>`
-    ).join("");
-  }
-
   function companionCardHtml(pr, card, first) {
     const cls = `next-card${first ? " first" : ""}`;
     const dismiss = `<button type="button" class="sb-close nc-x" data-dismiss="${card.id}" title="Dismiss" aria-label="Dismiss">${CLOSE_ICON}</button>`;
     const title = esc(PASS_LABELS[card.pass] || card.title || "Next");
-    const passMode = card.pass && state.rules?.passes?.[card.pass];
-    const onlyAsk = card.pass && card.pass !== "ask" && passMode === "auto"
-      ? `<button type="button" class="nc-quiet" data-only-ask="${esc(card.pass)}" title="Stop running this pass on its own; offer it here instead">Only run when I ask</button>` : "";
     const viewLog = card.pass === "ci_failed" && failingChecks(pr)[0]?.url
       ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "";
     // Whether a re-run makes sense can hinge on what only you know (say, you freed a quota).
@@ -2741,7 +2727,7 @@
       return `<div class="${cls}"><div class="nc-head">${esc(card.title)}${dismiss}</div>
         <p class="nc-reason">${esc(card.summary || "")}</p>
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
-          <button type="button" data-dismiss="${card.id}">Dismiss</button></div>${trustToggles(card)}</div>`;
+          <button type="button" data-dismiss="${card.id}">Dismiss</button></div></div>`;
     }
     const chip = card.pass === "feedback"
       ? companionSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
@@ -2752,7 +2738,7 @@
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}
       <p>${esc(card.summary || "")}</p>${proposals}
-      ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}${onlyAsk}</div>`}${trustToggles(card)}</div>`;
+      ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
   }
 
   function rerequestButton(reviewers, cardId) {
@@ -2768,7 +2754,6 @@
     const field = `d-${key}-${chip.kind}`;
     const run = (action, label, cls = "") => `<button type="button" class="nc-run ${cls}" data-pr-action="${esc(action)}" data-field="${esc(field)}">${esc(label)}</button>`;
     const rerequest = rerequestButton(chip.reviewers);
-    const off = `<button type="button" class="nc-quiet" data-chip-off="${esc(chip.rule || chip.kind)}" title="Hide this chip on every card">Turn off this chip</button>`;
     let body = "";
     let actionsHtml = "";
     if (chip.kind === "merge") {
@@ -2797,7 +2782,7 @@
       return "";
     }
     return `<div class="next-card first"><div class="nc-head">${esc(chip.label)}</div><p class="nc-reason">${esc(body)}</p>
-      <div class="nc-actions">${actionsHtml}${off}</div></div>`;
+      <div class="nc-actions">${actionsHtml}</div></div>`;
   }
 
   function nextSection(pr) {
@@ -2820,7 +2805,6 @@
       const h = c.handled || {};
       return `<div class="sb-handled"><strong>Handled:</strong> ${esc(h.result || "")}${h.reason ? ` — ${esc(h.reason)}` : ""}
         ${h.undoable ? `<button type="button" data-undo="${c.id}">Undo</button>` : ""}
-        <button type="button" data-trust-off="${esc(h.flag || "")}" title="Back to asking first">Stop doing this automatically</button>
         <button type="button" data-dismiss="${c.id}">OK</button></div>`;
     }).join("");
     let snooze = "";
@@ -2975,8 +2959,6 @@
     if (t.dataset.snooze !== undefined && t.value !== "") {
       const hours = Number(t.value) || null;
       await busy(null, () => companionCall(`companion/snooze?key=${encodeURIComponent(t.dataset.snooze)}`, { hours }));
-    } else if (t.dataset.trust) {
-      await busy(null, () => companionCall(`companion/trust?flag=${encodeURIComponent(t.dataset.trust)}&on=${t.checked ? 1 : 0}`));
     }
   });
 
@@ -3024,17 +3006,6 @@
     }
     if ((btn = t("[data-dismiss]"))) return busy(btn, () => companionCall(`companion/dismiss?card=${btn.dataset.dismiss}`));
     if ((btn = t("[data-undo]"))) return busy(btn, () => companionCall(`companion/undo?card=${btn.dataset.undo}`), "Couldn't undo");
-    if ((btn = t("[data-trust-off]"))) {
-      if (!btn.dataset.trustOff) return;
-      return busy(btn, () => companionCall(`companion/trust?flag=${encodeURIComponent(btn.dataset.trustOff)}&on=0`));
-    }
-    if ((btn = t("[data-only-ask]"))) {
-      return busy(btn, () => companionCall(`companion/rule?name=${encodeURIComponent(`passes.${btn.dataset.onlyAsk}`)}`, { value: "ask" }));
-    }
-    if ((btn = t("[data-chip-off]"))) {
-      if (!confirm("Hide this chip on every card? Set it back in shipyard.config.json under \"rules\".")) return;
-      return busy(btn, () => companionCall(`companion/rule?name=${encodeURIComponent(btn.dataset.chipOff)}`, { value: false }));
-    }
     if ((btn = t("[data-repin]"))) {
       return busy(btn, async () => {
         const res = await fetch(`companion/sessions?key=${encodeURIComponent(btn.dataset.repin)}`, { cache: "no-store" });

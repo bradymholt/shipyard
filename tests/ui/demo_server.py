@@ -129,9 +129,6 @@ def main():
         value = {"shipyard.companion.adapter_for": agent,
                  "shipyard.companion.worktrees.review_worktree": {"ok": True, "path": str(checkout)}}.get(target, wts)
         mock.patch(target, return_value=value).start()
-    mock.patch("shipyard.companion.update_config",
-               side_effect=lambda section, name, value: validate_config({section: {name: value}}
-                                                                        if "." not in name else {})).start()
 
     comp = Companion(validate_config({"rules": {"passes": {"feedback": "auto"}}}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
     comp.poll_once()

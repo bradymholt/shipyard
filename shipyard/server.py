@@ -32,7 +32,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       "/open-default-main", "/open-app", "/open-agent"}
     COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
-                         "/companion/trust", "/companion/rule", "/companion/pr-action",
+                         "/companion/pr-action",
                          "/companion/check-now"}
 
     def _json(self, obj, status=200):
@@ -194,8 +194,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "card-action": lambda c: c.card_action(card_id(), int(arg("index") or 0), body.get("payload")),
             "dismiss": lambda c: c.dismiss(card_id()),
             "undo": lambda c: c.undo(card_id()),
-            "trust": lambda c: c.set_trust(arg("flag"), arg("on") == "1"),
-            "rule": lambda c: c.set_rule(arg("name"), body.get("value")),
             "check-now": lambda c: c.check_now(),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),

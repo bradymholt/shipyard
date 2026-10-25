@@ -106,8 +106,6 @@ class CompanionCase(unittest.TestCase):
                 {"repo": "o/r", "branch": "feature", "path": self.checkout, "main": False}]),
             mock.patch("shipyard.companion.worktrees.review_worktree",
                        return_value={"ok": True, "path": self.checkout}),
-            mock.patch("shipyard.companion.update_config",
-                       side_effect=lambda section, name, value: self.reconfigure(section, name, value)),
         ]
         for p in patches:
             p.start()
@@ -117,9 +115,9 @@ class CompanionCase(unittest.TestCase):
         self.addCleanup(self.comp.db.close)
         self.addCleanup(self.comp.stop)
 
-    def reconfigure(self, section, name, value):
-        self.raw.setdefault(section, {})[name] = value
-        return validate_config(self.raw)
+    def trust(self, flag):
+        self.raw.setdefault("auto", {})[flag] = True
+        self.comp.config = validate_config(self.raw)
 
     def poll(self):
         self.comp.poll_once()
@@ -247,7 +245,7 @@ class CiFailed(CompanionCase):
         self.assertEqual(self.gh.calls[-1][1], "/repos/o/r/actions/runs/22/rerun-failed-jobs")
 
     def test_trusted_rerun_fires_itself_and_lands_in_handled(self):
-        self.comp.set_trust("rerun_checks", True)
+        self.trust("rerun_checks")
         self.gh.put(self.red(), "author:@me")
         pr = self.poll()["o/r#1"]
         self.assertIn(("POST", "/repos/o/r/actions/runs/22/rerun-failed-jobs", None), self.gh.calls)
@@ -256,7 +254,7 @@ class CiFailed(CompanionCase):
         self.assertFalse(pr["handled"][0]["handled"]["undoable"])
 
     def test_no_auto_action_when_the_card_closed_while_the_pass_ran(self):
-        self.comp.set_trust("rerun_checks", True)
+        self.trust("rerun_checks")
         node = self.red()
         self.gh.put(node, "author:@me")
 
@@ -269,7 +267,7 @@ class CiFailed(CompanionCase):
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["handled"], [])
 
     def test_no_auto_action_when_the_head_moved(self):
-        self.comp.set_trust("rerun_checks", True)
+        self.trust("rerun_checks")
         self.gh.put(self.red(), "author:@me")
 
         def pushed():
@@ -288,7 +286,7 @@ class CiFailed(CompanionCase):
         self.assertEqual(len([c for c in self.gh.calls if "rerun" in c[1]]), 1)
 
     def test_max_per_pr_caps_automatic_reruns(self):
-        self.comp.set_trust("rerun_checks", True)
+        self.trust("rerun_checks")
         for head in ("a1", "a2", "a3"):
             node = self.red(head)
             node["updatedAt"] = f"2026-10-2{head[-1]}T00:00:00Z"
@@ -296,16 +294,6 @@ class CiFailed(CompanionCase):
             self.poll()
         reruns = [c for c in self.gh.calls if c[0] == "POST" and "rerun" in c[1]]
         self.assertEqual(len(reruns), 2)
-
-    def test_trust_offer_after_three_manual_clicks(self):
-        self.gh.put(self.red(), "author:@me")
-        card = self.poll()["o/r#1"]["cards"][0]
-        self.assertEqual(card["trustOffers"], [])
-        for _ in range(3):
-            self.comp.do_action("o/r#1", "rerun_checks", {})
-        self.comp.db.update_card(card["id"], status="open")
-        card = self.comp.page_state()["prs"]["o/r#1"]["cards"][0]
-        self.assertEqual(card["trustOffers"], ["rerun_checks"])
 
     def test_ask_mode_offers_instead_of_running(self):
         self.raw = {"rules": {"passes": {"ci_failed": "ask"}}}
@@ -374,7 +362,7 @@ class Reviews(CompanionCase):
 
 
     def test_trusted_approve_only_from_re_review_and_without_agent_text(self):
-        self.comp.set_trust("approve_rereview", True)
+        self.trust("approve_rereview")
         self.agent.answers["first-pass code review"] = {"summary": "ok", "proposals": [
             {"action": "approve", "confidence": "high", "reason": "fine", "payload": {"body": "LGTM!!"}}]}
         self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
@@ -392,7 +380,7 @@ class Reviews(CompanionCase):
         self.assertNotIn("body", posted[0][2])
 
     def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None):
-        self.comp.set_trust("approve_rereview", True)
+        self.trust("approve_rereview")
         self.gh.compare = {"files": files}
         self.agent.answers = {"re-review": {"summary": "all addressed", "proposals": [
             {"action": "approve", "confidence": "high", "reason": "threads fixed"}]}}
@@ -427,7 +415,7 @@ class Reviews(CompanionCase):
             [{"filename": "new.py", "status": "added", "additions": 2, "deletions": 0}]))
 
     def test_trusted_actions_never_fire_on_someone_elses_pr(self):
-        self.comp.set_trust("rerun_checks", True)
+        self.trust("rerun_checks")
         self.agent.answers["re-review"] = {"summary": "flaky", "proposals": [
             {"action": "rerun_checks", "confidence": "high", "reason": "flaky"}]}
         review = {"databaseId": 9, "state": "COMMENTED", "submittedAt": "2026-10-19T00:00:00Z", "commit": {"oid": "old"}}
@@ -453,18 +441,6 @@ class Proposals(CompanionCase):
                        {"reviewers": ["jm"], "team_reviewers": []}), self.gh.calls)
         # the step goes at once, before a poll sees the request
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["steps"], [])
-
-    def test_re_request_never_offers_to_go_automatic(self):
-        node = pr_node(decision="CHANGES_REQUESTED", reviews=[{"state": "CHANGES_REQUESTED", "author": "jm"}])
-        self.gh.put(node, "author:@me")
-        self.poll()
-        for _ in range(3):
-            self.comp.db.click("rerequest_review")
-        node["headRefOid"] = "bbb"
-        self.gh.put(node, "author:@me")
-        proposal = next(c for c in self.poll()["o/r#1"]["cards"] if c["kind"] == "proposal")
-        self.assertEqual(proposal["trustOffers"], [])
-
 
 class Dropped(CompanionCase):
     def test_pr_that_leaves_every_list_is_read_once_then_left(self):
@@ -535,10 +511,6 @@ class PageRequests(CompanionCase):
         self.comp.run_pass_now("o/r#9", "new_session", "PR_o/r_9")
         self.idle()
         self.assertEqual(self.comp.db.pin("o/r#9")["session_id"], "fresh-1")
-
-    def test_post_reply_cannot_be_trusted(self):
-        with self.assertRaises(ValueError):
-            self.comp.set_trust("post_reply", True)
 
     def test_unknown_pr(self):
         with self.assertRaises(LookupError):
