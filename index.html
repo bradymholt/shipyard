@@ -575,6 +575,15 @@
   .sb-ask button { padding: 0.1875rem 0.625rem; font-size: 0.75rem; }
   .sb-handled { font-size: 0.75rem; color: var(--fg-muted); border-left: 2px solid var(--green); padding: 0.125rem 0 0.125rem 0.5rem; margin-bottom: 0.375rem; }
   .sb-handled button { padding: 0 0.375rem; font-size: 0.6875rem; margin-left: 0.25rem; }
+  .sb-auto { font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
+  .sb-auto label { display: flex; align-items: flex-start; gap: 0.375rem; font: 500 0.75rem var(--sans); cursor: pointer; }
+  .sb-auto input { margin: 0.1875rem 0 0; accent-color: var(--teal); }
+  .sb-auto .auto-why { color: var(--fg-muted); font: 500 0.6875rem var(--sans); }
+  .sb-auto details { color: var(--fg-muted); }
+  .sb-auto summary { cursor: pointer; font: 500 0.6875rem var(--sans); }
+  .sb-auto ul { margin: 0.25rem 0 0; padding-left: 1.125rem; }
+  .sb-auto li { margin: 0.125rem 0; }
+  .next-card .nc-held { color: var(--gold-text); font-size: 0.75rem; border-left: 2px solid var(--gold); padding-left: 0.5rem; }
   .sb-session { font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; }
   .sb-session .sess-title { font-weight: 600; font-size: 0.8125rem; }
   .sb-session .sess-meta { display: flex; align-items: center; gap: 0.375rem; color: var(--fg-muted); font: 500 0.6875rem var(--sans); flex-wrap: wrap; }
@@ -2789,8 +2798,9 @@
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
     const vi = verdictProposal(card);
     const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
+    const held = card.auto_held ? `<p class="nc-held">Auto-approve is on, but this one waits for you: ${esc(card.auto_held)}.</p>` : "";
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
-    return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}
+    return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
       ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${esc(card.summary || "")}</p>${proposals}
       ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
   }
@@ -2871,6 +2881,29 @@
       </select></span>`;
     }
     return `<div class="sb-section"><div class="sb-h">Next${snooze}</div>${html}</div>`;
+  }
+
+  const AUTO_BY = { review: "Set by the pre-review", you: "Set by you" };
+  function autoApproveSection(pr) {
+    const cp = companionPr(pr);
+    const setting = cp?.autoApprove;
+    if (!state.orchestrator || !setting || pr.mergedAt || !isReviewPr(pr)) return "";
+    const rule = state.companionState?.config?.approveRereview;
+    const why = !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
+      : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
+      : setting.on ? "On because your last review approved it." : "Off until you turn it on; no pre-review set it.";
+    const checks = rule ? `<details><summary>Checks it must pass first</summary><ul>
+        <li>The re-review finds your threads addressed and nothing else risky changed, with ${esc(rule.min_confidence)} confidence</li>
+        <li>At most ${esc(rule.max_lines)} lines changed since your last review, and no new files</li>
+        <li>At most ${esc(rule.max_per_pr)} automatic approvals on this PR</li>
+        <li>The PR is still open at the commit the re-review read</li>
+        <li>A re-review runs when the author re-requests your review or a push dismisses it, not on every push</li>
+        <li>It approves with no text, and can approve over a Request changes review</li>
+      </ul></details>` : "";
+    return `<div class="sb-section"><div class="sb-h">Auto-approve</div><div class="sb-auto">
+      <label><input type="checkbox" data-auto-approve="${esc(prKey(pr))}"${setting.on && rule ? " checked" : ""}${rule ? "" : " disabled"}>
+        Approve on its own when a re-review finds my review addressed</label>
+      <div class="auto-why">${esc(why)}</div>${checks}</div></div>`;
   }
 
   // A question runs in a fork of the pinned session, so it lives in that session's section.
@@ -2964,7 +2997,7 @@
       return;
     }
     loadDetail(sidebarKey);
-    const html = sidebarHeader(pr) + nextSection(pr) + sessionSection(pr) + activitySection(pr);
+    const html = sidebarHeader(pr) + nextSection(pr) + autoApproveSection(pr) + sessionSection(pr) + activitySection(pr);
     if (html === lastSidebarHtml) return;
     // Re-rendering on every pushed update must not eat what you're typing.
     const active = document.activeElement;
@@ -3013,6 +3046,9 @@
     if (t.dataset.snooze !== undefined && t.value !== "") {
       const hours = Number(t.value) || null;
       await busy(null, () => companionCall(`companion/snooze?key=${encodeURIComponent(t.dataset.snooze)}`, { hours }));
+    }
+    if (t.dataset.autoApprove !== undefined) {
+      await busy(null, () => companionCall(`companion/auto-approve?key=${encodeURIComponent(t.dataset.autoApprove)}`, { on: t.checked }));
     }
   });
 

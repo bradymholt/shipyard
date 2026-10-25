@@ -112,7 +112,8 @@ def main():
             "proposals": [{"action": "submit_review", "confidence": "medium", "reason": "one real bug, otherwise fine",
                            "payload": {"event": "REQUEST_CHANGES", "body": "One issue with accents below.",
                                        "comments": [{"path": "search/tokenize.py", "line": 12,
-                                                     "body": "This strips accents before matching exact names."}]}}]},
+                                                     "body": "This strips accents before matching exact names."}]}}],
+            "auto_approve": {"on": True, "why": "the one fix is small and checkable from the diff"}},
         "re-review": {
             "summary": "2 of 3 threads addressed; empty exports still crash.", "addressed": 2, "total": 3,
             "proposals": [{"action": "comment_unresolved", "confidence": "high", "reason": "one thread is open",

@@ -258,6 +258,12 @@ try {
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
   check((await sb.locator('a.btn-link:has-text("Finish review on GitHub")').getAttribute("href")).endsWith("/files"), "pre-review drafts on GitHub and links to the diff");
   check((await sb.locator(".nc-verdict").textContent()).includes("Request changes"), "the pre-review leads with its verdict");
+  const auto = sb.locator("input[data-auto-approve]");
+  check(await auto.isChecked() && (await sb.locator(".sb-auto .auto-why").textContent()).startsWith("Set by the pre-review"),
+    "the pre-review turns auto-approve on for small asks");
+  await auto.uncheck();
+  await page.waitForFunction(() => document.querySelector("#sidebar .sb-auto .auto-why")?.textContent.startsWith("Set by you"));
+  check(!(await auto.isChecked()), "unchecking auto-approve saves your choice");
   await page.waitForTimeout(400);
   if (shots) await page.screenshot({ path: `${shots}/sidebar-review.png` });
   await page.keyboard.press("Escape");

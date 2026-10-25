@@ -287,4 +287,5 @@ def load_config(path=CONFIG_PATH):
 def page_config(cfg):
     """The parts of the config the page needs."""
     return {"launcher": cfg["launcher"], "agent": cfg["agent"], "rules": cfg["rules"],
-            "auto": {k: bool(v) for k, v in cfg["auto"].items()}}
+            "auto": {k: bool(v) for k, v in cfg["auto"].items()},
+            "approveRereview": cfg["auto"]["approve_rereview"]}

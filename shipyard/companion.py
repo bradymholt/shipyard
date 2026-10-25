@@ -392,6 +392,11 @@ class Companion:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
                     f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
+        if name == "pre_review" and answer.get("auto_approve"):
+            saved = self.db.auto_approve(snap["key"])
+            if not saved or saved["by"] == "review":
+                auto = answer["auto_approve"]
+                self.db.set_auto_approve(snap["key"], auto["on"], "review", auto["why"])
         if name in ("pre_review", "re_review"):
             answer["proposals"] = self.draft_on_github(snap, answer["proposals"])
         kind = "answer" if name == "ask" else "pass"
@@ -451,23 +456,27 @@ class Companion:
         policy = AUTO_POLICY.get(action)
         if not rule or flag in HARD_LOCKED or not policy or source not in policy["sources"]:
             return False
-        if CONFIDENCE.get(confidence, 0) < CONFIDENCE[rule["min_confidence"]]:
-            return False
         card = self.db.card(card_id)
         snap = self.db.pr(card["key"]) if card else None
         if (not snap or snap.get("state") != "OPEN" or snap.get("dropped") or
                 snap["mine"] != policy["mine"] or card.get("head") != snap.get("head")):
             return False
-        if self.db.auto_runs(snap["key"], action) >= rule["max_per_pr"]:
+        if action == "approve" and not self.auto_approve_setting(snap)["on"]:
+            self.db.log(snap["key"], "left the approval for you: auto-approve is off for this PR")
+            return False
+        held = None
+        if CONFIDENCE.get(confidence, 0) < CONFIDENCE[rule["min_confidence"]]:
+            held = f"the re-review's confidence was {confidence} (needs {rule['min_confidence']})"
+        elif self.db.auto_runs(snap["key"], action) >= rule["max_per_pr"]:
+            held = f"it already approved this PR automatically {rule['max_per_pr']} times"
+        elif action == "approve":
+            held = self.rereview_too_big(snap, rule["max_lines"])
+        if held:
+            if action == "approve":
+                self.db.log(snap["key"], f"left the approval for you: {held}")
+                self.db.update_card(card_id, auto_held=held)
             return False
         if action == "approve":
-            review = snap.get("my_review") or {}
-            approved = review.get("state") == "APPROVED" or review.get("dismissed_from") == "APPROVED"
-            held = ("you hadn't approved it before" if not approved
-                    else self.rereview_too_big(snap, rule["max_lines"]))
-            if held:
-                self.db.log(snap["key"], f"left the approval for you: {held}")
-                return False
             payload = {}  # an automatic approval carries no words you haven't read
         if not self.db.claim_card(card_id):
             return False
@@ -484,6 +493,25 @@ class Companion:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
+
+    def auto_approve_setting(self, snap):
+        """Whether a re-review may approve this PR on its own: your choice, else the
+        pre-review's, else on only when your last review approved it."""
+        saved = self.db.auto_approve(snap["key"])
+        if saved:
+            return saved
+        review = snap.get("my_review") or {}
+        approved = review.get("state") == "APPROVED" or review.get("dismissed_from") == "APPROVED"
+        return {"on": approved, "by": "default", "why": None, "at": None}
+
+    def set_auto_approve(self, key, on):
+        snap = self.snapshot_or_error(key)
+        if snap["mine"]:
+            raise ValueError("Auto-approve is for re-reviews of someone else's PR.")
+        self.db.set_auto_approve(key, bool(on), "you")
+        self.db.log(key, f"auto-approve on re-reviews: {'on' if on else 'off'} (your choice)")
+        self.publish()
+        return {"ok": True}
 
     def rereview_too_big(self, snap, max_lines):
         """Why the change since your last review is too big to approve automatically, or None."""
@@ -675,7 +703,7 @@ class Companion:
     def card_view(self, card):
         view = {k: card.get(k) for k in ("id", "status", "kind", "pass", "action", "title", "summary",
                                          "proposals", "payload", "raw", "error", "handled", "created",
-                                         "question", "addressed", "total", "result")}
+                                         "question", "addressed", "total", "result", "auto_held")}
         view["kept"] = ({"path": card["kept_path"], "session": card.get("session_id"), "fork": card.get("mode") == "fork"}
                         if card.get("kept_path") else None)
         return view
@@ -715,6 +743,7 @@ class Companion:
                 "exchange": ({"pass": exchange["name"], "at": exchange["finished"],
                               "summary": exchange["summary"], "mode": exchange["mode"]} if exchange else None),
                 "activity": self.db.activity(key),
+                "autoApprove": None if snap["mine"] else self.auto_approve_setting(snap),
             }
         adapter = self.adapter
         return {
