@@ -529,8 +529,15 @@
   .sb-title code { font-family: var(--mono); font-size: 0.85em; background: var(--bg-inset); padding: 0.05em 0.35em; border-radius: 0.3em; }
   .sb-state { display: flex; flex-wrap: wrap; gap: 0.25rem 0.625rem; align-items: center; font: 500 0.6875rem var(--sans); color: var(--fg-muted); }
   .sb-state .ci { gap: 0.25rem; }
-  .sb-launch { display: flex; gap: 0.5rem; margin-top: 0.5rem; align-items: center; }
-  .sb-launch .wt-link { display: inline-flex; }
+  .sb-launch { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.625rem; align-items: center; }
+  .sb-launch .wt-link {
+    display: inline-flex; gap: 0.375rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--btn-bg);
+    padding: 0.25rem 0.625rem; font: 500 0.75rem var(--sans); white-space: nowrap;
+  }
+  .sb-launch .wt-link span { color: var(--fg); }
+  .sb-launch .wt-link:hover { background: var(--btn-hover); text-decoration: none; }
+  .sb-launch button.wt-link { padding: 0.25rem 0.625rem; border: 1px solid var(--border); background: var(--btn-bg); }
+  .sb-launch button.wt-link:hover { background: var(--btn-hover); }
   .sb-section { margin-top: 1.125rem; }
   .sb-h { font: 700 0.6875rem var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg-muted); margin-bottom: 0.375rem; display: flex; align-items: center; gap: 0.375rem; }
   .sb-h .sb-h-aside { margin-left: auto; font: 500 0.6875rem var(--sans); letter-spacing: 0; text-transform: none; }
@@ -1536,16 +1543,17 @@
     return `<a class="wt-link wt-agent" href="${esc(url)}" title="${esc(title)}">${icon}</a>`;
   }
 
-  function openCheckoutButton(wt) {
+  function openCheckoutButton(wt, label = "") {
     const target = launchTarget(wt);
+    const inner = label ? `${LAUNCH_ICON}<span>${esc(label)}</span>` : LAUNCH_ICON;
     const mod = wt.main ? " current" : " worktree";  // green for main clone, purple for a worktree
     const appName = state.launcher.name || "configured app";
     const title = wt.main
       ? `This branch is checked out in your main repo — open it in ${appName}`
       : `This branch is checked out in a worktree — open it in ${appName}`;
     return state.launcher.mode === "command"
-      ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${esc(title)}">${LAUNCH_ICON}</button>`
-      : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${LAUNCH_ICON}</a>`;
+      ? `<button class="wt-link wt-open${mod}" data-target="${esc(target)}" title="${esc(title)}">${inner}</button>`
+      : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${inner}</a>`;
   }
 
   // A merged PR's branch may still be checked out locally, with a session worth
@@ -2696,11 +2704,12 @@
     let launch = "";
     if (state.companion) {
       const checkout = wt || (cp?.path ? { path: cp.path, workspace: null, main: false } : null);
-      if (checkout) launch += openCheckoutButton(checkout);
+      if (checkout) launch += openCheckoutButton(checkout, `Open in ${state.launcher.name || "app"}`);
       const target = continueTarget(pr);
-      if (target) launch += sessionLink(target.path, target.session, AGENT_ICONS[state.agent?.sessions] || DEFAULT_AGENT_ICON, "wt-link wt-agent", key);
+      const icon = AGENT_ICONS[state.agent?.sessions] || DEFAULT_AGENT_ICON;
+      if (target) launch += sessionLink(target.path, target.session, `${icon}<span>Open in ${esc(agentName())}</span>`, "wt-link wt-agent", key);
     }
-    launch += `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}</a>`;
+    launch += `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}<span>Open on GitHub</span></a>`;
     return `
       <div class="sb-top">
         <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
