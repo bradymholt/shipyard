@@ -1049,7 +1049,7 @@
         nodes {
           ... on PullRequest {
             ${PR_FIELDS}
-            viewerLatestReview { state commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
+            viewerLatestReview { state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
             latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
             commits(last: 1) { nodes { commit { oid } } }
             pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
@@ -2482,15 +2482,18 @@
     return null;
   }
 
+  // The companion retires a review card on its next poll; the page sees your submitted review first.
+  function leftoverReviewCard(pr, card) {
+    const mine = reviewedCopy(pr).viewerLatestReview;
+    if (!mine?.state || mine.state === "PENDING" || reviewRequestedForViewer(pr)) return false;
+    return card.pass === "pre_review" || (card.pass === "re_review" && !!mine.submittedAt && mine.submittedAt > card.created);
+  }
+
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr, reviewMode) {
     const chip = nextChip(pr, reviewMode);
     const cp = companionPr(pr);
-    // The companion retires a pre-review on its next poll; the page sees the review first.
-    const mine = reviewedCopy(pr).viewerLatestReview?.state;
-    const reviewed = mine && mine !== "PENDING" && !reviewRequestedForViewer(pr);
-    const ready = (cp?.cards || []).find((c) =>
-      (c.kind === "pass" || c.kind === "answer") && !(reviewed && c.pass === "pre_review"));
+    const ready = (cp?.cards || []).find((c) => (c.kind === "pass" || c.kind === "answer") && !leftoverReviewCard(pr, c));
     const dot = cp?.running
       ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
       : cp?.planReady && ready ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
@@ -2824,7 +2827,7 @@
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
     // Your own asks and new sessions show under PR session.
-    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
+    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask" && !leftoverReviewCard(pr, c));
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && open) {
       const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);

@@ -234,6 +234,16 @@ try {
     render();
   });
   check(await page.locator('.card[data-key="o/r#201"] .next-row').count() === 0, "a submitted review drops the leftover Pre-review");
+  await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    const pr = state.reviewedPrs.find((p) => p.number === 201);
+    pr.viewerLatestReview = { ...pr.viewerLatestReview, state: "CHANGES_REQUESTED", submittedAt: "2026-10-25T04:42:27Z" };
+    const cp = state.companionState.prs["o/r#201"];
+    cp.cards = [{ id: 901, kind: "pass", pass: "re_review", title: "Re-review", created: "2026-10-25T04:40:01Z", proposals: [] }];
+    cp.planReady = true;
+    render();
+  });
+  check(await page.locator('.card[data-key="o/r#201"] .next-row').count() === 0, "a submitted review drops the leftover Re-review");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
   console.log("narrow window");
