@@ -2635,6 +2635,8 @@
   let sessionChoices = null;      // { key, sessions } while the re-pin picker is open
   let lastSidebarHtml = "";
   const CLOSE_ICON = '<svg viewBox="0 0 16 16" width="16" height="16"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>';
+  const AUTO_HELD_LABELS = { approve: "Auto-approve", rerun_checks: "Auto re-run", apply_fix: "Auto-fix",
+    enable_auto_merge: "Auto-merge" };
   const ACTION_LABELS = {
     rerun_checks: "Re-run failed jobs", apply_fix: "Apply fix and push", post_reply: "Post reply",
     approve: "Approve", comment_unresolved: "Comment on unresolved", submit_review: "Submit as review",
@@ -2888,8 +2890,9 @@
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
     const vi = verdictProposal(card);
     const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
-    const held = card.auto_held ? `<p class="nc-held">Auto-approve is on, but this one waits for you: ${esc(card.auto_held)}.</p>`
-      : card.auto_wait ? `<p class="nc-held">Auto-approves at ${esc(new Date(card.auto_wait.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}, a few minutes after the push.</p>` : "";
+    const held = card.auto_held ? `<p class="nc-held">${AUTO_HELD_LABELS[card.auto_action] || AUTO_HELD_LABELS.approve} is on, but this one waits for you: ${esc(card.auto_held)}.</p>`
+      : card.auto_wait?.until ? `<p class="nc-held">Auto-approves at ${esc(new Date(card.auto_wait.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}, a few minutes after the push.</p>`
+      : card.auto_wait ? `<p class="nc-held">Re-runs the failed checks automatically once the running ones finish.</p>` : "";
     const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
       ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${esc(card.summary || "")}</p>${proposals}

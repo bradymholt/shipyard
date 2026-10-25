@@ -28,6 +28,14 @@ AUTO_POLICY = {
     "enable_auto_merge": {"sources": {"feedback", "ci_failed"}, "mine": True},
     "approve": {"sources": {"re_review"}, "mine": False},
 }
+# How the log names an automatic action it held back, and one it already took.
+AUTO_WORDS = {
+    "approve": ("the approval", "approved"),
+    "rerun_checks": ("the re-run", "re-ran checks on"),
+    "apply_fix": ("the fix", "pushed a fix to"),
+    "enable_auto_merge": ("auto-merge", "enabled auto-merge on"),
+}
+SOURCE_NAMES = {"re_review": "re-review", "ci_failed": "CI assessment", "feedback": "feedback pass"}
 LIVE_CACHE_SECONDS = 15
 
 PASS_ACTIVITY = {
@@ -168,7 +176,7 @@ class Companion:
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
-        self.retry_waiting_approvals()
+        self.retry_waiting_actions()
         self.db.prune()
         self.status = {"github": "ok", "lastPoll": now_iso()}
         self.publish()
@@ -450,7 +458,7 @@ class Companion:
         return [p for p in out if p["action"] != "approve"] if drafted else out
 
     # ---------- trust ladder
-    def maybe_auto(self, card_id, action, payload, confidence, reason, source):
+    def maybe_auto(self, card_id, action, payload, confidence, reason, source, checks=None):
         """Press the button for a trusted action type when confidence clears its bar.
         Returns True when it acted; the card moves to Handled with the reason.
 
@@ -472,17 +480,27 @@ class Companion:
         if action == "approve" and not self.auto_approve_setting(snap)["on"]:
             self.db.log(snap["key"], "left the approval for you: auto-approve is off for this PR")
             return False
+        task, done = AUTO_WORDS.get(action, (action.replace("_", " "), action.replace("_", " ")))
+        failing = sorted(c["name"] for c in snap.get("failing") or [] if c.get("name"))
         held = None
         if CONFIDENCE.get(confidence, 0) < CONFIDENCE[rule["min_confidence"]]:
-            held = f"the re-review's confidence was {confidence} (needs {rule['min_confidence']})"
+            held = (f"the {SOURCE_NAMES.get(source, 'pass')}'s confidence was {confidence} "
+                    f"(needs {rule['min_confidence']})")
         elif self.db.auto_runs(snap["key"], action) >= rule["max_per_pr"]:
-            held = f"it already approved this PR automatically {rule['max_per_pr']} times"
+            held = f"it already {done} this PR automatically {rule['max_per_pr']} times"
         elif action == "approve":
             held = self.rereview_too_big(snap, rule["max_lines"])
+        elif action == "apply_fix":
+            held = self.fix_too_big(snap, (payload or {}).get("diff"), rule["max_lines"])
+        elif action == "rerun_checks" and checks is not None and not set(failing) <= set(checks):
+            held = "more checks failed while it waited"
         if held:
-            if action == "approve":
-                self.db.log(snap["key"], f"left the approval for you: {held}")
-                self.db.update_card(card_id, auto_held=held)
+            self.db.log(snap["key"], f"left {task} for you: {held}")
+            self.db.update_card(card_id, auto_held=held, auto_action=action)
+            return False
+        if action == "rerun_checks" and snap.get("checks_running"):
+            self.db.update_card(card_id, auto_wait={
+                "checks": failing, "action": action, "confidence": confidence, "reason": reason, "source": source})
             return False
         if action == "approve":
             ready_at = self.approve_ready_at(snap, rule["min_wait_minutes"])
@@ -512,14 +530,15 @@ class Companion:
         seen = self.db.head_seen_at(snap["key"], snap.get("head")) or now_iso()
         return datetime.fromisoformat(seen.replace("Z", "+00:00")) + timedelta(minutes=minutes)
 
-    def retry_waiting_approvals(self):
+    def retry_waiting_actions(self):
+        """Approvals wait out the time after a push; re-runs wait for running checks."""
         now = now_iso()
         for card in self.db.cards(statuses=("open",)):
             wait = card.get("auto_wait")
-            if wait and wait["until"] <= now:
+            if wait and (wait.get("until") or "") <= now:
                 self.db.update_card(card["id"], auto_wait=None)
                 self.maybe_auto(card["id"], wait["action"], {}, wait["confidence"],
-                                wait["reason"], wait["source"])
+                                wait["reason"], wait["source"], checks=wait.get("checks"))
 
     def note_unapproved(self, card_id, snap, proposals):
         """With auto-approve on, a re-review that proposed no approval says so on its card."""
@@ -569,6 +588,38 @@ class Companion:
         lines = sum(f.get("additions", 0) + f.get("deletions", 0) for f in files)
         if lines > max_lines:
             return f"{lines} lines changed since your review (limit {max_lines})"
+        return None
+
+    def fix_too_big(self, snap, diff, max_lines):
+        """Why a proposed CI fix can't be pushed automatically, or None. It may only edit
+        files the PR already changes, and only a few lines of them."""
+        paths, added, lines, new_file = set(), [], 0, False
+        for line in (diff or "").splitlines():
+            if line.startswith(("--- ", "+++ ")):
+                path = line[4:].strip()
+                if path == "/dev/null":
+                    new_file = line.startswith("--- ")
+                    continue
+                path = path[2:] if path[:2] in ("a/", "b/") else path
+                paths.add(path)
+                if line.startswith("+++ ") and new_file:
+                    added.append(path)
+                    new_file = False
+            elif line.startswith(("+", "-")):
+                lines += 1
+        if added:
+            return f"it adds {', '.join(added[:3])}"
+        if lines > max_lines:
+            return f"the fix changes {lines} lines (limit {max_lines})"
+        if (snap.get("changed_files") or 0) > 100:
+            return "the PR changes too many files to check the fix against"
+        try:
+            files = self.github.rest("GET", f"/repos/{snap['repo']}/pulls/{snap['number']}/files?per_page=100")
+        except Exception as e:
+            return f"couldn't list the PR's files ({e})"
+        outside = sorted(paths - {f.get("filename") for f in files or []})
+        if outside:
+            return f"it edits {', '.join(outside[:3])}, which the PR doesn't change"
         return None
 
     def action_context(self, snap):
@@ -741,7 +792,7 @@ class Companion:
     def card_view(self, card):
         view = {k: card.get(k) for k in ("id", "status", "kind", "pass", "action", "title", "summary",
                                          "proposals", "payload", "raw", "error", "handled", "created",
-                                         "question", "addressed", "total", "result", "auto_held", "auto_wait")}
+                                         "question", "addressed", "total", "result", "auto_held", "auto_action", "auto_wait")}
         view["kept"] = ({"path": card["kept_path"], "session": card.get("session_id"), "fork": card.get("mode") == "fork"}
                         if card.get("kept_path") else None)
         return view

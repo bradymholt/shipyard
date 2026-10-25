@@ -17,6 +17,7 @@ class FakeGitHub:
         self.nodes = {}
         self.calls = []
         self.compare = {"files": [{"filename": "a.py", "status": "modified", "additions": 3, "deletions": 1}]}
+        self.pr_files = [{"filename": "a.py"}]
 
     def put(self, node, *lists):
         self.nodes[node["id"]] = node
@@ -37,7 +38,9 @@ class FakeGitHub:
 
     def rest(self, method, path, body=None):
         self.calls.append((method, path, body))
-        return self.compare if "/compare/" in path else {}
+        if "/compare/" in path:
+            return self.compare
+        return self.pr_files if path.split("?")[0].endswith("/files") else {}
 
     def job_log_tail(self, repo, job_id, lines=150):
         return "Error: connect ETIMEDOUT registry.npmjs.org"
@@ -301,6 +304,38 @@ class CiFailed(CompanionCase):
             self.poll()
         reruns = [c for c in self.gh.calls if c[0] == "POST" and "rerun" in c[1]]
         self.assertEqual(len(reruns), 2)
+
+    def test_trusted_rerun_waits_for_running_checks(self):
+        self.trust("rerun_checks")
+        node = pr_node(ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=11, run=22)], running=2)
+        self.gh.put(node, "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.assertFalse(any("rerun" in c[1] for c in self.gh.calls))
+        self.assertEqual(card["auto_wait"]["checks"], ["rspec"])
+        node["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["checkRunCountsByState"] = []
+        self.poll()
+        self.assertIn(("POST", "/repos/o/r/actions/runs/22/rerun-failed-jobs", None), self.gh.calls)
+
+    def test_waiting_rerun_holds_when_more_checks_fail(self):
+        self.trust("rerun_checks")
+        node = pr_node(ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=11, run=22)], running=2)
+        self.gh.put(node, "author:@me")
+        self.poll()
+        self.gh.put(pr_node(ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=11, run=22),
+                                                    check_run("lint", "FAILURE", job=12, run=22)]), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.assertFalse(any("rerun" in c[1] for c in self.gh.calls))
+        self.assertEqual(card["auto_held"], "more checks failed while it waited")
+        self.assertEqual(card["auto_action"], "rerun_checks")
+
+    def test_trusted_fix_holds_when_it_edits_files_outside_the_pr(self):
+        self.trust("apply_fix")
+        diff = "--- a/other.py\n+++ b/other.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"
+        self.agent.answers["CI failure"] = {"summary": "Typo.", "proposals": [
+            {"action": "apply_fix", "confidence": "high", "reason": "fix typo", "payload": {"diff": diff}}]}
+        self.gh.put(self.red(), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.assertEqual(card["auto_held"], "it edits other.py, which the PR doesn't change")
 
     def test_ask_mode_offers_instead_of_running(self):
         self.raw = {"rules": {"passes": {"ci_failed": "ask"}}}
