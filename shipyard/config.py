@@ -182,6 +182,7 @@ def validate_rules(raw):
 
 REREVIEW_MAX_LINES = 30
 REREVIEW_MIN_WAIT_MINUTES = 3
+MAX_LINES = {"approve_rereview": REREVIEW_MAX_LINES, "apply_fix": 20}
 
 
 def validate_auto(raw):
@@ -196,7 +197,8 @@ def validate_auto(raw):
         if value is not False and name in HARD_LOCKED:
             raise ValueError(f'auto "{name}" is locked: it posts under your name, so it stays manual')
         if isinstance(value, dict):
-            allowed = {"when", "max_per_pr"} | ({"max_lines", "min_wait_minutes"} if name == "approve_rereview" else set())
+            allowed = ({"when", "max_per_pr"} | ({"max_lines"} if name in MAX_LINES else set())
+                       | ({"min_wait_minutes"} if name == "approve_rereview" else set()))
             if set(value) - allowed:
                 raise ValueError(f'auto "{name}" accepts only ' + " and ".join(f'"{k}"' for k in sorted(allowed)))
             when = value.get("when", "confidence >= high")
@@ -207,19 +209,21 @@ def validate_auto(raw):
             if not isinstance(per_pr, int) or isinstance(per_pr, bool) or per_pr < 1:
                 raise ValueError(f'auto "{name}" "max_per_pr" must be a positive integer')
             auto[name] = {"min_confidence": level, "max_per_pr": per_pr}
-            if name == "approve_rereview":
-                max_lines = value.get("max_lines", REREVIEW_MAX_LINES)
+            if name in MAX_LINES:
+                max_lines = value.get("max_lines", MAX_LINES[name])
                 if not isinstance(max_lines, int) or isinstance(max_lines, bool) or max_lines < 0:
                     raise ValueError(f'auto "{name}" "max_lines" must be a non-negative integer')
                 auto[name]["max_lines"] = max_lines
+            if name == "approve_rereview":
                 wait = value.get("min_wait_minutes", REREVIEW_MIN_WAIT_MINUTES)
                 if not isinstance(wait, (int, float)) or isinstance(wait, bool) or wait < 0:
                     raise ValueError(f'auto "{name}" "min_wait_minutes" must be a non-negative number')
                 auto[name]["min_wait_minutes"] = wait
         elif value is True:
             auto[name] = {"min_confidence": "high", "max_per_pr": 2}
+            if name in MAX_LINES:
+                auto[name]["max_lines"] = MAX_LINES[name]
             if name == "approve_rereview":
-                auto[name]["max_lines"] = REREVIEW_MAX_LINES
                 auto[name]["min_wait_minutes"] = REREVIEW_MIN_WAIT_MINUTES
         elif value is False:
             auto[name] = None

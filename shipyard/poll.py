@@ -17,7 +17,8 @@ query($q: String!, $after: String) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
       id updatedAt isDraft reviewDecision headRefOid
-      commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+      commits(last: 1) { nodes { commit { statusCheckRollup { state contexts {
+        checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
     } }
   }
 }"""
@@ -40,7 +41,9 @@ DETAIL_FIELDS = """
   } }
   commits(last: 1) { nodes { commit {
     oid committedDate
-    statusCheckRollup { state contexts(first: 50) { nodes {
+    statusCheckRollup { state contexts(first: 50) {
+      checkRunCountsByState { state count } statusContextCountsByState { state count }
+      nodes {
       __typename
       ... on CheckRun { name conclusion status detailsUrl databaseId
                         checkSuite { workflowRun { databaseId } } }
@@ -62,6 +65,7 @@ query($ids: [ID!]!) {{
 }}"""
 
 FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+RUNNING = {"IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "EXPECTED"}
 DETAIL_BATCH = 10
 HUNK_LINES = 6
 
@@ -72,11 +76,18 @@ def hunk_tail(hunk):
     return "\n".join(lines[-HUNK_LINES:]) or None
 
 
+def checks_running(rollup):
+    """How many checks are still queued or running; the rollup reads FAILURE once one fails."""
+    contexts = (rollup or {}).get("contexts") or {}
+    counts = (contexts.get("checkRunCountsByState") or []) + (contexts.get("statusContextCountsByState") or [])
+    return sum(c.get("count") or 0 for c in counts if c.get("state") in RUNNING)
+
+
 def signature(node):
     commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
-    rollup = (commit.get("statusCheckRollup") or {}).get("state")
-    return "|".join(str(v) for v in (node.get("updatedAt"), node.get("headRefOid"), rollup,
-                                     node.get("reviewDecision"), node.get("isDraft")))
+    rollup = commit.get("statusCheckRollup") or {}
+    return "|".join(str(v) for v in (node.get("updatedAt"), node.get("headRefOid"), rollup.get("state"),
+                                     checks_running(rollup), node.get("reviewDecision"), node.get("isDraft")))
 
 
 def reviewer_name(rr):
@@ -171,6 +182,7 @@ def snapshot(node, viewer):
                      for c in (node.get("comments") or {}).get("nodes") or []],
         "ci": rollup.get("state"),
         "failing": failing,
+        "checks_running": checks_running(rollup),
         "last_commit_at": commit.get("committedDate"),
     }
 
