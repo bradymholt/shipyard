@@ -65,7 +65,7 @@ RULE_DEFAULTS = {
     "nudge": {"after_hours": 24},
     "rerequest_review": True,
     "passes": {
-        "changes_requested": False,
+        "feedback": False,
         "ci_failed": "auto",
         "pre_review": "auto",
         "re_review": "auto",
@@ -148,7 +148,8 @@ def validate_rules(raw):
                 raise ValueError('rules "passes" must be an object')
             bad = sorted(set(value) - set(default))
             if bad:
-                raise ValueError(f"unknown pass(es): {', '.join(bad)}")
+                renamed = ' ("changes_requested" is now "feedback")' if "changes_requested" in bad else ""
+                raise ValueError(f"unknown pass(es): {', '.join(bad)}{renamed}")
             for pass_name, mode in value.items():
                 if mode not in PASS_MODES:
                     raise ValueError(f'rules "passes" "{pass_name}" must be "auto", "ask" or false')

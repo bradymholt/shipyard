@@ -14,7 +14,7 @@ from . import events
 
 # Which pass each event asks for, and which rule switches it off.
 EVENT_PASSES = {
-    "changes_requested": ("changes_requested", "address_feedback"),
+    "feedback": ("feedback", "address_feedback"),
     "ci_failed": ("ci_failed", "fix_ci"),
     "review_requested_of_me": ("pre_review", "review"),
     "review_rerequested": ("re_review", "re_review"),
@@ -85,14 +85,14 @@ def reactions(event, snap, rules):
     out = []
     if name == "pr_opened":
         out.append({"do": "pin"})
-    elif name == "pushed_after_changes_requested" and rules.get("rerequest_review"):
+    elif name == "pushed_after_feedback" and rules.get("rerequest_review"):
         reviewers = event["data"].get("reviewers") or []
         out.append({"do": "propose", "action": "rerequest_review",
                     "title": f"Re-request {', '.join(reviewers)}'s review",
                     "reason": "You pushed after changes were requested.",
                     "payload": {"reviewers": reviewers}})
     elif name == "merged" and events.approval_feedback(snap):
-        out.append({"do": "close_cards", "except": ["changes_requested"]})
+        out.append({"do": "close_cards", "except": ["feedback"]})
     elif name in ("merged", "closed"):
         out.append({"do": "close_cards"})
     elif name == "ci_recovered":
@@ -108,11 +108,11 @@ def reactions(event, snap, rules):
 def card_is_stale(card, snap):
     """A Next card stops applying once the condition that raised it is gone."""
     kind = card.get("pass")
-    if snap.get("state") == "MERGED" and kind == "changes_requested":
+    if snap.get("state") == "MERGED" and kind == "feedback":
         return not events.approval_feedback(snap)
     if snap.get("state") != "OPEN":
         return True
-    if kind == "changes_requested":
+    if kind == "feedback":
         asked = set(events.requesters(snap))
         return not events.needs_changes(snap) or bool(asked) and asked <= set(snap.get("requested") or [])
     if kind == "ci_failed":

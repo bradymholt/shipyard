@@ -25,14 +25,14 @@ PASS_WORKERS = 2
 AUTO_POLICY = {
     "rerun_checks": {"sources": {"ci_failed"}, "mine": True},
     "apply_fix": {"sources": {"ci_failed"}, "mine": True},
-    "enable_auto_merge": {"sources": {"changes_requested", "ci_failed"}, "mine": True},
+    "enable_auto_merge": {"sources": {"feedback", "ci_failed"}, "mine": True},
     "approve": {"sources": {"re_review"}, "mine": False},
 }
 TRUST_OFFER_AFTER = 3  # manual clicks on one action type before the card offers "do this automatically"
 LIVE_CACHE_SECONDS = 15
 
 PASS_ACTIVITY = {
-    "changes_requested": "asked for a plan",
+    "feedback": "asked for a plan",
     "ci_failed": "asked why CI failed",
     "pre_review": "ran a pre-review",
     "re_review": "asked for a re-check of the review threads",

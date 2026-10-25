@@ -140,7 +140,7 @@ class CompanionCase(unittest.TestCase):
 class ChangesRequested(CompanionCase):
     def setUp(self):
         super().setUp()
-        self.raw = {"rules": {"passes": {"changes_requested": "auto"}}}
+        self.raw = {"rules": {"passes": {"feedback": "auto"}}}
         self.comp.config = validate_config(self.raw)
 
     def test_pass_resumes_pinned_session_and_card_posts_the_edited_reply(self):
@@ -215,7 +215,7 @@ class ChangesRequested(CompanionCase):
                                               "submittedAt": "2026-10-21T00:00:00Z", "author": {"login": "rev"},
                                               "commit": {"oid": "aaa"}}]})
         self.gh.put(node)
-        self.assertEqual([c["pass"] for c in self.poll()["o/r#1"]["cards"]], ["changes_requested"])
+        self.assertEqual([c["pass"] for c in self.poll()["o/r#1"]["cards"]], ["feedback"])
         node["comments"] = {"nodes": [{"createdAt": "2026-10-21T01:00:00Z", "author": {"login": "me"}}]}
         self.assertEqual(self.poll()["o/r#1"]["cards"], [])
 

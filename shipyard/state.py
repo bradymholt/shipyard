@@ -58,6 +58,13 @@ class State:
                                 "'Interrupted by a restart.') WHERE id = ? AND status = 'open' "
                                 "AND json_extract(data, '$.kind') = 'running'", (row[0],))
             self.db.execute("UPDATE cards SET status = 'open' WHERE status = 'acting'")
+            # The feedback pass and its events were once named "changes_requested".
+            for old, new in (("changes_requested", "feedback"), ("pushed_after_changes_requested", "pushed_after_feedback")):
+                for table in ("events", "passes"):
+                    self.db.execute(f"UPDATE OR IGNORE {table} SET name = ? WHERE name = ?", (new, old))
+                    self.db.execute(f"DELETE FROM {table} WHERE name = ?", (old,))
+            self.db.execute("UPDATE cards SET data = json_set(data, '$.pass', 'feedback') "
+                            "WHERE json_extract(data, '$.pass') = 'changes_requested'")
             self.db.commit()
 
     def close(self):
@@ -100,7 +107,7 @@ class State:
             if snap.get("state") == "OPEN" and not snap.get("dropped"):
                 out.add(snap["id"])
             elif (snap.get("state") == "MERGED" and (snap.get("merged_at") or "") > since and
-                  any(c.get("pass") == "changes_requested" for c in self.cards(r["key"], ("open",)))):
+                  any(c.get("pass") == "feedback" for c in self.cards(r["key"], ("open",)))):
                 out.add(snap["id"])
         return out
 
