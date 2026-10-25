@@ -27,7 +27,7 @@ class DeriveMine(unittest.TestCase):
     def test_first_sight_reports_conditions_that_already_hold(self):
         cur = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED")], ci="FAILURE",
                    contexts=[check_run("rspec", "FAILURE")])
-        self.assertEqual(names(derive(None, cur)), ["pr_opened", "changes_requested", "ci_failed"])
+        self.assertEqual(names(derive(None, cur)), ["pr_opened", "feedback", "ci_failed"])
 
     def test_nothing_new_means_no_events(self):
         cur = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED")], ci="FAILURE")
@@ -38,7 +38,7 @@ class DeriveMine(unittest.TestCase):
         cur = snap(decision="CHANGES_REQUESTED",
                    reviews=[review("CHANGES_REQUESTED", id=1), review("CHANGES_REQUESTED", "jm", id=2)])
         events = derive(prev, cur)
-        self.assertEqual(names(events), ["changes_requested"])
+        self.assertEqual(names(events), ["feedback"])
         self.assertEqual(events[0]["data"]["reviewers"], ["rev", "jm"])
         # same commit, new set of reviews: a distinct dedupe key, so it isn't swallowed
         self.assertNotEqual(events[0]["head"], derive(None, prev)[1]["head"])
@@ -47,14 +47,14 @@ class DeriveMine(unittest.TestCase):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", id=1)])
         cur = snap(decision="CHANGES_REQUESTED", reviews=[review("COMMENTED", id=2)])
         events = derive(prev, cur)
-        self.assertEqual(names(events), ["changes_requested"])
+        self.assertEqual(names(events), ["feedback"])
         self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
         self.assertNotEqual(events[0]["head"], derive(None, prev)[1]["head"])
 
     def test_a_comment_review_with_open_threads_is_feedback(self):
         cur = snap(reviews=[review("COMMENTED", id=1)], threads=[{"body": "What is this?"}])
         events = derive(snap(), cur)
-        self.assertEqual(names(events), ["changes_requested"])
+        self.assertEqual(names(events), ["feedback"])
         self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
         resolved = snap(reviews=[review("COMMENTED", id=1)], threads=[{"body": "Nit", "resolved": True}])
         self.assertEqual(derive(snap(), resolved), [])
@@ -64,7 +64,7 @@ class DeriveMine(unittest.TestCase):
         self.assertEqual(names(derive(snap(), snap(**approved, reviews=[review("APPROVED", body="LGTM 🚀")]))),
                          ["approved"])
         thread = snap(**approved, reviews=[review("APPROVED", id=1)], threads=[{"body": "I'd use a map"}])
-        self.assertEqual(names(derive(snap(), thread)), ["changes_requested", "approved"])
+        self.assertEqual(names(derive(snap(), thread)), ["feedback", "approved"])
         body = snap(**approved, reviews=[review("APPROVED", id=1, body="Fine, though I'd prefer a map")])
         events = derive(snap(), body)
         self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
@@ -77,7 +77,7 @@ class DeriveMine(unittest.TestCase):
         cur = snap(head="bbb", decision="CHANGES_REQUESTED",
                    reviews=[review("CHANGES_REQUESTED", commit="aaa")])
         events = derive(prev, cur)
-        self.assertEqual(names(events), ["pushed_after_changes_requested"])
+        self.assertEqual(names(events), ["pushed_after_feedback"])
         self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
 
     def test_no_re_request_proposal_when_reviewer_already_requested(self):
@@ -158,11 +158,11 @@ class Reactions(unittest.TestCase):
     def ev(self, name, **data):
         return {"name": name, "head": "aaa", "data": data}
 
-    def test_changes_requested_runs_a_pass_only_when_turned_on(self):
-        self.assertEqual(rules.reactions(self.ev("changes_requested"), snap(), RULES), [])
-        on = validate_rules({"passes": {"changes_requested": "auto"}})
-        self.assertEqual(rules.reactions(self.ev("changes_requested"), snap(), on),
-                         [{"do": "pass", "pass": "changes_requested", "mode": "auto"}])
+    def test_feedback_runs_a_pass_only_when_turned_on(self):
+        self.assertEqual(rules.reactions(self.ev("feedback"), snap(), RULES), [])
+        on = validate_rules({"passes": {"feedback": "auto"}})
+        self.assertEqual(rules.reactions(self.ev("feedback"), snap(), on),
+                         [{"do": "pass", "pass": "feedback", "mode": "auto"}])
 
     def test_pass_mode_ask_and_off(self):
         ask = validate_rules({"passes": {"ci_failed": "ask"}})
@@ -178,10 +178,10 @@ class Reactions(unittest.TestCase):
         self.assertEqual(out[1]["pass"], "pre_review")
 
     def test_re_request_proposal(self):
-        out = rules.reactions(self.ev("pushed_after_changes_requested", reviewers=["jm"]), snap(), RULES)
+        out = rules.reactions(self.ev("pushed_after_feedback", reviewers=["jm"]), snap(), RULES)
         self.assertEqual(out[0]["action"], "rerequest_review")
         self.assertEqual(out[0]["payload"], {"reviewers": ["jm"]})
-        self.assertEqual(rules.reactions(self.ev("pushed_after_changes_requested", reviewers=["jm"]),
+        self.assertEqual(rules.reactions(self.ev("pushed_after_feedback", reviewers=["jm"]),
                                          snap(), validate_rules({"rerequest_review": False})), [])
 
     def test_merged_closes_cards(self):
@@ -191,20 +191,20 @@ class Reactions(unittest.TestCase):
 
 class StaleCards(unittest.TestCase):
     def test_changes_card_goes_when_decision_changes(self):
-        card = {"pass": "changes_requested", "head": "aaa"}
+        card = {"pass": "feedback", "head": "aaa"}
         self.assertFalse(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED")))
         self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED")))
         rev = [{"author": "rev", "state": "CHANGES_REQUESTED"}]
         self.assertTrue(rules.card_is_stale(card, snap(decision="CHANGES_REQUESTED", reviews=rev, requested=["rev"])))
 
     def test_comment_feedback_card_goes_when_threads_resolve(self):
-        card = {"pass": "changes_requested", "head": "aaa"}
+        card = {"pass": "feedback", "head": "aaa"}
         rev = [{"author": "rev", "state": "COMMENTED"}]
         self.assertFalse(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?"}])))
         self.assertTrue(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?", "resolved": True}])))
 
     def test_approval_feedback_card_goes_once_answered(self):
-        card = {"pass": "changes_requested", "head": "aaa"}
+        card = {"pass": "feedback", "head": "aaa"}
         rev = [{"author": "rev", "state": "APPROVED", "body": "Prefer a map", "at": "2026-10-20T10:00:00Z"}]
         self.assertFalse(rules.card_is_stale(card, snap(decision="APPROVED", reviews=rev)))
         self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED", reviews=rev,

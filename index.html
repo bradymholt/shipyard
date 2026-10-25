@@ -2518,7 +2518,7 @@
 
   // The companion retires a card on its next poll; the page sees what ended it (a review
   // submitted, CI green, feedback answered) first. Cards for other passes always show.
-  const CHIPS_FOR_PASS = { changes_requested: ["address_feedback", "rerequest_review"], ci_failed: ["fix_ci"],
+  const CHIPS_FOR_PASS = { feedback: ["address_feedback", "rerequest_review"], ci_failed: ["fix_ci"],
     pre_review: ["review"], re_review: ["re_review"] };
   function staleCard(pr, card, reviewMode) {
     const kinds = CHIPS_FOR_PASS[card.pass];
@@ -2564,7 +2564,7 @@
   // Actions that put words in front of someone show the full text, editable, before they post.
   const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review", "nudge", "approve"]);
   const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
-  const PASS_LABELS = { changes_requested: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
+  const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
   const TRUST_LABELS = {
     rerun_checks: "re-run failed jobs when it looks flaky", 
     enable_auto_merge: "enable auto-merge", approve_rereview: "approve a re-review", apply_fix: "apply small fixes",
@@ -2803,8 +2803,8 @@
         <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
           <button type="button" data-dismiss="${card.id}">Dismiss</button></div>${trustToggles(card)}</div>`;
     }
-    const chip = card.pass === "changes_requested" ? githubChip(pr) : null;
-    const rerequest = card.pass === "changes_requested" ? respondButton(pr) + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
+    const chip = card.pass === "feedback" ? githubChip(pr) : null;
+    const rerequest = card.pass === "feedback" ? respondButton(pr) + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
     const openKept = card.kept
       ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
     const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";

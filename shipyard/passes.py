@@ -5,7 +5,7 @@ parses the answer into a Next card. The agent proposes; it never acts.
 How a pass runs:
   - your PR, a question (ci_failed, ask): a fork of the pinned session, so the history
     is there and nothing is written back. Agents that cannot fork run a fresh session.
-  - your PR, a plan you will continue (changes_requested): a resume of the pinned
+  - your PR, a plan you will continue (feedback): a resume of the pinned
     session, so the plan is in the conversation when you open it.
   - someone else's PR (pre_review): a fresh session in a review worktree, pinned.
   - any PR, on request (new_session): a fresh session to keep talking in, pinned; it is
@@ -18,7 +18,7 @@ from pathlib import Path
 
 TEMPLATES = Path(__file__).resolve().parent / "passes"
 TEMPLATE_FILES = {
-    "changes_requested": "changes-requested.md",
+    "feedback": "feedback.md",
     "ci_failed": "ci-failed.md",
     "pre_review": "pre-review.md",
     "re_review": "re-review.md",
@@ -26,7 +26,7 @@ TEMPLATE_FILES = {
     "new_session": "new-session.md",
 }
 # fork: question; resume: plan to continue; fresh: new pinned session.
-PASS_MODES = {"changes_requested": "resume", "ci_failed": "fork", "pre_review": "fresh",
+PASS_MODES = {"feedback": "resume", "ci_failed": "fork", "pre_review": "fresh",
               "re_review": "resume", "ask": "fork", "new_session": "fresh"}
 ACTIONS = ["continue", "post_reply", "apply_fix", "rerun_checks", "rerequest_review", "approve",
            "comment_unresolved", "submit_review", "enable_auto_merge", "merge", "mark_ready", "nudge"]
@@ -53,7 +53,7 @@ ANSWER_SCHEMA = {
         },
     },
 }
-TITLES = {"changes_requested": "Address feedback", "ci_failed": "Fix CI",
+TITLES = {"feedback": "Address feedback", "ci_failed": "Fix CI",
           "pre_review": "Pre-review", "re_review": "Re-review", "ask": "Answer", "new_session": "New session"}
 
 
@@ -104,7 +104,7 @@ def inputs(name, snap, github=None, question=None):
     values = {k: snap.get(k) for k in ("repo", "number", "title", "url", "branch", "head", "base",
                                        "author")}
     values["body"] = (snap.get("body") or "(no description)")[:3000]
-    if name == "changes_requested":
+    if name == "feedback":
         values["feedback"] = feedback_text(snap)
     elif name == "ci_failed":
         failing = snap.get("failing") or []
@@ -132,7 +132,7 @@ def inputs(name, snap, github=None, question=None):
 def raw_event_text(name, snap):
     """What to paste into a session yourself when Shipyard can't run the pass."""
     head = f"{snap['repo']}#{snap['number']} {snap['url']}"
-    if name == "changes_requested":
+    if name == "feedback":
         return f"Review feedback on {head}:\n{feedback_text(snap)}"
     if name == "ci_failed":
         checks = ", ".join(c["name"] for c in snap.get("failing") or []) or "checks"

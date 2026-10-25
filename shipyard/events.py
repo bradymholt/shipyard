@@ -82,7 +82,7 @@ def derive(prev, cur):
             approvals = approval_feedback(cur) if cur["mine"] else []
             if approvals:
                 ids = sorted(str(r["id"]) for r in approvals if r.get("id") is not None)
-                add("changes_requested", key=f":{','.join(ids)}" if ids else None,
+                add("feedback", key=f":{','.join(ids)}" if ids else None,
                     reviewers=[r["author"] for r in approvals])
         return events
     if cur["state"] != "OPEN":
@@ -100,13 +100,13 @@ def derive(prev, cur):
             ids = sorted(str(i) for i in _feedback_ids(cur) if i is not None)
             reviewers = requesters(cur)
             reviewers += [r["author"] for r in approval_feedback(cur) if r["author"] not in reviewers]
-            add("changes_requested", key=f":{','.join(ids)}" if ids else None, reviewers=reviewers)
+            add("feedback", key=f":{','.join(ids)}" if ids else None, reviewers=reviewers)
         if (not first and prev.get("head") != cur.get("head") and
                 needs_changes(prev)):
             pending = set(cur.get("requested") or [])
             reviewers = [r for r in requesters(cur) if r not in pending]
             if reviewers:
-                add("pushed_after_changes_requested", reviewers=reviewers)
+                add("pushed_after_feedback", reviewers=reviewers)
         failing = cur.get("ci") in FAILING
         was_failing = not first and prev.get("ci") in FAILING and prev.get("head") == cur.get("head")
         if failing and not was_failing:
