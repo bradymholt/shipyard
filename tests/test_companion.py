@@ -451,6 +451,8 @@ class Proposals(CompanionCase):
         self.comp.card_action(proposal["id"], 0, None)
         self.assertIn(("POST", "/repos/o/r/pulls/1/requested_reviewers",
                        {"reviewers": ["jm"], "team_reviewers": []}), self.gh.calls)
+        # the step goes at once, before a poll sees the request
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["steps"], [])
 
     def test_re_request_never_offers_to_go_automatic(self):
         node = pr_node(decision="CHANGES_REQUESTED", reviews=[{"state": "CHANGES_REQUESTED", "author": "jm"}])
