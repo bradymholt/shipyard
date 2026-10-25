@@ -143,6 +143,14 @@
     border-radius: 0.625rem; padding: 0 0.4375rem; font-size: 0.75rem; margin-left: 0.25rem;
   }
   .tab.active .count { background: rgba(201,162,75,.18); color: var(--gold-text); }
+  #needs-you {
+    margin: 0 0 0.625rem 0.5rem; padding: 0.125rem 0.625rem; border-radius: 0.75rem;
+    font-size: 0.75rem; font-weight: 600; color: var(--gold-text);
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  }
+  #needs-you:hover { background: color-mix(in srgb, var(--gold) 22%, transparent); }
+  #needs-you.active { background: var(--gold); border-color: var(--gold); color: var(--navy); }
 
   #github-status {
     display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.625rem;
@@ -634,6 +642,7 @@
       <button class="tab active" data-filter="mine">My PRs <span class="count hidden" id="count-mine"></span></button>
       <button class="tab" data-filter="review">Reviews <span class="count hidden" id="count-review"></span></button>
     </div>
+    <button id="needs-you" type="button" class="hidden" aria-pressed="false"></button>
     <div class="spacer"></div>
     <span id="github-status" class="hidden">
       <span id="last-updated"></span>
@@ -767,6 +776,7 @@
     loadErrorAuth: false,
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
+    needsYou: false,
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, workspace }, from the local companion
     companion: false,     // true when the local companion answered (enables worktree actions)
@@ -1671,7 +1681,7 @@
           ? `<button type="button" class="merged-more" data-merged="more">Show more</button>` : "")
         + (mergedExtra > 0
           ? `<button type="button" class="merged-more" data-merged="less">Show less</button>` : "");
-    if (actions) out += `<div class="merged-actions">${actions}</div>`;
+    if (actions && !state.needsYou) out += `<div class="merged-actions">${actions}</div>`;
     return out;
   }
 
@@ -1939,20 +1949,30 @@
       : "";
     const attention = mineCount + reviewCount;
     document.title = attention ? `Shipyard (${attention})` : "Shipyard";
+    const needsMine = [...state.prs.filter((pr) => pr.author?.login === state.viewer), ...state.merged].filter(needsYou).length;
+    const needsReview = [...reviewSet.filter(reviewItem), ...reviewedMergedItems()].filter(needsYou).length;
+    const needsCount = needsMine + needsReview;
+    const needsBtn = $("#needs-you");
+    needsBtn.textContent = `Needs you · ${needsCount}`;
+    needsBtn.classList.toggle("hidden", !needsCount && !state.needsYou);
+    needsBtn.classList.toggle("active", state.needsYou);
+    needsBtn.setAttribute("aria-pressed", String(state.needsYou));
+    needsBtn.title = `${needsMine} on My PRs, ${needsReview} on Reviews. ` +
+      (state.needsYou ? "Click to show every pull request." : "Click to show only these.");
     const reviewBoard = state.filter === "review";
     const dataset = reviewBoard ? reviewSet : state.prs;
     $("#sort-select").value = state.sort;
     sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
     const { parents } = buildStacks(dataset);
-    const matches = dataset.filter(reviewBoard ? reviewItem : matchesFilter);
+    const matches = dataset.filter(reviewBoard ? reviewItem : matchesFilter).filter((pr) => !state.needsYou || needsYou(pr));
     const count = matches.length;
     const laneItems = reviewBoard ? [[], []] : [[], [], []];
     for (const pr of matches) laneItems[reviewBoard ? reviewLaneOf(pr) : laneOf(pr)].push(pr);
     const defs = reviewBoard
       ? [["Waiting", "yellow"], ["Review submitted", "green"]]
       : [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
-    const recentMerged = mergedItems();
+    const recentMerged = state.needsYou ? mergedItems().filter(needsYou) : mergedItems();
     let html = `<div class="board${reviewBoard ? " two-lane" : ""}">` + defs.map(([name, color], i) => {
       const inLane = laneItems[i];
       const laneNums = new Set(inLane.map((p) => p.number));
@@ -2007,11 +2027,11 @@
         ${header}
         ${laneHtml || (reviewBoard && i === 1 && !state.reviewHistoryLoaded
           ? '<div class="lane-empty">Loading…</div>'
-          : `<div class="lane-empty">${EMPTY_ICON}<span>${laneEmptyText(name, reviewBoard)}</span></div>`)}
+          : `<div class="lane-empty">${EMPTY_ICON}<span>${state.needsYou ? "Nothing needs you" : laneEmptyText(name, reviewBoard)}</span></div>`)}
         ${laneAction}
       </div>`;
     }).join("") + "</div>";
-    if (!count && !recentMerged.length) html = "";
+    if (!count && !recentMerged.length && !state.needsYou) html = "";
     const targetLink = viewTargets(getCurrentRepo()).map((target) => {
       const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
         : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
@@ -2469,6 +2489,11 @@
   });
   narrowViewport.addEventListener("change", render);
 
+  $("#needs-you").addEventListener("click", () => {
+    state.needsYou = !state.needsYou;
+    render();
+  });
+
   document.querySelectorAll(".tab").forEach((tab) =>
     tab.addEventListener("click", () => {
       state.filter = tab.dataset.filter;
@@ -2534,6 +2559,11 @@
     if (cp?.chip) return { ...cp.chip, tone: cp.chip.kind === "nudge" ? "gold" : "muted" };
     return null;
   }
+
+  const needsYou = (pr) => {
+    const chip = nextChip(pr);
+    return !!chip && chip.tone !== "muted" && !checkingPr(pr);
+  };
 
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr) {
