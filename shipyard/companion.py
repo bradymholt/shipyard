@@ -164,7 +164,7 @@ class Companion:
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
-        self.db.forget_old_prs()
+        self.db.prune()
         self.status = {"github": "ok", "lastPoll": now_iso()}
         self.publish()
 
@@ -324,17 +324,21 @@ class Companion:
         question = row.get("question")
         new_session = None
         pin_after = False
+        review_path = None
         if not snap["mine"]:
             # Someone else's PR is always read at its current head, in the review
             # worktree (made here when a re-review predates the companion).
             made = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots)
             if not made["ok"]:
                 return self.fail_pass(row, made["error"])
+            review_path = made["path"]
             pin = self.db.pin(snap["key"])
-            self.db.set_pin(snap["key"], made["path"], pin["session_id"] if pin else None,
+            self.db.set_pin(snap["key"], review_path, pin["session_id"] if pin else None,
                             pin["how"] if pin else "review")
         if name == "pre_review":
-            cwd, session = made["path"], None
+            if not review_path:
+                return self.fail_pass(row, "A pre-review reads someone else's PR, and this one is yours.")
+            cwd, session = review_path, None
             pin_after = True
         else:
             cwd = self.checkout_for(snap)

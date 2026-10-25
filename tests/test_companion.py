@@ -210,6 +210,7 @@ class ChangesRequested(CompanionCase):
         self.gh.put(node, "author:@me")
         self.poll()
         node.update(state="MERGED", reviewDecision="APPROVED", updatedAt="2026-10-21T00:00:00Z",
+                    mergedAt=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     latestReviews={"nodes": [{"databaseId": 7, "state": "APPROVED", "body": "I'd prefer a Map here",
                                               "submittedAt": "2026-10-21T00:00:00Z", "author": {"login": "rev"},
                                               "commit": {"oid": "aaa"}}]})
@@ -557,3 +558,22 @@ class ReloadConfig(CompanionCase):
                 mock.patch("shipyard.companion.read_config", side_effect=ValueError("bad")):
             self.comp.reload_config()
         self.assertIs(self.comp.config, edited)
+
+
+class Prune(CompanionCase):
+    def test_a_forgotten_pr_takes_its_rows_with_it(self):
+        db = self.comp.db
+        self.gh.put(pr_node(ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=1, run=2)]), "author:@me")
+        self.poll()
+        db.log("o/r#1", "x")
+        db._exec("UPDATE prs SET seen = 0, snapshot = json_set(snapshot, '$.state', 'MERGED')")
+        db.prune()
+        for table in ("prs", "events", "cards", "passes", "activity"):
+            self.assertEqual(db._rows(f"SELECT COUNT(*) AS n FROM {table}")[0]["n"], 0, table)
+
+    def test_pre_review_refuses_your_own_pr(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        card = self.comp.run_pass_now("o/r#1", "pre_review")["card"]
+        self.idle()
+        self.assertIn("this one is yours", self.comp.db.card(card)["error"])
