@@ -378,6 +378,7 @@
   .lane.collapsed .lane-chevron { transform: rotate(-90deg); }
   .lane.collapsed > :not(.lane-header) { display: none; }
   .lane-count { margin-left: auto; color: var(--fg-muted); font: 500 0.6875rem var(--sans); }
+  .lane-needs { color: var(--gold-text); font-weight: 600; text-transform: none; letter-spacing: normal; }
   .lane-empty { display: flex; flex-direction: column; align-items: center; gap: 0.375rem; color: var(--fg-faint); font-size: 0.75rem; text-align: center; padding: 1.75rem 0.75rem; }
   .lane-empty svg { fill: var(--muted-bar); }
   .lane-new-task {
@@ -440,6 +441,10 @@
   }
   .merged-divider::before { content: "recently merged"; }
   .drafts-divider::before { content: "drafts"; }
+  .merged-divider .lane-needs {
+    position: relative; z-index: 1; display: inline-block; background: var(--surface);
+    margin-left: -0.5rem; padding-right: 0.75rem; font: 600 0.625rem var(--sans);
+  }
   .lane .merged-divider, .lane .drafts-divider { margin: 0.5rem 0 0.375rem; }
   .merged-actions {
     display: flex; justify-content: center; gap: 0.75rem; padding: 0.375rem 0;
@@ -1919,10 +1924,7 @@
     const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
       [prKey(pr), pr]
     )).values()];
-    const stepsFor = (prs) => prs.filter((pr) => {
-      const chip = nextChip(pr);
-      return chip && chip.tone !== "muted" && !checkingPr(pr);
-    }).length;
+    const stepsFor = (prs) => prs.filter(needsYou).length;
     const mineCount = state.companionState
       ? stepsFor([...state.prs.filter((pr) => pr.author?.login === state.viewer), ...state.merged])
       : state.prs.filter((pr) => {
@@ -1998,18 +2000,22 @@
       let laneHtml = renderGroup((p) => !p.isDraft);
       const draftHtml = renderGroup((p) => p.isDraft);
       if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
+      const needsLabel = (n, lead = "") => n ? `<span class="lane-needs">${lead}${n} need${n === 1 ? "s" : ""} you</span>` : "";
       if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
-        laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
+        const mergedNeeds = needsLabel(state.companionState ? stepsFor(recentMerged) : 0, "· ");
+        laneHtml += `<div class="merged-divider">${mergedNeeds}</div>` + mergedSection(recentMerged, mergedCard);
       }
       const laneAction = (!reviewBoard && i === 0 && state.companion)
         ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
         : "";
       const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
+      const needs = needsLabel(state.companionState ? stepsFor(inLane) : 0);
+      const laneCount = `<span class="lane-count">${needs && `${needs} · `}${inLane.length}</span>`;
       const collapsible = narrowViewport.matches;
       const collapsed = collapsible && collapsedLanes.has(laneKey);
       const header = collapsible
-        ? `<div class="lane-header" role="button" tabindex="0" aria-expanded="${!collapsed}" data-lane="${esc(laneKey)}"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span><span class="lane-chevron">${LANE_CHEVRON}</span></div>`
-        : `<div class="lane-header"><span class="lane-dot ${color}"></span>${name}<span class="lane-count">${inLane.length}</span></div>`;
+        ? `<div class="lane-header" role="button" tabindex="0" aria-expanded="${!collapsed}" data-lane="${esc(laneKey)}"><span class="lane-dot ${color}"></span>${name}${laneCount}<span class="lane-chevron">${LANE_CHEVRON}</span></div>`
+        : `<div class="lane-header"><span class="lane-dot ${color}"></span>${name}${laneCount}</div>`;
       return `
       <div class="lane${collapsed ? " collapsed" : ""}">
         ${header}
@@ -2542,6 +2548,11 @@
     if (cp?.chip) return { ...cp.chip, tone: cp.chip.kind === "nudge" ? "gold" : "muted" };
     return null;
   }
+
+  const needsYou = (pr) => {
+    const chip = nextChip(pr);
+    return !!chip && chip.tone !== "muted" && !checkingPr(pr);
+  };
 
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr) {
