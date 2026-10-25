@@ -239,6 +239,7 @@ class CiFailed(CompanionCase):
         return pr_node(head=head, ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=11, run=22)])
 
     def test_fork_and_log_tail_in_prompt(self):
+        self.trust("rerun_checks", False)
         self.gh.put(self.red(), "author:@me")
         card = self.poll()["o/r#1"]["cards"][0]
         self.assertEqual(self.agent.runs[0]["mode"], "fork")
@@ -248,6 +249,7 @@ class CiFailed(CompanionCase):
         self.assertFalse(any(c[0] == "POST" for c in self.gh.calls))  # manual until trusted
 
     def test_rerun_from_the_card_closes_it(self):
+        self.trust("rerun_checks", False)
         self.gh.put(self.red(), "author:@me")
         card = self.poll()["o/r#1"]["cards"][0]
         self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])
@@ -255,7 +257,6 @@ class CiFailed(CompanionCase):
         self.assertEqual(self.gh.calls[-1][1], "/repos/o/r/actions/runs/22/rerun-failed-jobs")
 
     def test_trusted_rerun_fires_itself_and_lands_in_handled(self):
-        self.trust("rerun_checks")
         self.gh.put(self.red(), "author:@me")
         pr = self.poll()["o/r#1"]
         self.assertIn(("POST", "/repos/o/r/actions/runs/22/rerun-failed-jobs", None), self.gh.calls)
@@ -288,6 +289,7 @@ class CiFailed(CompanionCase):
         self.assertFalse(any("rerun" in c[1] for c in self.gh.calls if c[0] == "POST"))
 
     def test_a_card_acts_once(self):
+        self.trust("rerun_checks", False)
         self.gh.put(self.red(), "author:@me")
         card = self.poll()["o/r#1"]["cards"][0]
         self.comp.card_action(card["id"], 0, None)
@@ -338,7 +340,7 @@ class CiFailed(CompanionCase):
         self.assertEqual(card["auto_held"], "it edits other.py, which the PR doesn't change")
 
     def test_ask_mode_offers_instead_of_running(self):
-        self.raw = {"rules": {"passes": {"ci_failed": "ask"}}}
+        self.raw = {"rules": {"passes": {"ci_failed": "ask"}}, "auto": {"rerun_checks": False}}
         self.comp.config = validate_config(self.raw)
         self.gh.put(self.red(), "author:@me")
         card = self.poll()["o/r#1"]["cards"][0]
