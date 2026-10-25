@@ -14,7 +14,7 @@ class Config(unittest.TestCase):
         cfg = validate_config({})
         self.assertEqual(cfg["rules"]["nudge"], {"after_hours": 24})
         self.assertEqual(cfg["rules"]["passes"]["ci_failed"], "auto")
-        self.assertEqual({k for k, v in cfg["auto"].items() if v}, {"approve_rereview"})
+        self.assertEqual({k for k, v in cfg["auto"].items() if v}, {"approve_rereview", "rerun_checks"})
         self.assertIsNone(validate_config({"auto": {"approve_rereview": False}})["auto"]["approve_rereview"])
 
     def test_rules_validation(self):
