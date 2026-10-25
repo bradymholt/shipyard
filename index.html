@@ -2462,21 +2462,25 @@
       : null;
   }
 
-  function githubChip(pr, reviewMode) {
-    if (pr.mergedAt) return !reviewMode && pr.author?.login === state.viewer ? approvalChip(pr) : null;
+  // Every next step the PR's GitHub data supports, most urgent first; the chip shows the first.
+  function githubChips(pr, reviewMode) {
+    const out = [];
+    if (pr.mergedAt) {
+      const approval = !reviewMode && pr.author?.login === state.viewer && approvalChip(pr);
+      return approval ? [approval] : out;
+    }
     if (reviewMode) {
       const mine = reviewedCopy(pr).viewerLatestReview;
       const requested = reviewRequestedForViewer(pr);
-      if (requested && !mine) return ruleOn("review") ? { kind: "review", label: "Review", tone: "gold" } : null;
-      if ((requested && mine) || viewerReviewDismissed(reviewedCopy(pr))) {
-        if (!ruleOn("re_review")) return null;
+      if (requested && !mine && ruleOn("review")) out.push({ kind: "review", label: "Review", tone: "gold" });
+      if (((requested && mine) || viewerReviewDismissed(reviewedCopy(pr))) && ruleOn("re_review")) {
         const card = (companionPr(pr)?.cards || []).find((c) => c.pass === "re_review" && c.total);
-        return { kind: "re_review", tone: "gold",
-          label: card ? `Re-review · ${card.addressed} of ${card.total} addressed` : "Re-review" };
+        out.push({ kind: "re_review", tone: "gold",
+          label: card ? `Re-review · ${card.addressed} of ${card.total} addressed` : "Re-review" });
       }
-      return null;
+      return out;
     }
-    if (pr.author?.login !== state.viewer) return null;
+    if (pr.author?.login !== state.viewer) return out;
     const waitingOn = changesRequestedBy(pr).filter((r) => !reviewRequested(pr, r.author?.login));
     if (waitingOn.length) {
       const reviewers = waitingOn.map((r) => r.author.login);
@@ -2484,22 +2488,24 @@
       const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved);
       const replied = open.length > 0 && open.every((t) => t.comments?.nodes?.[0]?.author?.login === state.viewer);
       if ((pushed || replied) && ruleOn("rerequest_review"))
-        return { kind: "rerequest_review", label: `Re-request review · ${reviewers.length}`, tone: "gold", reviewers,
-          title: pushed ? "You pushed since the review" : "You replied last on every open thread" };
-      if (ruleOn("address_feedback"))
-        return { kind: "address_feedback", label: `Address feedback · ${reviewers.length}`, tone: "red", reviewers };
+        out.push({ kind: "rerequest_review", label: `Re-request review · ${reviewers.length}`, tone: "gold", reviewers,
+          title: pushed ? "You pushed since the review" : "You replied last on every open thread" });
+      else if (ruleOn("address_feedback"))
+        out.push({ kind: "address_feedback", label: `Address feedback · ${reviewers.length}`, tone: "red", reviewers });
     }
     const approval = approvalChip(pr);
-    if (approval) return approval;
+    if (approval) out.push(approval);
     if (ciFailing(pr) && ruleOn("fix_ci")) {
       const failing = failingChecks(pr);
-      return { kind: "fix_ci", tone: "red", label: failing[0] ? `Fix CI · ${clip(failing[0].name, 18)}` : "Fix CI",
-        title: failing.map((c) => c.name).join(", ") };
+      out.push({ kind: "fix_ci", tone: "red", label: failing[0] ? `Fix CI · ${clip(failing[0].name, 18)}` : "Fix CI",
+        title: failing.map((c) => c.name).join(", ") });
     }
     if (pr.reviewDecision === "APPROVED" && ciOk(pr) && !pr.autoMergeRequest && !pr.isDraft && ruleOn("merge"))
-      return { kind: "merge", label: "Merge", tone: "green" };
-    return null;
+      out.push({ kind: "merge", label: "Merge", tone: "green" });
+    return out;
   }
+
+  const githubChip = (pr, reviewMode) => githubChips(pr, reviewMode)[0] || null;
 
   function nextChip(pr, reviewMode) {
     const cp = companionPr(pr);
@@ -2510,18 +2516,20 @@
     return null;
   }
 
-  // The companion retires a review card on its next poll; the page sees your submitted review first.
-  function leftoverReviewCard(pr, card) {
-    const mine = reviewedCopy(pr).viewerLatestReview;
-    if (!mine?.state || mine.state === "PENDING" || reviewRequestedForViewer(pr)) return false;
-    return card.pass === "pre_review" || (card.pass === "re_review" && !!mine.submittedAt && mine.submittedAt > card.created);
+  // The companion retires a card on its next poll; the page sees what ended it (a review
+  // submitted, CI green, feedback answered) first. Cards for other passes always show.
+  const CHIPS_FOR_PASS = { changes_requested: ["address_feedback", "rerequest_review"], ci_failed: ["fix_ci"],
+    pre_review: ["review"], re_review: ["re_review"] };
+  function staleCard(pr, card, reviewMode) {
+    const kinds = CHIPS_FOR_PASS[card.pass];
+    return !!kinds && card.kind !== "running" && !githubChips(pr, reviewMode).some((c) => kinds.includes(c.kind));
   }
 
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr, reviewMode) {
     const chip = nextChip(pr, reviewMode);
     const cp = companionPr(pr);
-    const ready = (cp?.cards || []).find((c) => (c.kind === "pass" || c.kind === "answer") && !leftoverReviewCard(pr, c));
+    const ready = (cp?.cards || []).find((c) => (c.kind === "pass" || c.kind === "answer") && !staleCard(pr, c, reviewMode));
     const dot = cp?.running
       ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
       : cp?.planReady && ready ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";
@@ -2857,7 +2865,7 @@
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
     // Your own asks and new sessions show under PR session.
-    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask" && !leftoverReviewCard(pr, c));
+    const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask" && !staleCard(pr, c, isReviewPr(pr)));
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && (open || githubChip(pr, isReviewPr(pr)))) {
       const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);

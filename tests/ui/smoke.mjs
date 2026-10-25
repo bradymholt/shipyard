@@ -258,6 +258,14 @@ try {
     render();
   });
   check(await page.locator('.card[data-key="o/r#201"] .next-row').count() === 0, "a submitted review drops the leftover Re-review");
+  await page.locator('.tab[data-filter="mine"]').click();
+  await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    const pr = state.prs.find((p) => p.number === 102);
+    pr.commits.nodes[0].commit.statusCheckRollup = { state: "SUCCESS", contexts: { nodes: [] } };
+    render();
+  });
+  check(await page.locator('.card[data-key="o/r#102"] .plan-dot').count() === 0, "green CI drops the leftover Fix CI card");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
   console.log("narrow window");
