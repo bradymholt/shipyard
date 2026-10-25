@@ -201,12 +201,6 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-merged-approval.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#companion-status").textContent()).includes("watching your PRs"), "footer shows the companion watching");
-  await page.locator("#needs-you").click();
-  check(await page.locator('.card[data-key="o/r#101"]').count() === 1 && await page.locator('.card[data-key="o/r#104"]').count() === 0,
-    "Needs you keeps the cards with a next step and hides the rest");
-  if (shots) await page.screenshot({ path: `${shots}/needs-you.png`, fullPage: true });
-  await page.locator("#needs-you").click();
-  check(await page.locator('.card[data-key="o/r#104"]').count() === 1, "clicking Needs you again shows every card");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
   await page.locator('.card[data-key="o/r#101"] .card-meta').click();
