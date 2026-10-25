@@ -8,9 +8,11 @@ Your earlier review threads:
 
 Check each of your threads against the code as it is now (this checkout is at the PR's head; `gh pr diff {number}` shows the whole change, `gh pr view {number} --json commits` the commits since). Say for each whether it is addressed.
 
-Then review everything that changed since your last review: `git diff {reviewed_commit} {head}` (fetch first if the commit is missing). Flag anything that goes beyond answering your threads: new behavior, files unrelated to the threads, risky edits (auth, data migrations, deletes, config, dependencies). Name each in the summary. If anything is flagged, don't propose `approve` with high confidence; use medium or low so it waits for you.
+Then review everything that changed since your last review: `git diff {reviewed_commit} {head}` (`git fetch origin` first if the commit is missing). Flag anything that goes beyond answering your threads: new behavior, files unrelated to the threads, risky edits (auth, data migrations, deletes, config, dependencies). Name each in the summary. If anything is flagged, don't propose `approve` with high confidence; use medium or low so it waits for you.
 
 Then decide whether the PR is ready to approve.
+
+If you have a code-review skill, follow its review approach, but answer in the format below and post nothing.
 
 Answer with one JSON object and nothing else:
 {{"summary": "N of M threads addressed; what is left",

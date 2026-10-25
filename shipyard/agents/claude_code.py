@@ -7,14 +7,16 @@ from pathlib import Path
 from . import PASS_TIMEOUT, Adapter, AgentError, parse_json_answer
 
 # Passes only read: files and the PR on GitHub. Only the interactive session you open
-# yourself edits files. git log/diff/show are left out because --output writes a file;
-# `gh pr diff` and `gh pr view` cover what a pass needs.
+# yourself edits files. git log/show are left out because --output writes a file.
 READ_ONLY_TOOLS = [
-    "Read", "Grep", "Glob", "Task",
-    "Bash(git status:*)", "Bash(git blame:*)",
+    "Read", "Grep", "Glob", "Task", "Skill",
+    "Bash(git status:*)", "Bash(git blame:*)", "Bash(git diff:*)", "Bash(git fetch origin:*)",
     "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr checks:*)", "Bash(gh run view:*)",
 ]
-WRITE_TOOLS = ["Edit", "Write", "NotebookEdit", "MultiEdit"]
+# git diff --output writes a file and git fetch --upload-pack runs a command; git accepts
+# any unambiguous prefix of a long option, so --upl is enough.
+WRITE_TOOLS = ["Edit", "Write", "NotebookEdit", "MultiEdit",
+               "Bash(git diff *--output*)", "Bash(git fetch *--upl*)"]
 # Set when the companion itself was started from inside a Claude Code session; passed
 # through, they make the headless run think it is that session (or a child of it).
 PARENT_SESSION_VARS = {"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",

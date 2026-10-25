@@ -124,8 +124,12 @@ class ClaudeSessions(HomeCase):
         self.assertNotIn("--setting-sources", fresh)
         theirs = ClaudeCode().command("hi", {}, "fresh", None, "x", untrusted=True)
         self.assertEqual(theirs[theirs.index("--setting-sources") + 1], "user")
-        # git commands that can write files with --output aren't allowed at all
-        self.assertFalse(any(t.startswith(("Bash(git diff", "Bash(git log", "Bash(git show")) for t in theirs))
+        allowed = theirs[theirs.index("--allowedTools"):theirs.index("--disallowedTools")]
+        denied = theirs[theirs.index("--disallowedTools"):]
+        self.assertIn("Bash(git diff:*)", allowed)
+        self.assertIn("Bash(git diff *--output*)", denied)
+        self.assertIn("Bash(git fetch *--upl*)", denied)
+        self.assertFalse(any(t.startswith(("Bash(git log", "Bash(git show")) for t in allowed))
 
     def test_run_parses_structured_output(self):
         self.fake_cli("claude", """
