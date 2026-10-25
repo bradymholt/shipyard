@@ -3,7 +3,7 @@ Shipyard (the PR dashboard) is checking in on this pull request because a review
 PR: {repo}#{number} "{title}" ({url})
 Branch: {branch} at {head}
 
-Review feedback (unresolved threads first; each has a comment_id you can reply to):
+Review feedback (unresolved threads first; each has a comment_id you can reply to; a review's own text has none, so a reply to it leaves comment_id out and lands on the PR):
 {feedback}
 
 For each piece of feedback, say in one line what the reviewer is asking for. Then give a short plan for addressing all of it. Where a reply is the whole answer (a question, a misunderstanding, a deliberate choice), draft that reply in the voice of the PR author: brief, specific, no greeting.

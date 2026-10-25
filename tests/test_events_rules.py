@@ -59,6 +59,19 @@ class DeriveMine(unittest.TestCase):
         resolved = snap(reviews=[review("COMMENTED", id=1)], threads=[{"body": "Nit", "resolved": True}])
         self.assertEqual(derive(snap(), resolved), [])
 
+    def test_an_approval_with_comments_is_feedback(self):
+        approved = dict(decision="APPROVED")
+        self.assertEqual(names(derive(snap(), snap(**approved, reviews=[review("APPROVED", body="LGTM 🚀")]))),
+                         ["approved"])
+        thread = snap(**approved, reviews=[review("APPROVED", id=1)], threads=[{"body": "I'd use a map"}])
+        self.assertEqual(names(derive(snap(), thread)), ["changes_requested", "approved"])
+        body = snap(**approved, reviews=[review("APPROVED", id=1, body="Fine, though I'd prefer a map")])
+        events = derive(snap(), body)
+        self.assertEqual(events[0]["data"]["reviewers"], ["rev"])
+        # a push answers it without proposing to re-request an approver
+        self.assertEqual(derive(body, snap(head="bbb", **approved,
+                                           reviews=[review("APPROVED", id=1, commit="aaa", body="Prefer a map")])), [])
+
     def test_push_after_changes_requested_proposes_re_request(self):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", commit="aaa")])
         cur = snap(head="bbb", decision="CHANGES_REQUESTED",
@@ -189,6 +202,17 @@ class StaleCards(unittest.TestCase):
         rev = [{"author": "rev", "state": "COMMENTED"}]
         self.assertFalse(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?"}])))
         self.assertTrue(rules.card_is_stale(card, snap(reviews=rev, threads=[{"body": "Why?", "resolved": True}])))
+
+    def test_approval_feedback_card_goes_once_answered(self):
+        card = {"pass": "changes_requested", "head": "aaa"}
+        rev = [{"author": "rev", "state": "APPROVED", "body": "Prefer a map", "at": "2026-10-20T10:00:00Z"}]
+        self.assertFalse(rules.card_is_stale(card, snap(decision="APPROVED", reviews=rev)))
+        self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED", reviews=rev,
+                                                       comments=[{"author": "me", "at": "2026-10-20T11:00:00Z"}])))
+        threads = [{"body": "Use a map", "replies": ["me"]}]
+        self.assertTrue(rules.card_is_stale(card, snap(decision="APPROVED",
+                                                       reviews=[{"author": "rev", "state": "APPROVED"}],
+                                                       threads=threads)))
 
     def test_ci_card_goes_on_green_or_new_head(self):
         card = {"pass": "ci_failed", "head": "aaa"}

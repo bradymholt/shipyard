@@ -28,6 +28,7 @@ DETAIL_FIELDS = """
   repository { nameWithOwner }
   author { login }
   reviewDecision mergeable
+  comments(last: 10) { nodes { createdAt author { login } } }
   autoMergeRequest { enabledAt }
   viewerLatestReview { databaseId state submittedAt commit { oid } }
   reviewRequests(first: 20) { nodes { requestedReviewer {
@@ -166,6 +167,8 @@ def snapshot(node, viewer):
                        "submitted": mine.get("submittedAt"),
                        "commit": (mine.get("commit") or {}).get("oid")} if mine else None),
         "threads": threads,
+        "comments": [{"author": (c.get("author") or {}).get("login"), "created": c.get("createdAt")}
+                     for c in (node.get("comments") or {}).get("nodes") or []],
         "ci": rollup.get("state"),
         "failing": failing,
         "last_commit_at": commit.get("committedDate"),

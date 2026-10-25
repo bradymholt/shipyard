@@ -38,11 +38,11 @@ function pr(number, extra = {}) {
     isDraft: !!extra.draft, createdAt: ago(100), updatedAt: extra.updated || ago(1), mergedAt: extra.mergedAt || null,
     headRefName: extra.branch || `me/pr-${number}`, baseRefName: "main", headRefOid: `h${number}`,
     additions: 40, deletions: 12, changedFiles: 3, autoMergeRequest: null, labels: { nodes: [] },
-    viewerCanEnableAutoMerge: true, viewerCanDisableAutoMerge: false,
+    viewerCanEnableAutoMerge: true, viewerCanDisableAutoMerge: false, ...(extra.autoMerge && { autoMergeRequest: { enabledAt: ago(5) } }),
     repository: { nameWithOwner: "o/r" }, author: { login: author, avatarUrl: `https://avatars.example/${author}?v=4` },
     reviewDecision: extra.decision || null, comments: { totalCount: extra.comments || 0 },
     reviewRequests: { nodes: (extra.requested || []).map((l) => ({ requestedReviewer: user(l) })) },
-    latestReviews: { nodes: (extra.reviews || []).map(([state, login]) => ({ state, author: { login, avatarUrl: null } })) },
+    latestReviews: { nodes: (extra.reviews || []).map(([state, login, body]) => ({ state, body, author: { login, avatarUrl: null } })) },
     reviewThreads: { nodes: (extra.threads || []).map((login) => ({ isResolved: false, comments: { nodes: [{ author: { login } }] } })) },
     commits: { nodes: [{ commit: { oid: `h${number}`, statusCheckRollup: extra.ci === null ? null : {
       state: extra.ci || "SUCCESS",
@@ -64,6 +64,8 @@ const MINE = [
   pr(106, { title: "Tidy the README", decision: "CHANGES_REQUESTED", reviews: [["CHANGES_REQUESTED", "rev"]], threads: ["me"] }),
   pr(107, { title: "Fix the typo", decision: "CHANGES_REQUESTED", reviews: [["COMMENTED", "rev"]], threads: ["me", "rev"] }),
   pr(108, { title: "Rename the flag", decision: "CHANGES_REQUESTED", requested: ["rev"] }),
+  pr(109, { title: "Cache the lookups", decision: "APPROVED", autoMerge: true,
+    reviews: [["APPROVED", "jm", "Approving, though I'd prefer a Map here."]] }),
 ];
 const REQUESTED = [
   pr(201, { author: "alice", title: "Fuzzy search in the index", requested: ["me"] }),
@@ -152,6 +154,7 @@ try {
   check(await page.locator('.card[data-key="o/r#108"] .next-row').count() === 0, "re-requested after changes → no chip, waiting on the reviewer");
   check(await page.locator('.card[data-key^="o/r#10"] .review-badge.changes').count() === 0, "no standalone Changes requested badge");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
+  check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
   check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
   check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
