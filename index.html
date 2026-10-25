@@ -1613,7 +1613,7 @@
     if (!state.companion) return "";
     const wt = worktreeFor(pr);
     if (!wt) return "";
-    return `<div class="card-icons"><span class="wt-links">${openCheckoutButton(wt)}${agentButton(pr, wt)}</span></div>`;
+    return `<div class="card-icons"><span class="wt-links">${agentButton(pr, wt)}${openCheckoutButton(wt)}</span></div>`;
   }
 
   function worktreeLinks(pr) {
@@ -1642,13 +1642,13 @@
           ? `<button class="wt-link wt-move-wt blocked" disabled title="${esc(blocked)}">${MOVE_WT_ICON}</button>`
           : `<button class="wt-link wt-move-wt" data-repo="${repo}" data-branch="${branch}" title="Move this branch out to a new worktree and open it in ${esc(appName)}">${MOVE_WT_ICON}</button>`;
       }
-      return `<span class="wt-links">${openBtn}${agentButton(pr, wt)}${moveBtn}</span>`;
+      return `<span class="wt-links">${agentButton(pr, wt)}${openBtn}${moveBtn}</span>`;
     }
 
     // A review worktree is detached, so it has no branch entry in worktrees.json.
     const cp = companionPr(pr);
     if (cp?.path) {
-      return `<span class="wt-links">${openCheckoutButton({ path: cp.path, workspace: null, main: false })}${agentButton(pr, null)}</span>`;
+      return `<span class="wt-links">${agentButton(pr, null)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo
