@@ -110,7 +110,7 @@ def main():
             "summary": "Adds fuzzy search to the index. Solid overall; the tokenizer drops accents, "
                        "which breaks exact matches for non-ASCII names.",
             "proposals": [{"action": "submit_review", "confidence": "medium", "reason": "one real bug, otherwise fine",
-                           "payload": {"event": "COMMENT", "body": "Nice. One issue with accents below.",
+                           "payload": {"event": "REQUEST_CHANGES", "body": "One issue with accents below.",
                                        "comments": [{"path": "search/tokenize.py", "line": 12,
                                                      "body": "This strips accents before matching exact names."}]}}]},
         "re-review": {

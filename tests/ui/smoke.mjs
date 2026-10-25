@@ -235,6 +235,7 @@ try {
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
   check((await sb.locator('a.btn-link:has-text("Finish review on GitHub")').getAttribute("href")).endsWith("/files"), "pre-review drafts on GitHub and links to the diff");
+  check((await sb.locator(".nc-verdict").textContent()).includes("Request changes"), "the pre-review leads with its verdict");
   await page.waitForTimeout(400);
   if (shots) await page.screenshot({ path: `${shots}/sidebar-review.png` });
   await page.keyboard.press("Escape");
