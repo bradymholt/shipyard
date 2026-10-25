@@ -2,7 +2,6 @@ import copy
 import tempfile
 import time
 import unittest
-from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -116,8 +115,8 @@ class CompanionCase(unittest.TestCase):
         self.addCleanup(self.comp.db.close)
         self.addCleanup(self.comp.stop)
 
-    def trust(self, flag):
-        self.raw.setdefault("auto", {})[flag] = True
+    def trust(self, flag, value=True):
+        self.raw.setdefault("auto", {})[flag] = value
         self.comp.config = validate_config(self.raw)
 
     def poll(self):
@@ -370,7 +369,7 @@ class Reviews(CompanionCase):
 
 
     def test_trusted_approve_only_from_re_review_and_without_agent_text(self):
-        self.trust("approve_rereview")
+        self.trust("approve_rereview", {"min_wait_minutes": 0})
         self.agent.answers["first-pass code review"] = {"summary": "ok", "proposals": [
             {"action": "approve", "confidence": "high", "reason": "fine", "payload": {"body": "LGTM!!"}}]}
         self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
@@ -381,8 +380,7 @@ class Reviews(CompanionCase):
         review = {"databaseId": 9, "state": "APPROVED", "submittedAt": "2026-10-19T00:00:00Z",
                   "commit": {"oid": "old"}}
         self.gh.put(pr_node(number=7, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
-        with mock.patch("shipyard.companion.APPROVE_MIN_WAIT", timedelta(0)):
-            self.poll()
+        self.poll()
         posted = [c for c in self.gh.calls if c[1] == "/repos/o/r/pulls/7/reviews"]
         self.assertEqual(len(posted), 1)
         self.assertEqual(posted[0][2]["event"], "APPROVE")
@@ -391,8 +389,8 @@ class Reviews(CompanionCase):
                       [a["text"] for a in self.comp.page_state()["prs"]["o/r#7"]["activity"]])
 
     def rereview_approval_posted(self, files, state="APPROVED", dismissed_from=None, auto_approve=None,
-                                 wait=timedelta(0)):
-        self.trust("approve_rereview")
+                                 wait=0):
+        self.trust("approve_rereview", {"min_wait_minutes": wait})
         if auto_approve is not None:
             self.comp.db.set_auto_approve("o/r#7", auto_approve, "you")
         self.gh.compare = {"files": files}
@@ -405,8 +403,7 @@ class Reviews(CompanionCase):
             node["timelineItems"]["nodes"].append({"__typename": "ReviewDismissedEvent",
                                                    "previousReviewState": dismissed_from, "review": {"databaseId": 9}})
         self.gh.put(node, "review-requested:@me")
-        with mock.patch("shipyard.companion.APPROVE_MIN_WAIT", wait):
-            self.poll()
+        self.poll()
         return any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls)
 
     def test_trusted_approve_fires_on_a_small_change(self):
@@ -415,7 +412,7 @@ class Reviews(CompanionCase):
 
     def test_trusted_approve_waits_a_few_minutes_after_the_push(self):
         files = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]
-        self.assertFalse(self.rereview_approval_posted(files, wait=timedelta(minutes=3)))
+        self.assertFalse(self.rereview_approval_posted(files, wait=3))
         card = self.comp.db.cards("o/r#7", ("open",))[-1]
         self.assertIn("until", card["auto_wait"])
         self.comp.db._exec("UPDATE events SET at = '2000-01-01T00:00:00Z' WHERE key = 'o/r#7'")
