@@ -83,11 +83,15 @@ class State:
 
     def open_node_ids(self):
         """Open PRs still on one of your lists; a PR that dropped off every list (say a
-        review request was withdrawn) is read once more, then left alone."""
+        review request was withdrawn) is read once more, then left alone. A merged PR
+        whose approval comments still hold a card keeps being read until you answer."""
         out = set()
-        for r in self._rows("SELECT snapshot FROM prs"):
+        for r in self._rows("SELECT key, snapshot FROM prs"):
             snap = json.loads(r["snapshot"])
             if snap.get("state") == "OPEN" and not snap.get("dropped"):
+                out.add(snap["id"])
+            elif snap.get("state") == "MERGED" and any(c.get("pass") == "changes_requested"
+                                                       for c in self.cards(r["key"], ("open",))):
                 out.add(snap["id"])
         return out
 

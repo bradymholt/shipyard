@@ -1603,6 +1603,7 @@
         <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
         <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)}</div>
         ${mergedWorktreeLinks(pr)}
+        ${nextRowHtml(pr, false)}
       </div>`;
   }
 
@@ -2454,8 +2455,15 @@
     if (reviewed) state.reviewedMerged = mergeMergedLists([{ ...reviewed, mergedAt }], state.reviewedMerged);
   }
 
+  function approvalChip(pr) {
+    const approvers = approvalFeedback(pr).map((r) => r.author.login);
+    return approvers.length && ruleOn("address_feedback")
+      ? { kind: "address_feedback", label: `Reply to approval · ${approvers.length}`, tone: "gold", reviewers: approvers, approval: true }
+      : null;
+  }
+
   function githubChip(pr, reviewMode) {
-    if (pr.mergedAt) return null;
+    if (pr.mergedAt) return !reviewMode && pr.author?.login === state.viewer ? approvalChip(pr) : null;
     if (reviewMode) {
       const mine = reviewedCopy(pr).viewerLatestReview;
       const requested = reviewRequestedForViewer(pr);
@@ -2481,10 +2489,8 @@
       if (ruleOn("address_feedback"))
         return { kind: "address_feedback", label: `Address feedback · ${reviewers.length}`, tone: "red", reviewers };
     }
-    const approvers = approvalFeedback(pr).map((r) => r.author.login);
-    if (approvers.length && ruleOn("address_feedback"))
-      return { kind: "address_feedback", label: `Reply to approval · ${approvers.length}`, tone: "gold",
-        reviewers: approvers, approval: true };
+    const approval = approvalChip(pr);
+    if (approval) return approval;
     if (ciFailing(pr) && ruleOn("fix_ci")) {
       const failing = failingChecks(pr);
       return { kind: "fix_ci", tone: "red", label: failing[0] ? `Fix CI · ${clip(failing[0].name, 18)}` : "Fix CI",
@@ -2853,7 +2859,7 @@
     // Your own asks and new sessions show under PR session.
     const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask" && !leftoverReviewCard(pr, c));
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
-    if (!html && open) {
+    if (!html && (open || githubChip(pr, isReviewPr(pr)))) {
       const chip = githubChip(pr, isReviewPr(pr)) || (cp?.chip?.kind !== "snoozed" ? cp?.chip : null);
       html = cp ? derivedCardHtml(pr, chip) : "";
     }

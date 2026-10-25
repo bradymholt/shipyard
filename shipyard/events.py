@@ -78,6 +78,12 @@ def derive(prev, cur):
     if cur["state"] == "MERGED":
         if first or prev.get("state") != "MERGED":
             add("merged")
+            # Auto-merge can land on the approval itself, before its comments were seen open.
+            approvals = approval_feedback(cur) if cur["mine"] else []
+            if approvals:
+                ids = sorted(str(r["id"]) for r in approvals if r.get("id") is not None)
+                add("changes_requested", key=f":{','.join(ids)}" if ids else None,
+                    reviewers=[r["author"] for r in approvals])
         return events
     if cur["state"] != "OPEN":
         if first or prev.get("state") == "OPEN":
