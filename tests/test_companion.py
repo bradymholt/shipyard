@@ -544,3 +544,16 @@ class PageRequests(CompanionCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReloadConfig(CompanionCase):
+    def test_a_hand_edit_is_picked_up_and_a_bad_one_is_ignored(self):
+        edited = validate_config({"rules": {"merge": False}})
+        with mock.patch("shipyard.companion.config_mtime", return_value=1.0), \
+                mock.patch("shipyard.companion.read_config", return_value=edited):
+            self.comp.reload_config()
+        self.assertFalse(self.comp.config["rules"]["merge"])
+        with mock.patch("shipyard.companion.config_mtime", return_value=2.0), \
+                mock.patch("shipyard.companion.read_config", side_effect=ValueError("bad")):
+            self.comp.reload_config()
+        self.assertIs(self.comp.config, edited)

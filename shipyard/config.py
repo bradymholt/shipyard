@@ -250,18 +250,33 @@ def validate_config(raw):
     return {"roots": roots, "launcher": launcher, "agent": agent, "rules": rules, "auto": auto}
 
 
-def load_config(path=CONFIG_PATH):
+def config_mtime(path=CONFIG_PATH):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return None
+
+
+def read_config(path=CONFIG_PATH):
+    """The validated config; ValueError when the file can't be read or doesn't validate."""
     try:
         with open(path) as fh:
             raw = json.load(fh)
     except FileNotFoundError:
         raw = {}
     except (OSError, json.JSONDecodeError) as e:
-        sys.exit(f"Could not read {CONFIG_FILE}: {e}")
+        raise ValueError(f"Could not read {CONFIG_FILE}: {e}") from e
     try:
-        cfg = validate_config(raw)
+        return validate_config(raw)
     except ValueError as e:
-        sys.exit(f"Invalid {CONFIG_FILE}: {e}")
+        raise ValueError(f"Invalid {CONFIG_FILE}: {e}") from e
+
+
+def load_config(path=CONFIG_PATH):
+    try:
+        cfg = read_config(path)
+    except ValueError as e:
+        sys.exit(str(e))
     for label in ("launcher", "agent"):
         settings = cfg[label]
         if settings and settings["mode"] == "command" and not shutil.which(settings["command"][0]):

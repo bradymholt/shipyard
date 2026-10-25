@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import actions, passes, rules, worktrees
 from .agents import AgentError, adapter_for, read_text
-from .config import CONFIDENCE, HARD_LOCKED, page_config, update_config
+from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config, update_config
 from .events import derive
 from .github import GitHub, GitHubError
 from .poll import Poller
@@ -64,6 +64,7 @@ def session_used(mode, pinned_after, kept=False):
 class Companion:
     def __init__(self, config, roots, db_path, github=None, poll_seconds=POLL_SECONDS):
         self.config = config
+        self.config_mtime = config_mtime()
         self.roots = roots
         self.db = State(db_path)
         self.github = github or GitHub()
@@ -99,6 +100,7 @@ class Companion:
 
     def poll_loop(self):
         while not self.stopped:
+            self.reload_config()
             try:
                 self.poll_once()
             except Exception as e:  # keep polling through any one bad cycle
@@ -109,6 +111,20 @@ class Companion:
                 self.publish()
             self.wake.wait(self.poll_seconds)
             self.wake.clear()
+
+    def reload_config(self):
+        """Pick up a hand edit to the config without a restart, which would cut running
+        passes short. Roots are read only at startup."""
+        mtime = config_mtime()
+        if mtime == self.config_mtime:
+            return
+        self.config_mtime = mtime
+        try:
+            self.config = read_config()
+        except ValueError as e:
+            print(f"Warning: kept the previous config: {e}")
+            return
+        self.publish()
 
     def poke(self):
         """Poll again soon, e.g. right after an action changed the PR."""
