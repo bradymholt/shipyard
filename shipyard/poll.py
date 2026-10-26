@@ -3,7 +3,12 @@ signature (updatedAt, head, checks, review decision, draft) moved. Check results
 bump a PR's updatedAt, which is why the signature carries them too.
 
 Each PR becomes a plain snapshot dict; events.py diffs two of them."""
+import hashlib
 import re
+from pathlib import Path
+
+# A change to how PRs are read or shaped must re-read them all, so saved memory carries this.
+VERSION = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()[:12]
 
 SEARCHES = {
     "mine": "is:pr is:open archived:false author:@me",
@@ -305,6 +310,15 @@ class Poller:
         self.signatures = {}  # PR node id -> last light signature
         self.owner_types = {}  # login -> "org" | "user"
         self.lists = {}  # PR node id -> names of the SEARCHES it was on in the last poll
+
+    def memory(self):
+        return {"version": VERSION, "signatures": self.signatures, "lists": self.lists}
+
+    def restore(self, memory):
+        """Pick up where the last process left off, unless this code reads PRs differently."""
+        if memory and memory.get("version") == VERSION:
+            self.signatures = dict(memory.get("signatures") or {})
+            self.lists = dict(memory.get("lists") or {})
 
     def search(self, q):
         nodes, viewer, after = [], None, None

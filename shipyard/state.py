@@ -76,6 +76,14 @@ class State:
         with self.lock:
             self.db.close()
 
+    def poll_memory(self):
+        rows = self._rows("SELECT value FROM meta WHERE key = 'poll'")
+        return json.loads(rows[0]["value"]) if rows else None
+
+    def set_poll_memory(self, memory):
+        self._exec("INSERT INTO meta (key, value) VALUES ('poll', ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(memory),))
+
     def session_token(self):
         """The token the page sends with every POST. It outlives restarts, so an open tab
         keeps working when saving the companion's code reloads it."""
