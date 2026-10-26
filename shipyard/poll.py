@@ -175,6 +175,12 @@ PAGE_FIELDS = ("id", "number", "title", "url", "state", "isDraft", "createdAt", 
 PAGE_CONTEXT_FIELDS = ("__typename", "name", "conclusion", "detailsUrl", "context", "state", "targetUrl")
 
 
+def is_failing(ctx):
+    if ctx.get("__typename") == "CheckRun":
+        return ctx.get("conclusion") in FAILING
+    return ctx.get("state") in ("FAILURE", "ERROR")
+
+
 def first_author(conn):
     return [{"author": n.get("author")} for n in ((conn or {}).get("nodes") or [])[:1]]
 
@@ -196,8 +202,9 @@ def page_pr(node):
                                     for t in (node.get("reviewThreads") or {}).get("nodes") or []]},
         "commits": {"nodes": [{"commit": {"oid": commit.get("oid"), "statusCheckRollup": rollup and {
             "state": rollup.get("state"),
+            # The page shows the overall state and names only the failing checks.
             "contexts": {"nodes": [{k: c[k] for k in PAGE_CONTEXT_FIELDS if k in c}
-                                   for c in (rollup.get("contexts") or {}).get("nodes") or []]}}}}]},
+                                   for c in (rollup.get("contexts") or {}).get("nodes") or [] if is_failing(c)]}}}}]},
     }
 
 

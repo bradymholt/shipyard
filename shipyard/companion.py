@@ -61,6 +61,16 @@ def reply_context(snap, comment_id):
     return None
 
 
+def transcripts_stamp(adapter, path):
+    mtimes = []
+    for _, f in adapter.session_files(path):
+        try:
+            mtimes.append(os.path.getmtime(f))
+        except OSError:
+            continue
+    return path, len(mtimes), max(mtimes, default=0)
+
+
 def session_used(mode, pinned_after, kept=False):
     if kept:
         return "in a fork of your open session, kept" if mode == "fork" else "in a new session, kept (yours was open)"
@@ -89,6 +99,7 @@ class Companion:
         self.live_cache = {}
         self.info_cache = {}
         self.merged_cache = {}  # (view, kind, cursor) -> (time, page)
+        self.pin_misses = {}  # PR key -> the transcripts a lookup found no session in
         self.version = 0
         self.cond = threading.Condition()
         self.wake = threading.Event()
@@ -259,13 +270,19 @@ class Companion:
         current = self.db.pin(key)
         if current and (current.get("session_id") or current.get("how") == "unpinned") and not force:
             return current
+        # A lookup reads every transcript in the checkout, so a miss stands until they change.
+        stamp = transcripts_stamp(adapter, wt["path"])
+        if not force and self.pin_misses.get(key) == stamp:
+            return None
         # A main clone holds sessions about many PRs, so its newest one says nothing about this PR.
         found = adapter.find_pr_session(wt["path"], snap["branch"], snap["url"], latest=not wt.get("main"))
         if found:
+            self.pin_misses.pop(key, None)
             self.db.set_pin(key, wt["path"], found["id"], found["how"])
             self.db.log(key, f"pinned {self.config['agent']['name']} session"
                         + (" (latest in the checkout)" if found["how"] == "latest" else ""))
             return self.db.pin(key)
+        self.pin_misses[key] = stamp
         return None
 
     def resolve_stale_cards(self, snap):

@@ -82,7 +82,7 @@ class Snapshot(unittest.TestCase):
         self.assertEqual(snapshot(node, VIEWER)["requested"], ["team:web"])
 
     def test_page_shape(self):
-        node = pr_node(contexts=[check_run("lint", "SUCCESS")], comments=[{"author": "rev"}],
+        node = pr_node(contexts=[check_run("lint", "SUCCESS"), check_run("rspec", "FAILURE")], comments=[{"author": "rev"}],
                        reviews=[{"state": "APPROVED", "author": "rev", "body": "lgtm"}],
                        threads=[{"body": "why?", "author": VIEWER, "replies": ["you", "me2"]}])
         node["comments"]["totalCount"] = 4
@@ -95,8 +95,8 @@ class Snapshot(unittest.TestCase):
         self.assertEqual(page["reviewThreads"]["nodes"], [{"isResolved": False,
                                                           "opener": {"nodes": [{"author": {"login": VIEWER}}]},
                                                           "comments": {"nodes": [{"author": {"login": "me2"}}]}}])
-        ctx = page["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"][0]
-        self.assertEqual(set(ctx), {"__typename", "name", "conclusion", "detailsUrl"})
+        [ctx] = page["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"]
+        self.assertEqual((ctx["name"], set(ctx)), ("rspec", {"__typename", "name", "conclusion", "detailsUrl"}))
         self.assertIsNone(snapshot(pr_node(ci=None), VIEWER)["page"]["commits"]["nodes"][0]["commit"]["statusCheckRollup"])
 
 
