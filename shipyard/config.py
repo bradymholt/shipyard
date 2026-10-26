@@ -91,8 +91,6 @@ CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
 
 DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT,
                   "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": []}
-# What the page's settings may change. The rest (roots, trust flags) stays a hand edit.
-PAGE_SETTINGS = {"views"}
 TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
 
@@ -326,29 +324,10 @@ def format_json(value, depth=0):
     return json.dumps(value, ensure_ascii=False)
 
 
-def save_settings(changes, expect=None, path=CONFIG_PATH):
-    """Write settings the page changed into the config file and return the new config.
-    Everything else in the file is kept. `expect` holds the values the page last saw, so
-    a hand edit made since then isn't silently overwritten."""
-    if not isinstance(changes, dict) or not changes:
-        raise ValueError("No settings to save.")
-    blocked = sorted(set(changes) - PAGE_SETTINGS)
-    if blocked:
-        raise ValueError(f"{', '.join(blocked)} can only be changed in {CONFIG_FILE}.")
-    raw = read_raw(path)
-    current = read_config(path)
-    for key, value in (expect or {}).items():
-        if key in PAGE_SETTINGS and current[key] != value:
-            raise ValueError(f'"{key}" changed in {CONFIG_FILE} since this page loaded. Reload and try again.')
-    try:
-        cfg = validate_config({**raw, **changes})
-    except ValueError as e:
-        raise ValueError(f"Invalid setting: {e}") from e
-    raw.update({key: cfg[key] for key in changes})
+def write_raw(raw, path=CONFIG_PATH):
     tmp = Path(f"{path}.tmp")
     tmp.write_text(format_json(raw) + "\n")
     os.replace(tmp, path)
-    return cfg
 
 
 def load_config(path=CONFIG_PATH):

@@ -13,11 +13,11 @@ from datetime import datetime, timedelta, timezone
 
 from . import actions, passes, rules, worktrees
 from .agents import AgentError, adapter_for, process_cwds, read_text
-from .config import (CONFIDENCE, CONFIG_PATH, HARD_LOCKED, PAGE_SETTINGS, config_mtime, page_config,
-                     read_config, save_settings, view_targets)
+from .config import CONFIDENCE, CONFIG_PATH, HARD_LOCKED, config_mtime, page_config, read_config, read_raw, view_targets
 from .events import derive
 from .github import GitHub, GitHubError
 from .poll import MERGED_SEARCHES, Poller
+from .settings import MISSING, SECTIONS, fields as setting_fields, save as save_setting_file
 from .state import State, now_iso
 
 POLL_SECONDS = 60
@@ -760,11 +760,14 @@ class Orchestrator:
         current = self.db.current_view()
         return {"views": views, "current": current if current in views else (views[0] if views else "")}
 
-    def save_settings(self, changes, expect=None):
-        self.config = save_settings(changes, expect, self.config_path)
+    def settings(self):
+        return {"ok": True, "sections": SECTIONS, "fields": setting_fields(read_raw(self.config_path))}
+
+    def save_setting(self, path, value=None, reset=False, expect=MISSING):
+        self.config, fields = save_setting_file(path, value, reset, expect, self.config_path)
         self.config_mtime = config_mtime(self.config_path)
         self.publish()
-        return {"ok": True, "settings": {key: self.config[key] for key in PAGE_SETTINGS}}
+        return {"ok": True, "fields": fields}
 
     def set_current_view(self, view):
         self.db.set_current_view(", ".join(view_targets(view)) if view else "")
@@ -777,7 +780,7 @@ class Orchestrator:
         if not old:
             return
         if old.get("views") and not self.config["views"]:
-            self.save_settings({"views": old["views"]})
+            self.save_setting(["views"], old["views"])
         self.db.set_current_view(old.get("current") or "")
 
     def merged_history(self, view, kind, after=None):

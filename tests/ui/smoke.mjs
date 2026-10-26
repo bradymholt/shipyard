@@ -202,6 +202,23 @@ try {
   check(mergedCalls.length === 0, "merged history arrives with the server's pushes, without the page asking");
   check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
 
+  console.log("settings");
+  await page.click("#settings-btn");
+  await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
+  const fileSets = () => page.evaluate(async () => (await (await fetch("api/settings")).json()).fields
+    .filter((f) => f.set && f.path[0] !== "views").map((f) => f.path.join(".")));
+  check((await fileSets()).length === 0, "settings show every field at its default before any change");
+  const hours = page.locator('[data-path="rules.nudge.after_hours"] input');
+  await hours.fill("48");
+  await hours.press("Enter");
+  await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag.changed');
+  check((await page.locator('[data-path="rules.nudge.after_hours"] .set-default').textContent()) === "Default: 24" &&
+    JSON.stringify(await fileSets()) === '["rules.nudge.after_hours"]', "changing a setting writes only that key and shows its default");
+  await page.locator('[data-path="rules.nudge.after_hours"] [data-reset]').click();
+  await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
+  check((await fileSets()).length === 0, "Reset takes the setting back out of the file");
+  await page.click("#settings-close");
+
   console.log("narrow window");
   const narrow = await openPage(browser, DEMO_PORT, { width: 420, height: 900 });
   check(await narrow.page.locator('.card[data-key="o/r#101"]').count() === 1, "a browser with nothing stored shows the server's saved view");

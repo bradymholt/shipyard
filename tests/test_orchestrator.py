@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest import mock
 
 from shipyard.orchestrator import Orchestrator
-from shipyard.config import validate_config
+from shipyard.config import read_config, validate_config
+from shipyard.settings import MISSING
 from shipyard.state import State
 
 from fixtures import VIEWER, check_run, pr_node
@@ -211,15 +212,24 @@ class SharedCosts(OrchestratorCase):
 class Settings(OrchestratorCase):
     def test_views_save_to_the_config_file_and_keep_the_rest(self):
         self.config_path.write_text(json.dumps({"roots": ["~/dev"]}))
-        out = self.comp.save_settings({"views": ["o/r ,acme", "o/r, acme", "me"]}, {"views": []})
-        self.assertEqual(out["settings"]["views"], ["o/r, acme", "me"])
+        self.comp.save_setting(["views"], ["o/r ,acme", "o/r, acme", "me"], expect=[])
         self.assertEqual(self.config_path.read_text(), '{\n  "roots": ["~/dev"],\n  "views": ["o/r, acme", "me"]\n}\n')
         self.assertEqual(self.comp.set_current_view("gone")["current"], "o/r, acme")
         self.assertEqual(self.comp.set_current_view("me")["current"], "me")
-        for changes, expect in (({"views": ["acme is:open"]}, None), ({"roots": ["/"]}, None),
-                                ({"views": ["x"]}, {"views": ["stale"]})):
+        for path, value, expect in ((["views"], ["acme is:open"], MISSING), (["auto", "post_reply"], True, MISSING),
+                                    (["views"], ["x"], ["stale"])):
             with self.assertRaises(ValueError):
-                self.comp.save_settings(changes, expect)
+                self.comp.save_setting(path, value, expect=expect)
+
+    def test_a_setting_saves_in_the_files_own_form_and_resets_away(self):
+        self.config_path.write_text("{}")
+        out = self.comp.save_setting(["auto", "rerun_checks", "when"], "medium", expect="high")
+        self.assertEqual(json.loads(self.config_path.read_text()), {"auto": {"rerun_checks": {"when": "confidence >= medium"}}})
+        self.assertEqual(read_config(self.config_path)["auto"]["rerun_checks"]["min_confidence"], "medium")
+        field = next(f for f in out["fields"] if f["path"] == ["auto", "rerun_checks", "when"])
+        self.assertEqual((field["value"], field["default"], field["set"]), ("medium", "high", True))
+        self.comp.save_setting(["auto", "rerun_checks", "when"], reset=True)
+        self.assertEqual(json.loads(self.config_path.read_text()), {})
 
     def test_views_saved_in_the_database_move_to_the_config_file(self):
         self.comp.db.set_current_view("")

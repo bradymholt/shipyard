@@ -1,7 +1,7 @@
 // The settings dialog's views and the Start work dialog.
 import { $, state } from "./base.js";
 import { esc, REMOVE_ICON } from "./html.js";
-import { apiPost, getCurrentRepo, getRepos, saveViews } from "./server.js";
+import { apiGet, apiPost, getCurrentRepo, getRepos, saveSetting, saveViews } from "./server.js";
 import { refreshNow, resetData, viewTargets } from "./data.js";
 import { launchTarget, openInApp, render } from "./board.js";
 
@@ -43,9 +43,111 @@ $("#views-list").addEventListener("click", (e) => {
   if (btn) removeView(btn.dataset.view);
 });
 
-$("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#settings-dialog").showModal(); });
+$("#settings-btn").addEventListener("click", openSettings);
 
 $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
+
+// ---------- every other setting, built from the server's field list ----------
+let settingSections = [];
+let settingFields = [];
+
+export async function openSettings() {
+  renderViewsList();
+  $("#settings-fields").innerHTML = "";
+  $("#settings-dialog").showModal();
+  try {
+    ({ sections: settingSections, fields: settingFields } = await apiGet("api/settings"));
+    renderSettings();
+  } catch (err) {
+    $("#settings-fields").innerHTML = `<p class="set-error">${esc(err.message)}</p>`;
+  }
+}
+
+const fieldKey = (f) => f.path.join(".");
+const fieldAt = (key) => settingFields.find((f) => fieldKey(f) === key);
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+function shownValue(f, value) {
+  if (f.kind === "switch") return value ? "On" : "Off";
+  if (f.kind === "choice") return f.choices.find(([v]) => v === value)?.[1] || String(value);
+  if (value === "" || value == null) return "none";
+  return f.kind === "lines" ? value.split("\n").join(", ") : String(value);
+}
+
+function settingControl(f, id, off) {
+  const dis = off ? " disabled" : "";
+  const mono = /url|command|prompt|roots/.test(fieldKey(f)) ? " set-mono" : "";
+  switch (f.kind) {
+    case "switch":
+      return `<input type="checkbox" id="${id}" class="set-switch"${f.value ? " checked" : ""}${dis}>`;
+    case "locked":
+      return `<span class="set-locked">Always manual</span>`;
+    case "choice":
+      return `<select id="${id}"${dis}>${f.choices.map(([v, label]) =>
+        `<option value="${esc(v)}"${v === f.value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
+    case "number":
+      return `<input type="number" id="${id}" min="0" step="any" value="${esc(f.value)}"${dis}>`;
+    case "lines":
+      return `<textarea id="${id}" rows="3" class="${mono.trim()}"${dis}>${esc(f.value)}</textarea>`;
+    default:
+      return `<input type="text" id="${id}" class="${mono.trim()}" value="${esc(f.value)}" spellcheck="false"${dis}>`;
+  }
+}
+
+function settingRow(f, error) {
+  const key = fieldKey(f);
+  const id = `set-${key.replace(/[^\w]/g, "-")}`;
+  const parent = f.parent && fieldAt(f.parent.join("."));
+  const off = !!parent && !parent.value;
+  const inline = f.kind === "switch" || f.kind === "locked";
+  const control = settingControl(f, id, off);
+  const changed = f.set && !same(f.value, f.default);
+  const tag = f.kind === "locked" ? "" : `<span class="set-tag${changed ? " changed" : ""}">${changed ? "Changed" : "Default"}</span>`;
+  const note = !f.set ? "" : (changed ? `<span class="set-default">Default: ${esc(shownValue(f, f.default))}</span>`
+    : `<span class="set-default">Set to the default in the file</span>`)
+    + `<button type="button" class="set-reset" data-reset="${esc(key)}">Reset</button>`;
+  return `<div class="set-row${parent ? " set-child" : ""}${off ? " set-off" : ""}" data-path="${esc(key)}">
+    <div class="set-head"><label for="${id}">${esc(f.label)}</label>${tag}${inline ? control : ""}</div>
+    ${inline ? "" : control}
+    ${f.help || note ? `<div class="set-note">${f.help ? `<span>${esc(f.help)}</span>` : ""}${note}</div>` : ""}
+    ${error ? `<div class="set-error">${esc(error)}</div>` : ""}
+  </div>`;
+}
+
+function renderSettings(errors = {}) {
+  const focused = document.activeElement?.id;
+  $("#settings-fields").innerHTML = settingSections.map((s) => `<section class="set-section">
+      <h3>${esc(s.title)}</h3><p class="set-intro">${esc(s.help)}</p>
+      ${settingFields.filter((f) => f.section === s.id).map((f) => settingRow(f, errors[fieldKey(f)])).join("")}
+    </section>`).join("");
+  if (focused) document.getElementById(focused)?.focus();
+}
+
+async function saveField(f, change) {
+  try {
+    ({ fields: settingFields } = await saveSetting(f.path, { ...change, expect: f.value }));
+    renderSettings();
+  } catch (err) {
+    renderSettings({ [fieldKey(f)]: err.message });
+  }
+}
+
+// Text saves when it's committed (Enter or leaving the field), not on every keystroke.
+$("#settings-fields").addEventListener("change", (e) => {
+  const row = e.target.closest(".set-row");
+  const f = row && fieldAt(row.dataset.path);
+  if (!f) return;
+  if (f.kind === "switch") return saveField(f, { value: e.target.checked });
+  if (f.kind === "number") {
+    return e.target.value === "" ? saveField(f, { reset: true }) : saveField(f, { value: Number(e.target.value) });
+  }
+  saveField(f, { value: e.target.value });
+});
+
+$("#settings-fields").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-reset]");
+  if (btn) saveField(fieldAt(btn.dataset.reset), { reset: true });
+});
 
 $("#refresh-btn").addEventListener("click", refreshNow);
 
