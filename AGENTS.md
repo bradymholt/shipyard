@@ -47,8 +47,10 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
 
 The companion makes every GitHub call, with the `gh auth token` token; the page never
 talks to GitHub or holds a token. The page builds its lists from the PRs the companion
-pushes, filtered to the current view, reads merged history and a PR's timeline from
-`/companion/merged` and `/companion/timeline`, and acts through `/companion/pr-action`.
+pushes, filtered to the current view, including your latest merges, which the companion
+searches every 15 minutes and pushes as their own event. It asks `/companion/merged` only
+for a view's older merges (Show more), reads a PR's timeline from `/companion/timeline`,
+and acts through `/companion/pr-action`.
 Your saved views live in `shipyard.db` with the rest of the companion's state; only display
 preferences (tab, sort, collapsed lanes) stay in the browser's local storage.
 

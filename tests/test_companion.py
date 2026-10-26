@@ -189,14 +189,21 @@ class SharedCosts(CompanionCase):
             self.comp.ensure_pin(snap)
             self.assertEqual(lookup.call_count, 2)
 
-    def test_merged_history_is_reused_until_asked_fresh(self):
+    def test_recent_merges_are_searched_every_so_often_or_on_refresh(self):
+        with mock.patch.object(self.comp.poller, "recent_merged", return_value=[{"number": 9}]) as search:
+            self.poll()
+            self.poll()
+            self.assertEqual((search.call_count, self.comp.merged_version), (2, 1))  # one per list, once
+            self.comp.check_now(merged=True)
+            self.poll()
+            self.assertEqual(search.call_count, 4)
+
+    def test_a_views_older_merges_are_reused_by_other_tabs(self):
         page = {"prs": [], "after": None}
         with mock.patch.object(self.comp.poller, "merged", return_value=page) as search:
             self.comp.merged_history("o/r", "mine")
             self.comp.merged_history("o/r ", "mine")
             self.assertEqual(search.call_count, 1)
-            self.comp.merged_history("o/r", "mine", fresh=True)
-            self.assertEqual(search.call_count, 2)
 
 
 class Views(CompanionCase):

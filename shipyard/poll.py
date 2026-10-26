@@ -80,11 +80,12 @@ MERGED_SEARCHES = {
     "mine": "is:merged author:@me",
     "review": "is:merged reviewed-by:@me -author:@me",
 }
-MERGED_PAGE_SIZE = 10  # the page shows 3 at first; Show more reveals 10 at a time
+MERGED_PAGE_SIZE = 10  # a view's Show more reveals 10 at a time
+RECENT_MERGED = 25  # your latest merges across every repo, which the page narrows to a view
 
 MERGED_QUERY = """
-query($q: String!, $after: String) {
-  search(query: $q, type: ISSUE, first: %d, after: $after) {
+query($q: String!, $after: String, $first: Int!) {
+  search(query: $q, type: ISSUE, first: $first, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
       id number title url state isDraft createdAt updatedAt mergedAt
@@ -112,7 +113,7 @@ query($q: String!, $after: String) {
       } } } } } }
     } }
   }
-}""" % MERGED_PAGE_SIZE
+}"""
 
 # What the page's sidebar lists under Activity, read when it opens.
 TIMELINE_QUERY = """
@@ -352,12 +353,17 @@ class Poller:
         """Search qualifiers for a view: comma-separated repos, orgs, or users, which GitHub ORs."""
         return " ".join(f"repo:{t}" if "/" in t else f"{self.owner_qualifier(t)}:{t}" for t in view_targets(view))
 
+    def recent_merged(self, kind):
+        q = f"is:pr archived:false {MERGED_SEARCHES[kind]} sort:updated-desc"
+        search = self.github.graphql(MERGED_QUERY, {"q": q, "after": None, "first": RECENT_MERGED})["search"]
+        return [page_pr(n) for n in search["nodes"] if n and n.get("number")]
+
     def merged(self, view, kind, after=None):
         """One page of a view's merged history, newest first, in the page's shape."""
         if kind not in MERGED_SEARCHES:
             raise ValueError(f'Unknown merged list "{kind}".')
         q = f"is:pr archived:false {self.scope(view)} {MERGED_SEARCHES[kind]} sort:updated-desc"
-        search = self.github.graphql(MERGED_QUERY, {"q": q, "after": after or None})["search"]
+        search = self.github.graphql(MERGED_QUERY, {"q": q, "after": after or None, "first": MERGED_PAGE_SIZE})["search"]
         page = search["pageInfo"]
         return {"prs": [page_pr(n) for n in search["nodes"] if n and n.get("number")],
                 "after": page["endCursor"] if page["hasNextPage"] else None}

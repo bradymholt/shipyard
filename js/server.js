@@ -1,7 +1,7 @@
 // Talking to the companion: requests, its event stream, saved views, and local checkouts.
 import { DEFAULT_LAUNCHER, state } from "./base.js";
 import { clip, esc, refreshAgoLabels, showError } from "./html.js";
-import { applyServerPrs, lastPollAt, load, resetData, updateGitHubStatus } from "./data.js";
+import { applyServerPrs, githubProblem, lastPollAt, resetData, updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
 import { renderRepoSelect, renderViewsList } from "./settings.js";
 
@@ -87,9 +87,11 @@ export function connectCompanionEvents() {
   companionEvents = new EventSource("companion/events");
   companionEvents.addEventListener("error", () => render());
   companionEvents.addEventListener("state", (e) => {
+    const polledAt = lastPollAt();
     try {
       state.companionState = JSON.parse(e.data);
     } catch { return; }
+    if (lastPollAt() !== polledAt || githubProblem()) state.refreshing = false;
     const config = state.companionState.config;
     if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER });
     applyViews();
@@ -98,11 +100,19 @@ export function connectCompanionEvents() {
     updateGitHubStatus();
     render();
   });
+  companionEvents.addEventListener("merged", (e) => {
+    try {
+      state.recentMerged = JSON.parse(e.data);
+    } catch { return; }
+    applyServerPrs();
+    render();
+  });
   companionEvents.addEventListener("poll", (e) => {
     if (!state.companionState?.status) return;
     try {
       state.companionState.status.lastPoll = JSON.parse(e.data).lastPoll;
     } catch { return; }
+    state.refreshing = false;
     updateGitHubStatus();
     refreshAgoLabels();
   });
@@ -116,10 +126,7 @@ function applyViews() {
   state.views = views;
   renderRepoSelect();
   renderViewsList();
-  if (getCurrentRepo() !== was) {
-    resetData();
-    load();
-  }
+  if (getCurrentRepo() !== was) resetData();
 }
 
 export function companionStatusHtml() {
@@ -144,7 +151,6 @@ export function refreshOnFocus() {
   } else {
     rescanWorktrees();
   }
-  load();
 }
 
 // Views used to live in each browser; hand any this one has to the server, once.

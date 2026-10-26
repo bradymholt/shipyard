@@ -2,7 +2,7 @@
 import { $, state } from "./base.js";
 import { esc, REMOVE_ICON } from "./html.js";
 import { companionPost, getCurrentRepo, getRepos, saveViews } from "./server.js";
-import { load, resetData, viewTargets } from "./data.js";
+import { refreshNow, resetData, viewTargets } from "./data.js";
 import { launchTarget, openInApp, render } from "./board.js";
 
 export function renderRepoSelect() {
@@ -33,7 +33,6 @@ function removeView(v) {
   renderViewsList();
   if (wasCurrent) {
     render();
-    load();
   } else {
     render();
   }
@@ -48,9 +47,9 @@ $("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#sett
 
 $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
 
-$("#refresh-btn").addEventListener("click", () => load(true));
+$("#refresh-btn").addEventListener("click", refreshNow);
 
-$("#stale-retry-btn").addEventListener("click", () => load(true));
+$("#stale-retry-btn").addEventListener("click", refreshNow);
 
 // The repo picker offers local clones under the current view only, so it matches the
 // view selector: a repo view contributes just itself; an org/username view contributes
@@ -173,7 +172,6 @@ $("#add-repo-btn").addEventListener("click", () => {
   renderViewsList();
   resetData();
   render();
-  load();
 });
 
 $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
@@ -182,5 +180,4 @@ $("#repo-select").addEventListener("change", (e) => {
   saveViews(getRepos(), e.target.value);
   resetData();
   render();
-  load();
 });
