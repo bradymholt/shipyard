@@ -1,7 +1,7 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
 import { $, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtTitle, GITHUB_ICON, showError, timeAgo } from "./html.js";
-import { apiCall, apiGet, apiPost, worktreeFor } from "./server.js";
+import { apiCall, apiGet, apiPost, automationHeld, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
 import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
 import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
@@ -342,7 +342,8 @@ function autoApproveSection(pr) {
   const setting = cp?.autoApprove;
   if (!setting || pr.mergedAt || !isReviewPr(pr)) return "";
   const rule = state.serverState?.config?.approveRereview;
-  const why = !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
+  const why = automationHeld() ? "Held: Shipyard isn't acting on its own until you turn it on."
+    : !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
     : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
     : setting.on ? "On because your last review approved it." : "Off because your last review didn't approve it.";
   return `<div class="sb-section"><div class="sb-h">Auto-approve</div><div class="sb-auto">

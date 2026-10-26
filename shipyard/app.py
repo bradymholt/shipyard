@@ -45,7 +45,7 @@ def main(argv=None):
     warn_unavailable_roots(roots)
     Handler.roots = roots
     Handler.config = config
-    Handler.orchestrator = Orchestrator(config, roots, REPO_DIR / DB_FILE, github=GitHub())
+    Handler.orchestrator = Orchestrator(config, roots, REPO_DIR / DB_FILE, github=GitHub(), first_run_hold=True)
     Handler.orchestrator.move_old_views()
     Handler.session_token = Handler.orchestrator.db.session_token()
     # Threaded: the Server-Sent Events stream holds a connection open per tab.

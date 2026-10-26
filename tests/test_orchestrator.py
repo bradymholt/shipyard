@@ -470,6 +470,32 @@ class CiFailed(OrchestratorCase):
         card = self.poll()["o/r#1"]["cards"][0]
         self.assertEqual(card["proposals"][0]["payload"]["message"], "Fixes the typo in app.py")
 
+    def test_a_new_install_offers_passes_and_presses_nothing_until_turned_on(self):
+        self.comp.db.close()
+        self.db_path.unlink()
+        self.comp = Orchestrator(validate_config({}), [self.checkout], self.db_path, github=self.gh,
+                                 config_path=self.config_path, first_run_hold=True)
+        self.addCleanup(self.comp.db.close)
+        self.gh.put(self.red(), "author:@me")
+        state = self.poll()
+        self.assertEqual(([c["kind"] for c in state["o/r#1"]["cards"]], self.agent.runs, self.comp.page_state()["automation"]),
+                         (["offer"], [], "held"))
+        self.comp.turn_on_automation()
+        self.assertEqual(self.comp.page_state()["automation"], "on")
+        again = Orchestrator(validate_config({}), [self.checkout], self.db_path, github=self.gh,
+                             config_path=self.config_path, first_run_hold=True)
+        self.addCleanup(again.db.close)
+        self.assertFalse(again.held())
+
+    def test_an_install_that_has_polled_before_isnt_held(self):
+        self.gh.put(self.red(), "author:@me")
+        self.poll()
+        self.comp.db._exec("DELETE FROM meta WHERE key = 'automation'")
+        again = Orchestrator(validate_config({}), [self.checkout], self.db_path, github=self.gh,
+                             config_path=self.config_path, first_run_hold=True)
+        self.addCleanup(again.db.close)
+        self.assertFalse(again.held())
+
     def test_applied_fix_hides_fix_ci_before_the_next_poll(self):
         self.trust("rerun_checks", False)
         self.gh.put(self.red(), "author:@me")

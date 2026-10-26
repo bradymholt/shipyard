@@ -42,7 +42,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                          "/api/card-action", "/api/dismiss", "/api/undo",
                          "/api/pr-action", "/api/auto-approve",
                          "/api/check-now", "/api/rescan-worktrees", "/api/settings",
-                         "/api/current-view"}
+                         "/api/current-view", "/api/automation"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -244,6 +244,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "settings": lambda c: c.save_setting(body.get("path"), body.get("value"), bool(body.get("reset")),
                                                  body["expect"] if "expect" in body else MISSING),
             "current-view": lambda c: c.set_current_view(body.get("view")),
+            "automation": lambda c: c.turn_on_automation(),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),

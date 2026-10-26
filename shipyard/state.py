@@ -96,6 +96,18 @@ class State:
             self.db.commit()
             return token
 
+    def automation(self):
+        """"on" once you've let Shipyard act on its own; None until then."""
+        rows = self._rows("SELECT value FROM meta WHERE key = 'automation'")
+        return rows[0]["value"] if rows else None
+
+    def set_automation(self, value):
+        self._exec("INSERT INTO meta (key, value) VALUES ('automation', ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (value,))
+
+    def has_history(self):
+        return bool(self._rows("SELECT 1 FROM prs LIMIT 1") or self._rows("SELECT 1 FROM meta WHERE key = 'poll'"))
+
     def current_view(self):
         rows = self._rows("SELECT value FROM meta WHERE key = 'current_view'")
         return rows[0]["value"] if rows else ""
