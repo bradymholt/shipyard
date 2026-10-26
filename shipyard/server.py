@@ -1,5 +1,5 @@
-"""The companion's HTTP side: serves the page, /worktrees.json, the companion's state
-(once as JSON and as a Server-Sent Events stream), the GitHub reads the page asks for
+"""The companion's HTTP side: serves the page, the companion's state with your local
+checkouts (once as JSON and as a Server-Sent Events stream), the GitHub reads the page asks for
 (merged history, a PR's timeline), and the POSTs behind every button.
 
 Binds to localhost. Every request must carry a localhost Host header (against DNS
@@ -31,10 +31,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       ".webmanifest": "application/manifest+json"}
     BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main",
                       "/open-default-main", "/open-app", "/open-agent"}
+    CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main"}
     COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
                          "/companion/pr-action", "/companion/auto-approve",
-                         "/companion/check-now"}
+                         "/companion/check-now", "/companion/rescan-worktrees"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -89,8 +90,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json({"ok": False, "error": "Invalid Host header."}, 403)
         parsed = urlparse(self.path)
         path = parsed.path
-        if path == "/worktrees.json":
-            return self._json(worktrees.discover(self.roots, self.config["agent"]))
         if path == "/config.json":
             return self._json({**page_config(self.companion.config),
                                "companionToken": self.session_token})
@@ -185,6 +184,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result = worktrees.launch_app(arg("path"), self.roots, self.config)
         else:
             result = worktrees.launch_agent(arg("path"), self.roots, self.config, arg("session") or None)
+        if result.get("ok") and parsed.path in self.CHECKOUT_ACTIONS:
+            self.companion.rescan_worktrees()
         return self._json(result, 200 if result.get("ok") else 500)
 
     def _companion(self, name, arg, body):
@@ -204,6 +205,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "dismiss": lambda c: c.dismiss(card_id()),
             "undo": lambda c: c.undo(card_id()),
             "check-now": lambda c: c.check_now(),
+            "rescan-worktrees": lambda c: c.rescan_worktrees(),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),

@@ -145,6 +145,7 @@ class PageState(CompanionCase):
         self.assertEqual((pr["state"], pr["dropped"], pr["openThreads"]), ("OPEN", False, 1))
         self.assertEqual((pr["pr"]["number"], pr["pr"]["headRefName"]), (1, "feature"))
         self.assertEqual(pr["lists"], ["mine"])
+        self.assertEqual([w["branch"] for w in self.comp.page_state()["worktrees"]], ["feature"])
 
 
 class AfterAction(CompanionCase):

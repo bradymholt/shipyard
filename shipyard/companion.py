@@ -162,10 +162,16 @@ class Companion:
         except Exception as e:
             print(f"Warning: worktree discovery failed: {e}")
 
+    def rescan_worktrees(self):
+        """Look for new or changed checkouts now, e.g. after a branch action or when the tab regains focus."""
+        self.refresh_worktrees()
+        self.publish()
+        return {"ok": True}
+
     def poll_once(self):
+        self.refresh_worktrees()  # local, so it stays current while GitHub is unreachable
         viewer, snaps, listed = self.poller.poll(self.db.open_node_ids())
         self.viewer = viewer
-        self.refresh_worktrees()
         for snap in snaps:
             if snap["state"] == "OPEN" and snap["id"] not in listed:
                 snap["dropped"] = True  # still open, but no longer yours to act on
@@ -917,4 +923,5 @@ class Companion:
                                   "canFork": adapter.can_fork} if adapter else None)},
             "config": page_config(self.config),
             "prs": prs,
+            "worktrees": [w for w in self.worktree_map.values() if w.get("branch")],
         }
