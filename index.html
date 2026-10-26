@@ -951,6 +951,19 @@
     return "just now";
   }
 
+  // The companion's quiet polls don't re-render, so these labels age in place.
+  function agoText(at, short) {
+    const text = timeAgo(at);
+    return short ? text.replace(" ago", "") : text;
+  }
+  const agoSpan = (at, short = false) =>
+    `<span data-ago="${new Date(at).getTime()}"${short ? " data-short" : ""}>${agoText(at, short)}</span>`;
+  function refreshAgoLabels() {
+    document.querySelectorAll("[data-ago]").forEach((el) => {
+      el.textContent = agoText(Number(el.dataset.ago), el.hasAttribute("data-short"));
+    });
+  }
+
   // GitHub label colors are arbitrary; pick dark or light text by background luminance.
   function labelColors(hex) {
     const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
@@ -1682,7 +1695,7 @@
     return `
       <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}">
         <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><span>${fmtTitle(pr.title)}</span></div>
-        <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${timeAgo(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
+        <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
         ${mergedWorktreeLinks(pr)}
         ${nextRowHtml(pr)}
       </div>`;
@@ -1856,7 +1869,7 @@
     return `
       <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
         <div class="card-title">${fmtTitle(pr.title)}${draft}${labels}</div>
-        <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${timeAgo(pr.updatedAt)}</div>
+        <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}</div>
         <div class="card-icons">
           ${ciHtml(pr)}
           ${comments}
@@ -3022,9 +3035,9 @@
       const ex = cp.exchange;
       body = `
         <div class="sess-title">${esc(s.title || s.id)}</div>
-        <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${esc(timeAgo(s.updated * 1000))}`}
+        <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${agoSpan(s.updated * 1000)}`}
           · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
-        ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${esc(timeAgo(ex.at))}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
+        ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${agoSpan(ex.at)}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
         <div class="nc-actions">${repin}
           <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
     }
@@ -3058,7 +3071,7 @@
     ].filter((e) => e.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 25);
     if (!entries.length) return "";
     return `<div class="sb-section"><div class="sb-h">Activity</div><ul class="sb-activity">${entries.map((e) =>
-      `<li><span class="act-when">${esc(timeAgo(e.at).replace(" ago", ""))}</span><span>${e.shipyard ? '<span class="act-shipyard">Shipyard</span> ' : ""}${esc(e.text)}</span></li>`).join("")}</ul></div>`;
+      `<li><span class="act-when">${agoSpan(e.at, true)}</span><span>${e.shipyard ? '<span class="act-shipyard">Shipyard</span> ' : ""}${esc(e.text)}</span></li>`).join("")}</ul></div>`;
   }
 
   function renderSidebar() {
@@ -3237,6 +3250,15 @@
       } catch { return; }
       if (state.companionState.config?.rules) state.rules = state.companionState.config.rules;
       render();
+    });
+    companionEvents.addEventListener("poll", (e) => {
+      if (!state.companionState?.status) return;
+      try {
+        state.companionState.status.lastPoll = JSON.parse(e.data).lastPoll;
+      } catch { return; }
+      updateGitHubStatus(state.loading);
+      refreshAgoLabels();
+      syncWithCompanion();
     });
   }
 

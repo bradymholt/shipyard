@@ -121,13 +121,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
-        seen = None
+        seen = sent = sent_poll = None
         try:
             while True:
                 if seen != self.companion.version:
                     seen = self.companion.version
-                    data = json.dumps(self.companion.page_state())
-                    self.wfile.write(f"event: state\ndata: {data}\n\n".encode())
+                    state = self.companion.page_state()
+                    status = state.get("status") or {}
+                    # Every poll bumps the version and lastPoll; only the rest is worth a re-render.
+                    content = json.dumps({**state, "version": None,
+                                          "status": {**status, "lastPoll": None}}, sort_keys=True)
+                    if content != sent:
+                        sent, sent_poll = content, status.get("lastPoll")
+                        self.wfile.write(f"event: state\ndata: {json.dumps(state)}\n\n".encode())
+                    elif status.get("lastPoll") != sent_poll:
+                        sent_poll = status.get("lastPoll")
+                        self.wfile.write(f"event: poll\ndata: {json.dumps({'lastPoll': sent_poll})}\n\n".encode())
+                    else:
+                        self.wfile.write(b": keepalive\n\n")
                 else:
                     self.wfile.write(b": keepalive\n\n")
                 self.wfile.flush()
