@@ -84,12 +84,17 @@ def session_used(mode, pinned_after, kept=False):
 
 
 class Orchestrator:
-    def __init__(self, config, roots, db_path, github=None, poll_seconds=POLL_SECONDS, config_path=CONFIG_PATH):
+    def __init__(self, config, roots, db_path, github=None, poll_seconds=POLL_SECONDS, config_path=CONFIG_PATH,
+                 first_run_hold=False):
         self.config = config
         self.config_path = config_path
         self.config_mtime = config_mtime(config_path)
         self.roots = roots
         self.db = State(db_path)
+        # A new install doesn't act on its own until you say so: passes wait for Ask and
+        # nothing is pressed for you. An install that has polled before keeps going.
+        if self.db.automation() is None and (not first_run_hold or self.db.has_history()):
+            self.db.set_automation("on")
         self.github = github or GitHub()
         self.poller = Poller(self.github)
         self.poll_seconds = poll_seconds
@@ -161,6 +166,14 @@ class Orchestrator:
     def poke(self):
         """Poll again soon, e.g. right after an action changed the PR."""
         self.wake.set()
+
+    def held(self):
+        return self.db.automation() != "on"
+
+    def turn_on_automation(self):
+        self.db.set_automation("on")
+        self.publish()
+        return {"ok": True}
 
     def check_now(self, merged=False):
         """Poll now: the page was refreshed or came back into view. `merged` also searches
@@ -272,7 +285,8 @@ class Orchestrator:
                 self.db.set_pin(key, result["path"], pin["session_id"] if pin else None,
                                 pin["how"] if pin else "review")
         elif do == "pass":
-            self.offer_or_queue(snap, reaction["pass"], reaction["mode"], reaction.get("head"))
+            mode = "ask" if self.held() and reaction["mode"] == "auto" else reaction["mode"]
+            self.offer_or_queue(snap, reaction["pass"], mode, reaction.get("head"))
 
     def checkout_for(self, snap):
         """Where a PR's code lives locally: its branch's checkout, or the review worktree."""
@@ -522,7 +536,7 @@ class Orchestrator:
         Only on a card that is still open, for a PR still open at the head the card was
         made for, from a pass allowed to propose that action on that PR (AUTO_POLICY)."""
         flag = actions.TRUST_FLAG.get(action)
-        rule = self.config["auto"].get(flag) if flag else None
+        rule = self.config["auto"].get(flag) if flag and not self.held() else None
         policy = AUTO_POLICY.get(action)
         if not rule or flag in HARD_LOCKED or not policy or source not in policy["sources"]:
             return False
@@ -601,7 +615,7 @@ class Orchestrator:
 
     def note_unapproved(self, card_id, snap, proposals):
         """With auto-approve on, a re-review that proposed no approval says so on its card."""
-        if not self.config["auto"].get("approve_rereview") or not self.auto_approve_setting(snap)["on"]:
+        if self.held() or not self.config["auto"].get("approve_rereview") or not self.auto_approve_setting(snap)["on"]:
             return
         if any(p["action"] == "approve" for p in proposals):
             return
@@ -1021,4 +1035,5 @@ class Orchestrator:
             "prs": prs,
             "worktrees": [w for w in self.worktree_map.values() if w.get("branch")],
             "views": self.views(),
+            "automation": "held" if self.held() else "on",
         }

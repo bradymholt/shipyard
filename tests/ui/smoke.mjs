@@ -207,6 +207,17 @@ try {
   check(mergedCalls.length === 0, "merged history arrives with the server's pushes, without the page asking");
   check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
 
+  console.log("first run");
+  await page.evaluate(() => { window.__dashboard.state.serverState.automation = "held"; window.__dashboard.render(); });
+  const intro = page.locator(".auto-intro");
+  check((await intro.textContent()).includes("Nothing happens without a click yet") &&
+    (await intro.textContent()).includes("re-reviews PRs you reviewed when they change"),
+    "a new install explains what Shipyard would do on its own, from your settings");
+  if (shots) await page.screenshot({ path: `${shots}/first-run.png` });
+  await intro.locator('[data-automation="on"]').click();
+  await page.waitForSelector(".auto-intro", { state: "detached" });
+  check(true, "Turn it on clears the card");
+
   console.log("settings");
   await page.click("#settings-btn");
   await page.click('#set-nav [data-pane="rules"]');

@@ -1,7 +1,7 @@
 // The settings dialog's views and the Start work dialog.
 import { $, state } from "./base.js";
 import { esc, REMOVE_ICON } from "./html.js";
-import { apiGet, apiPost, getCurrentRepo, getRepos, saveSetting, saveViews } from "./server.js";
+import { apiGet, apiPost, automationHeld, getCurrentRepo, getRepos, saveSetting, saveViews, turnOnAutomation } from "./server.js";
 import { refreshNow, resetData, viewTargets } from "./data.js";
 import { launchTarget, openInApp, render } from "./board.js";
 
@@ -180,8 +180,11 @@ function renderSettings(errors = {}) {
   }).join("");
   $("#set-views").classList.toggle("hidden", pane !== "views");
   const section = settingSections.find((s) => s.id === pane);
+  const held = automationHeld() && (pane === "passes" || pane === "auto")
+    ? `<div class="set-held">Held for now: until you turn it on, passes wait for Ask and nothing is pressed for you.
+        <button type="button" class="primary" data-automation="on">Turn it on</button></div>` : "";
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
-    ${sectionRows(section.id, errors)}` : "";
+    ${held}${sectionRows(section.id, errors)}` : "";
   if (focused) document.getElementById(focused)?.focus();
 }
 
@@ -206,7 +209,11 @@ $("#settings-fields").addEventListener("change", (e) => {
   saveField(f, { value: e.target.value });
 });
 
-$("#settings-fields").addEventListener("click", (e) => {
+$("#settings-fields").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-automation]")) {
+    await turnOnAutomation();
+    return renderSettings();
+  }
   const btn = e.target.closest("[data-reset]");
   if (btn) saveField(fieldAt(btn.dataset.reset), { reset: true });
 });

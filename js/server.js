@@ -17,6 +17,19 @@ export function saveSetting(path, change) {
   return apiCall("api/settings", { path, ...change });
 }
 
+// A new install holds passes and automatic actions until you turn them on.
+export const automationHeld = () => state.serverState?.automation === "held";
+
+export async function turnOnAutomation() {
+  try {
+    await apiCall("api/automation", { on: true });
+    state.serverState.automation = "on";
+    render();
+  } catch (err) {
+    showError(err.message, "Couldn't turn it on");
+  }
+}
+
 // Show the change now; the server's push then confirms it in every open tab.
 let savingViews = 0;
 

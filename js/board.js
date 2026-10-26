@@ -1,7 +1,7 @@
 // The board: lanes, cards, and Recently merged.
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtTitle, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
-import { apiCall, apiPost, serverStatusHtml, getCurrentRepo, worktreeFor } from "./server.js";
+import { apiCall, apiPost, automationHeld, getCurrentRepo, serverStatusHtml, turnOnAutomation, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, laneOf, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { openNewTaskDialog } from "./settings.js";
@@ -395,6 +395,38 @@ function sizeSortSelect() {
   probe.remove();
 }
 
+// What turning automation on would start, read from your settings so it matches them.
+const PASS_STARTS = {
+  ci_failed: "looks into failing checks on your PRs",
+  pre_review: "pre-reviews PRs when your review is requested",
+  re_review: "re-reviews PRs you reviewed when they change",
+  feedback: "plans a response when a reviewer requests changes",
+};
+const AUTO_STARTS = {
+  rerun_checks: "re-runs flaky checks",
+  approve_rereview: "approves re-reviews once the small things you asked for are done",
+  enable_auto_merge: "turns on auto-merge",
+  apply_fix: "pushes small CI fixes",
+};
+const listed = (items) => items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : items[0] || "";
+
+function automationCardHtml() {
+  if (!automationHeld()) return "";
+  const config = state.serverState.config || {};
+  const passes = Object.entries(config.rules?.passes || {}).filter(([, mode]) => mode === "auto").map(([p]) => PASS_STARTS[p]).filter(Boolean);
+  const pressed = Object.entries(config.auto || {}).filter(([, on]) => on).map(([a]) => AUTO_STARTS[a]).filter(Boolean);
+  const what = [passes.length && `Your coding agent ${listed(passes)}.`,
+    pressed.length && `When the agent is confident, Shipyard ${listed(pressed)}.`].filter(Boolean);
+  return `<div class="auto-intro" role="note">
+    <div class="auto-intro-text"><strong>Shipyard can work on your PRs on its own</strong>
+      <p>Nothing happens without a click yet: the agent waits for Ask, and no button is pressed for you.${what.length ? " Turned on:" : ""}</p>
+      ${what.length ? `<ul>${what.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}
+      <p>Pre-reviews stay drafts only you can see, and replies never post on their own.</p></div>
+    <div class="auto-intro-actions"><button type="button" class="primary" data-automation="on">Turn it on</button>
+      <button type="button" data-automation="settings">Choose in Settings</button></div>
+  </div>`;
+}
+
 export function render() {
   renderBoard();
   renderSidebar();
@@ -527,7 +559,7 @@ function renderBoard() {
     ? `${count} review pull request${count === 1 ? "" : "s"}`
     : `${count} open pull request${count === 1 ? "" : "s"}`;
   $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
-  listBody.innerHTML = html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`;
+  listBody.innerHTML = automationCardHtml() + (html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`);
 }
 
 function loadErrorHtml() {
@@ -545,6 +577,12 @@ function handleMergedClick(e) {
 
 listBody.addEventListener("click", async (e) => {
   if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
+  const automation = e.target.closest("[data-automation]");
+  if (automation) {
+    if (automation.dataset.automation === "on") turnOnAutomation();
+    else location.hash = "#settings/auto";
+    return;
+  }
   const chip = e.target.closest("button.next-row");
   if (chip) { openSidebar(chip.dataset.open); return; }
   // A click anywhere on a card that isn't a link or control opens its sidebar.

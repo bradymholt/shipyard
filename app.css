@@ -202,6 +202,14 @@ dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop { background: rg
 .set-pane h2 { margin: 0; font: 700 1.0625rem var(--sans); color: var(--fg); }
 .set-intro { margin: 0.25rem 0 0.75rem; font-size: 0.8125rem; color: var(--fg-muted); }
 .set-group { margin-top: 0.875rem; padding-top: 0.75rem; border-top: 1px dashed var(--border); font-size: 0.75rem; color: var(--fg-muted); }
+.set-held { display: flex; align-items: center; gap: 0.75rem; margin: 0 0 0.75rem; padding: 0.625rem 0.75rem; border-radius: 0.5rem; font-size: 0.8125rem; color: var(--gold-text); background: color-mix(in srgb, var(--gold) 12%, var(--surface)); }
+.set-held button { margin-left: auto; flex: none; }
+.auto-intro { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.875rem; padding: 0.875rem 1rem; border: 1px solid color-mix(in srgb, var(--gold) 45%, var(--border)); border-radius: 0.625rem; background: color-mix(in srgb, var(--gold) 8%, var(--surface)); }
+.auto-intro-text { flex: 1; min-width: 0; font-size: 0.8125rem; color: var(--fg); }
+.auto-intro-text p { margin: 0.25rem 0 0; color: var(--fg-muted); line-height: 1.45; }
+.auto-intro-text ul { margin: 0.25rem 0 0; padding-left: 1.125rem; color: var(--fg); line-height: 1.45; }
+.auto-intro-actions { display: flex; flex-direction: column; gap: 0.375rem; flex: none; }
+@media (max-width: 700px) { .auto-intro { flex-direction: column; align-items: stretch; } .auto-intro-actions { flex-direction: row; } }
 .set-group.set-child { margin-top: 0; border-top: none; padding-top: 1rem; }
 .set-group > span { display: block; font: 600 0.6875rem var(--sans); letter-spacing: 0.06em; text-transform: uppercase; }
 @media (max-width: 700px) {
