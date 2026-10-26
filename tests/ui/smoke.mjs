@@ -228,7 +228,7 @@ try {
     "a merged PR keeps its approval feedback card, without re-request");
   if (shots) await page.screenshot({ path: `${shots}/sidebar-merged-approval.png` });
   await page.keyboard.press("Escape");
-  check((await page.locator("#companion-status").textContent()).trim() === "Companion connected", "footer shows the companion connected");
+  check((await page.locator("#companion-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
     document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional)").length,

@@ -636,7 +636,7 @@ class Companion:
     def snapshot_or_error(self, key):
         snap = self.db.pr(key)
         if not snap:
-            raise LookupError("Shipyard's companion isn't tracking that PR (it only follows PRs you "
+            raise LookupError("Shipyard isn't tracking that PR (it only follows PRs you "
                               "authored, were asked to review, or reviewed).")
         return snap
 

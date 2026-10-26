@@ -30,14 +30,12 @@ def parse_args(argv):
                         help=f"folder containing Git clones (overrides {CONFIG_FILE})")
     parser.add_argument("-p", "--port", type=port_number, default=DEFAULT_PORT,
                         help=f"localhost port (default: {DEFAULT_PORT})")
-    parser.add_argument("--no-orchestrator", action="store_true",
-                        help="only serve the page and worktrees: no GitHub polling, passes, or cards")
     args = parser.parse_args(argv)
-    return args.port, args.roots, args.no_orchestrator
+    return args.port, args.roots
 
 
 def main(argv=None):
-    port, cli_roots, no_orchestrator = parse_args(sys.argv[1:] if argv is None else argv)
+    port, cli_roots = parse_args(sys.argv[1:] if argv is None else argv)
     config = load_config()
     # Roots come from the command line if given, otherwise the "roots" config key.
     cfg_roots = config.get("roots") or []
@@ -50,27 +48,24 @@ def main(argv=None):
     Handler.config = config
     Handler.session_token = secrets.token_urlsafe(32)
     Handler.github = GitHub()
-    if not no_orchestrator:
-        Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=Handler.github)
+    Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=Handler.github)
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))
     httpd.daemon_threads = True
-    print(f"Shipyard companion → http://localhost:{port}")
+    print(f"Shipyard → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}")
     launcher = config["launcher"]
     print(f"Opens in: {launcher['name']} via {launcher['mode']}")
     agent = config["agent"]
     if agent:
         print(f"Resumes sessions in: {agent['name']} via {agent['mode']}")
-    if Handler.companion:
-        print("Watching your PRs on GitHub (token from `gh auth token`); state in " + DB_FILE)
-        Handler.companion.start()
+    print("Watching your PRs on GitHub (token from `gh auth token`); state in " + DB_FILE)
+    Handler.companion.start()
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        if Handler.companion:
-            Handler.companion.stop()
+        Handler.companion.stop()
