@@ -585,7 +585,8 @@ $("#sidebar").addEventListener("click", async (e) => {
       if (action === "mark_ready" && pr) pr.isDraft = false;
       if (action === "enable_auto_merge" && pr) pr.autoMergeRequest = { enabledAt: new Date().toISOString() };
       if (card) cp.cards = cp.cards.filter((c) => c !== card);
-      render();
+      if (action === "merge") closeSidebar();
+      else render();
     });
   }
 });

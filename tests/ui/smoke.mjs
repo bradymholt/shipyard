@@ -161,6 +161,7 @@ try {
   await sb.locator('button.nc-run[data-pr-action="merge"]').click();
   await page.waitForSelector('.card.merged[data-key="o/r#103"]', { timeout: 2000 });
   check(await page.locator('.card[data-key="o/r#103"]:not(.merged)').count() === 0, "Merge moves the card to Recently merged right away");
+  check(!(await page.evaluate(() => document.body.classList.contains("sidebar-open"))), "Merge closes the sidebar");
 
   await page.locator('.card[data-key="o/r#105"] .card-meta').click();
   await page.waitForSelector("#sidebar select[data-snooze]");
