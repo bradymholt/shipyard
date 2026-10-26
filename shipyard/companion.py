@@ -884,6 +884,7 @@ class Companion:
                               "summary": exchange["summary"], "mode": exchange["mode"]} if exchange else None),
                 "activity": self.db.activity(key),
                 "autoApprove": auto if auto and (auto["by"] != "default" or snap.get("my_review")) else None,
+                "pr": snap.get("page"),
             }
         adapter = self.adapter
         return {
