@@ -36,7 +36,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
                          "/companion/pr-action", "/companion/auto-approve",
-                         "/companion/check-now", "/companion/rescan-worktrees"}
+                         "/companion/check-now", "/companion/rescan-worktrees", "/companion/views"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -113,7 +113,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _page(self):
         """index.html with the session token and config written in, so the page can POST
         without first asking for them."""
-        boot = json.dumps({**page_config(self.companion.config), "token": self.session_token}).replace("<", "\\u003c")
+        boot = json.dumps({**page_config(self.companion.config), "token": self.session_token,
+                           "views": self.companion.views()}).replace("<", "\\u003c")
         tag = f'<script id="shipyard-boot" type="application/json">{boot}</script>\n</head>'
         html = Path(self.directory, "index.html").read_text().replace("</head>", tag, 1)
         body = html.encode()
@@ -220,6 +221,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "undo": lambda c: c.undo(card_id()),
             "check-now": lambda c: c.check_now(),
             "rescan-worktrees": lambda c: c.rescan_worktrees(),
+            "views": lambda c: c.set_views(body.get("views"), body.get("current")),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),

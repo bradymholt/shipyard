@@ -15,7 +15,7 @@ from .agents import AgentError, adapter_for, read_text
 from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config
 from .events import derive
 from .github import GitHub, GitHubError
-from .poll import Poller
+from .poll import Poller, view_targets
 from .state import State, now_iso
 
 POLL_SECONDS = 60
@@ -707,6 +707,19 @@ class Companion:
     def timeline(self, node_id):
         return {"ok": True, "node": self.poller.timeline(node_id)}
 
+    def views(self):
+        return self.db.views()
+
+    def set_views(self, views, current):
+        if not isinstance(views, list):
+            raise ValueError("Views must be a list.")
+        clean = list(dict.fromkeys(", ".join(view_targets(v)) for v in views if isinstance(v, str)))
+        current = ", ".join(view_targets(current)) if current else ""
+        saved = {"views": clean, "current": current if current in clean else (clean[0] if clean else "")}
+        self.db.set_views(saved)
+        self.publish()
+        return {"ok": True, **saved}
+
     def merged_history(self, view, kind, after=None):
         return {"ok": True, **self.poller.merged(view, kind, after), "owners": dict(self.poller.owner_types)}
 
@@ -924,4 +937,5 @@ class Companion:
             "config": page_config(self.config),
             "prs": prs,
             "worktrees": [w for w in self.worktree_map.values() if w.get("branch")],
+            "views": self.db.views(),
         }

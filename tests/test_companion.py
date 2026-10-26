@@ -147,6 +147,15 @@ class SessionToken(CompanionCase):
         self.assertEqual(State(self.db_path).session_token(), token)
 
 
+class Views(CompanionCase):
+    def test_saves_cleaned_views_and_keeps_current_among_them(self):
+        out = self.comp.set_views(["o/r ,acme", "o/r, acme", "me"], "gone")
+        self.assertEqual((out["views"], out["current"]), (["o/r, acme", "me"], "o/r, acme"))
+        self.assertEqual(self.comp.page_state()["views"]["views"], ["o/r, acme", "me"])
+        with self.assertRaises(ValueError):
+            self.comp.set_views(["acme is:open"], "")
+
+
 class PageState(CompanionCase):
     def test_carries_pr_state_and_open_thread_count_for_the_page(self):
         self.gh.put(pr_node(threads=[{"body": "a"}, {"body": "b", "resolved": True}]), "author:@me")

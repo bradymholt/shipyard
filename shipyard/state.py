@@ -1,7 +1,7 @@
 """The companion's memory, in one SQLite file next to shipyard.config.json: the last
 snapshot of each PR, events already handled, pins, snoozes, cards, passes, activity,
 how often each action ran automatically on each PR, whether each may be approved
-on a re-review, and the page's session token."""
+on a re-review, the page's session token, and your saved views."""
 import json
 import secrets
 import sqlite3
@@ -87,6 +87,15 @@ class State:
             self.db.execute("INSERT INTO meta (key, value) VALUES ('session_token', ?)", (token,))
             self.db.commit()
             return token
+
+    def views(self):
+        """Your saved views (comma-separated repos, orgs, or users) and the one showing."""
+        rows = self._rows("SELECT value FROM meta WHERE key = 'views'")
+        return json.loads(rows[0]["value"]) if rows else {"views": [], "current": ""}
+
+    def set_views(self, views):
+        self._exec("INSERT INTO meta (key, value) VALUES ('views', ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(views),))
 
     def _exec(self, sql, args=()):
         with self.lock:
