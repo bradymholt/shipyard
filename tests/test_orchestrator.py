@@ -214,7 +214,7 @@ class Settings(OrchestratorCase):
         self.config_path.write_text(json.dumps({"roots": ["~/dev"]}))
         self.comp.save_setting(["views"], ["o/r ,acme", "o/r, acme", "me"], expect=[])
         self.assertEqual(self.config_path.read_text(), '{\n  "roots": ["~/dev"],\n  "views": ["o/r, acme", "me"]\n}\n')
-        self.assertEqual(self.comp.set_current_view("gone")["current"], "o/r, acme")
+        self.assertEqual(self.comp.set_current_view("gone")["current"], "")  # everything
         self.assertEqual(self.comp.set_current_view("me")["current"], "me")
         for path, value, expect in ((["views"], ["acme is:open"], MISSING), (["auto", "post_reply"], True, MISSING),
                                     (["views"], ["x"], ["stale"])):

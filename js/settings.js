@@ -9,9 +9,8 @@ export function renderRepoSelect() {
   const repos = getRepos();
   const current = getCurrentRepo();
   const sel = $("#repo-select");
-  sel.innerHTML = repos.length
-    ? repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("")
-    : '<option value="">— add a view in settings —</option>';
+  sel.innerHTML = `<option value="">Everything</option>`
+    + repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("");
 }
 
 export function renderViewsList() {
@@ -27,7 +26,7 @@ export function renderViewsList() {
 function removeView(v) {
   const wasCurrent = getCurrentRepo() === v;
   const remaining = getRepos().filter((r) => r !== v);
-  saveViews(remaining, wasCurrent ? remaining[0] || "" : getCurrentRepo());
+  saveViews(remaining, wasCurrent ? "" : getCurrentRepo());
   if (wasCurrent) resetData();
   renderRepoSelect();
   renderViewsList();
@@ -229,7 +228,7 @@ function ntRepoOptionsHtml() {
   }
   const seenAt = (r) => activity.get(r) || 0;
   const targets = viewTargets(getCurrentRepo());
-  const available = localRepos.filter((r) =>
+  const available = localRepos.filter((r) => !targets.length ||
     targets.some((t) => t.includes("/") ? r === t : r.split("/")[0] === t)
   ).sort((a, b) => seenAt(b) - seenAt(a) || a.localeCompare(b));
   return available.map((r, i) =>

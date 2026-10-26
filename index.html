@@ -54,7 +54,7 @@
     <div class="set-pane">
       <div id="set-views" class="hidden">
         <h2>Views</h2>
-        <p class="set-intro">Each view is a repo, org, or username, or several comma-separated; the selector in the header switches between them.</p>
+        <p class="set-intro">Optional filters. Without one, the board shows every PR you're involved in. Each view is a repo, org, or username, or several comma-separated; the selector in the header switches between them.</p>
         <ul id="views-list" class="views-list"></ul>
         <div class="add-view-row">
           <input type="text" id="add-repo-input" placeholder="owner/repo, org, or username — comma-separate to combine">
@@ -111,7 +111,7 @@
 
   <div class="list">
     <div id="list-body">
-      <div class="empty">Add a repo, org, or user in settings (⚙) to get started.</div>
+      <div class="loading"><div class="spinner"></div>Loading pull requests…</div>
     </div>
   </div>
 

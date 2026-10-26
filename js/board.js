@@ -506,18 +506,17 @@ function renderBoard() {
     </div>`;
   }).join("") + "</div>";
   if (!count && !recentMerged.length) html = "";
-  const targetLink = viewTargets(getCurrentRepo()).map((target) => {
+  const targetLink = getCurrentRepo() ? viewTargets(getCurrentRepo()).map((target) => {
     const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
       : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
       : ownerType(target) === "user" ? `https://github.com/${esc(target)}?tab=repositories`
       : `https://github.com/${esc(target)}`;
     return `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
-  }).join(", ");
+  }).join(", ") : "everything you're involved in";
 
   // Until the server's first poll, show the spinner (or why it failed) rather than
   // the empty "No pull requests match." message.
   if (!state.targetedLoaded) {
-    if (!getCurrentRepo()) return;  // not configured: keep the setup prompt
     $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
     listBody.innerHTML = githubProblem()
       ? loadErrorHtml()

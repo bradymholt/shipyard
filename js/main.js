@@ -1,6 +1,6 @@
 // Entry point: starts the page.
 import { state } from "./base.js";
-import { connectServerEvents, getCurrentRepo, moveLocalViews, refreshOnFocus } from "./server.js";
+import { connectServerEvents, moveLocalViews, refreshOnFocus } from "./server.js";
 import { updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
 import { renderRepoSelect, renderViewsList, route } from "./settings.js";
@@ -13,11 +13,7 @@ for (const key of Object.keys(localStorage)) {
 moveLocalViews().finally(() => {
   renderRepoSelect();
   renderViewsList();
-  if (getCurrentRepo()) {
-    render();
-  } else {
-    if (!location.hash.startsWith("#settings")) location.hash = "#settings";
-  }
+  render();
 });
 
 connectServerEvents();

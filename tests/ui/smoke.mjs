@@ -80,6 +80,11 @@ try {
   const { page, errors, direct, mergedCalls } = await openPage(browser, DEMO_PORT, undefined, true);
   check(await page.evaluate(() => window.__dashboard.state.views.current === "o/r" && localStorage.getItem("ghpr.repos") === null),
     "views kept in the browser move to the server");
+  await page.locator("#repo-select").selectOption("");
+  await page.waitForFunction(() => document.querySelector("#list-title").textContent.includes("everything you're involved in"));
+  check(await page.locator('.card[data-key="o/r#101"]').count() === 1, "with no view the board shows everything you're involved in");
+  await page.locator("#repo-select").selectOption("o/r");
+  await page.waitForFunction(() => document.querySelector("#list-title").textContent.includes("o/r"));
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");

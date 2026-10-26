@@ -7,7 +7,8 @@ import { renderRepoSelect, renderViewsList } from "./settings.js";
 
 export const getRepos = () => state.views.views;
 
-export const getCurrentRepo = () => state.views.current || getRepos()[0] || "";
+// "" is everything you're involved in; a view only narrows it.
+export const getCurrentRepo = () => state.views.current || "";
 
 // Settings live in the server's config file, one path at a time: `change` is
 // { value } or { reset: true }, plus the `expect`ed value this page last showed, so a
