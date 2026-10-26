@@ -42,7 +42,7 @@ Track the PRs you owe a review, split into what's still waiting on you and what 
 
 ## GitHub access
 
-Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` and run `gh auth login`. The companion reads it with `gh auth token` and makes every GitHub call itself, so the token never reaches the browser. Your saved views are kept by the companion, so every browser sees the same ones; display preferences stay in your browser's local storage.
+Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` and run `gh auth login`. The companion reads it with `gh auth token` and makes every GitHub call itself, so the token never reaches the browser. Your views are saved in `shipyard.config.json` (as `"views"`), so every browser sees the same ones and you can edit them there too; display preferences stay in your browser's local storage.
 
 ## Features
 

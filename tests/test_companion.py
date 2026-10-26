@@ -1,4 +1,5 @@
 import copy
+import json
 import tempfile
 import time
 import unittest
@@ -119,7 +120,8 @@ class CompanionCase(unittest.TestCase):
             self.addCleanup(p.stop)
         self.raw = {}
         self.db_path = base / "shipyard.db"
-        self.comp = Companion(validate_config({}), [str(base)], self.db_path, github=self.gh)
+        self.comp = Companion(validate_config({}), [str(base)], self.db_path, github=self.gh,
+                              config_path=self.config_path)
         self.addCleanup(self.comp.db.close)
         self.addCleanup(self.comp.stop)
 
@@ -206,13 +208,26 @@ class SharedCosts(CompanionCase):
             self.assertEqual(search.call_count, 1)
 
 
-class Views(CompanionCase):
-    def test_saves_cleaned_views_and_keeps_current_among_them(self):
-        out = self.comp.set_views(["o/r ,acme", "o/r, acme", "me"], "gone")
-        self.assertEqual((out["views"], out["current"]), (["o/r, acme", "me"], "o/r, acme"))
-        self.assertEqual(self.comp.page_state()["views"]["views"], ["o/r, acme", "me"])
-        with self.assertRaises(ValueError):
-            self.comp.set_views(["acme is:open"], "")
+class Settings(CompanionCase):
+    def test_views_save_to_the_config_file_and_keep_the_rest(self):
+        self.config_path.write_text(json.dumps({"roots": ["~/dev"]}))
+        out = self.comp.save_settings({"views": ["o/r ,acme", "o/r, acme", "me"]}, {"views": []})
+        self.assertEqual(out["settings"]["views"], ["o/r, acme", "me"])
+        self.assertEqual(json.loads(self.config_path.read_text()), {"roots": ["~/dev"], "views": ["o/r, acme", "me"]})
+        self.assertEqual(self.comp.set_current_view("gone")["current"], "o/r, acme")
+        self.assertEqual(self.comp.set_current_view("me")["current"], "me")
+        for changes, expect in (({"views": ["acme is:open"]}, None), ({"roots": ["/"]}, None),
+                                ({"views": ["x"]}, {"views": ["stale"]})):
+            with self.assertRaises(ValueError):
+                self.comp.save_settings(changes, expect)
+
+    def test_views_saved_in_the_database_move_to_the_config_file(self):
+        self.comp.db.set_current_view("")
+        self.comp.db._exec("INSERT INTO meta (key, value) VALUES ('views', ?)",
+                           (json.dumps({"views": ["acme"], "current": "acme"}),))
+        self.comp.move_old_views()
+        self.assertEqual(json.loads(self.config_path.read_text())["views"], ["acme"])
+        self.assertEqual(self.comp.views(), {"views": ["acme"], "current": "acme"})
 
 
 class PageState(CompanionCase):

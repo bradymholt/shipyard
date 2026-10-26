@@ -40,7 +40,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
                          "/companion/card-action", "/companion/dismiss", "/companion/undo",
                          "/companion/pr-action", "/companion/auto-approve",
-                         "/companion/check-now", "/companion/rescan-worktrees", "/companion/views"}
+                         "/companion/check-now", "/companion/rescan-worktrees", "/companion/settings",
+                         "/companion/current-view"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -237,7 +238,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "undo": lambda c: c.undo(card_id()),
             "check-now": lambda c: c.check_now(bool(body.get("merged"))),
             "rescan-worktrees": lambda c: c.rescan_worktrees(),
-            "views": lambda c: c.set_views(body.get("views"), body.get("current")),
+            "settings": lambda c: c.save_settings(body.get("set"), body.get("expect")),
+            "current-view": lambda c: c.set_current_view(body.get("view")),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),

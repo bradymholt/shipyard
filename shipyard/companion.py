@@ -13,10 +13,11 @@ from datetime import datetime, timedelta, timezone
 
 from . import actions, passes, rules, worktrees
 from .agents import AgentError, adapter_for, process_cwds, read_text
-from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config
+from .config import (CONFIDENCE, CONFIG_PATH, HARD_LOCKED, PAGE_SETTINGS, config_mtime, page_config,
+                     read_config, save_settings, view_targets)
 from .events import derive
 from .github import GitHub, GitHubError
-from .poll import MERGED_SEARCHES, Poller, view_targets
+from .poll import MERGED_SEARCHES, Poller
 from .state import State, now_iso
 
 POLL_SECONDS = 60
@@ -83,9 +84,10 @@ def session_used(mode, pinned_after, kept=False):
 
 
 class Companion:
-    def __init__(self, config, roots, db_path, github=None, poll_seconds=POLL_SECONDS):
+    def __init__(self, config, roots, db_path, github=None, poll_seconds=POLL_SECONDS, config_path=CONFIG_PATH):
         self.config = config
-        self.config_mtime = config_mtime()
+        self.config_path = config_path
+        self.config_mtime = config_mtime(config_path)
         self.roots = roots
         self.db = State(db_path)
         self.github = github or GitHub()
@@ -145,12 +147,12 @@ class Companion:
     def reload_config(self):
         """Pick up a hand edit to the config without a restart, which would cut running
         passes short. Roots are read only at startup."""
-        mtime = config_mtime()
+        mtime = config_mtime(self.config_path)
         if mtime == self.config_mtime:
             return
         self.config_mtime = mtime
         try:
-            self.config = read_config()
+            self.config = read_config(self.config_path)
         except ValueError as e:
             print(f"Warning: kept the previous config: {e}")
             return
@@ -753,17 +755,30 @@ class Companion:
         return {"ok": True, "node": self.poller.timeline(node_id)}
 
     def views(self):
-        return self.db.views()
+        """Your views from the config file, and the one showing."""
+        views = self.config["views"]
+        current = self.db.current_view()
+        return {"views": views, "current": current if current in views else (views[0] if views else "")}
 
-    def set_views(self, views, current):
-        if not isinstance(views, list):
-            raise ValueError("Views must be a list.")
-        clean = list(dict.fromkeys(", ".join(view_targets(v)) for v in views if isinstance(v, str)))
-        current = ", ".join(view_targets(current)) if current else ""
-        saved = {"views": clean, "current": current if current in clean else (clean[0] if clean else "")}
-        self.db.set_views(saved)
+    def save_settings(self, changes, expect=None):
+        self.config = save_settings(changes, expect, self.config_path)
+        self.config_mtime = config_mtime(self.config_path)
         self.publish()
-        return {"ok": True, **saved}
+        return {"ok": True, "settings": {key: self.config[key] for key in PAGE_SETTINGS}}
+
+    def set_current_view(self, view):
+        self.db.set_current_view(", ".join(view_targets(view)) if view else "")
+        self.publish()
+        return {"ok": True, **self.views()}
+
+    def move_old_views(self):
+        """Views the page saved in the database before they lived in the config file."""
+        old = self.db.take_old_views()
+        if not old:
+            return
+        if old.get("views") and not self.config["views"]:
+            self.save_settings({"views": old["views"]})
+        self.db.set_current_view(old.get("current") or "")
 
     def merged_history(self, view, kind, after=None):
         """A page of a view's older merges, for Show more; kept a few minutes so other tabs
@@ -1001,5 +1016,5 @@ class Companion:
             "config": page_config(self.config),
             "prs": prs,
             "worktrees": [w for w in self.worktree_map.values() if w.get("branch")],
-            "views": self.db.views(),
+            "views": self.views(),
         }

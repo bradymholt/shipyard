@@ -21,11 +21,13 @@ rule and trust settings that decide what the companion does on its own.
       },                       // a new session with {prompt} typed in; null for none
       "rules": { "address_feedback": { "prompt": "/pr-review-respond {url} (branch {branch})" },
                  "nudge": { "after_hours": 24 }, "passes": { "ci_failed": "ask" } },
-      "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } }
-    }
+      "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } },
+      "views": ["acme", "me/tools, acme/web"]   // the page's views: repos, orgs, or
+    }                                           // users; the settings page edits these
 """
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -88,7 +90,29 @@ HARD_LOCKED = {"post_reply"}
 CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
 
 DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT,
-                  "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS}
+                  "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": []}
+# What the page's settings may change. The rest (roots, trust flags) stays a hand edit.
+PAGE_SETTINGS = {"views"}
+TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
+
+
+def view_targets(view):
+    targets = [t.strip() for t in (view or "").split(",") if t.strip()] if isinstance(view, str) else []
+    if not targets:
+        raise ValueError("No repo, org, or user to search.")
+    for t in targets:
+        if not TARGET.fullmatch(t):
+            raise ValueError(f'"{t}" is not a repo, org, or user.')
+    return targets
+
+
+def validate_views(raw):
+    if not isinstance(raw, list):
+        raise ValueError('"views" must be an array')
+    try:
+        return list(dict.fromkeys(", ".join(view_targets(v)) for v in raw))
+    except ValueError as e:
+        raise ValueError(f'"views": {e}') from e
 
 
 def validate_open_settings(label, settings, placeholder):
@@ -257,7 +281,8 @@ def validate_config(raw):
     agent = validate_agent(raw.get("agent", DEFAULT_AGENT))
     rules = validate_rules(raw.get("rules", {}))
     auto = validate_auto(raw.get("auto", {}))
-    return {"roots": roots, "launcher": launcher, "agent": agent, "rules": rules, "auto": auto}
+    views = validate_views(raw.get("views", []))
+    return {"roots": roots, "launcher": launcher, "agent": agent, "rules": rules, "auto": auto, "views": views}
 
 
 def config_mtime(path=CONFIG_PATH):
@@ -267,19 +292,48 @@ def config_mtime(path=CONFIG_PATH):
         return None
 
 
-def read_config(path=CONFIG_PATH):
-    """The validated config; ValueError when the file can't be read or doesn't validate."""
+def read_raw(path):
     try:
         with open(path) as fh:
-            raw = json.load(fh)
+            return json.load(fh)
     except FileNotFoundError:
-        raw = {}
+        return {}
     except (OSError, json.JSONDecodeError) as e:
         raise ValueError(f"Could not read {CONFIG_FILE}: {e}") from e
+
+
+def read_config(path=CONFIG_PATH):
+    """The validated config; ValueError when the file can't be read or doesn't validate."""
+    raw = read_raw(path)
     try:
         return validate_config(raw)
     except ValueError as e:
         raise ValueError(f"Invalid {CONFIG_FILE}: {e}") from e
+
+
+def save_settings(changes, expect=None, path=CONFIG_PATH):
+    """Write settings the page changed into the config file and return the new config.
+    Everything else in the file is kept. `expect` holds the values the page last saw, so
+    a hand edit made since then isn't silently overwritten."""
+    if not isinstance(changes, dict) or not changes:
+        raise ValueError("No settings to save.")
+    blocked = sorted(set(changes) - PAGE_SETTINGS)
+    if blocked:
+        raise ValueError(f"{', '.join(blocked)} can only be changed in {CONFIG_FILE}.")
+    raw = read_raw(path)
+    current = read_config(path)
+    for key, value in (expect or {}).items():
+        if key in PAGE_SETTINGS and current[key] != value:
+            raise ValueError(f'"{key}" changed in {CONFIG_FILE} since this page loaded. Reload and try again.')
+    try:
+        cfg = validate_config({**raw, **changes})
+    except ValueError as e:
+        raise ValueError(f"Invalid setting: {e}") from e
+    raw.update({key: cfg[key] for key in changes})
+    tmp = Path(f"{path}.tmp")
+    tmp.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
+    return cfg
 
 
 def load_config(path=CONFIG_PATH):
