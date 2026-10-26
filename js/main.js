@@ -16,7 +16,7 @@ moveLocalViews().finally(() => {
   if (getCurrentRepo()) {
     render();
   } else {
-    location.hash = "#settings";
+    if (!location.hash.startsWith("#settings")) location.hash = "#settings";
   }
 });
 
