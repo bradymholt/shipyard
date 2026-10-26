@@ -144,6 +144,8 @@ class MergedHistory(unittest.TestCase):
                                          "is:merged reviewed-by:@me -author:@me sort:updated-desc")
         self.assertEqual(([p["number"] for p in out["prs"]], out["after"]), ([1], "c1"))
         poller.merged("acme", "mine", "c1")
+        poller.merged("", "mine")
+        self.assertEqual(calls[-1]["q"], "is:pr archived:false is:merged author:@me sort:updated-desc")
         self.assertEqual(sum("login" in c for c in calls), 2)
         with self.assertRaises(ValueError):
             poller.merged("acme is:open", "mine")

@@ -81,12 +81,6 @@ export const mergeMergedLists = (...lists) => {
   return byMergedAt(out);
 };
 
-function requireTarget() {
-  const target = getCurrentRepo();
-  if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
-  return target;
-}
-
 // A view is one or more comma-separated targets (repos, orgs, or users).
 export const viewTargets = (view) => view.split(",").map((t) => t.trim()).filter(Boolean);
 
@@ -97,7 +91,7 @@ export const MERGED_SEARCHES = {
 };
 
 export async function fetchMergedPage(kind, after) {
-  const params = new URLSearchParams({ view: requireTarget(), kind });
+  const params = new URLSearchParams({ view: getCurrentRepo(), kind });
   if (after) params.set("after", after);
   const data = await apiGet(`api/merged?${params}`);
   Object.assign(state.ownerTypes, data.owners);
@@ -137,13 +131,13 @@ export const prKey = (pr) => `${pr.repository?.nameWithOwner || ""}#${pr.number}
 
 function inScope(key) {
   const repo = key.split("#")[0].toLowerCase();
-  return viewTargets(getCurrentRepo() || "").some((t) =>
+  const view = getCurrentRepo();
+  return !view || viewTargets(view).some((t) =>
     t.includes("/") ? t.toLowerCase() === repo : repo.split("/")[0] === t.toLowerCase());
 }
 
 // The server polls GitHub and searches merged history on its own; this asks it to do both now.
 export function refreshNow() {
-  if (!getCurrentRepo()) return;
   state.refreshing = true;
   updateGitHubStatus();
   apiCall("api/check-now", { merged: true }).catch(() => {

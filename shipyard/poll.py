@@ -349,10 +349,11 @@ class Poller:
         return [page_pr(n) for n in search["nodes"] if n and n.get("number")]
 
     def merged(self, view, kind, after=None):
-        """One page of a view's merged history, newest first, in the page's shape."""
+        """One page of a view's merged history (all of yours with no view), newest first."""
         if kind not in MERGED_SEARCHES:
             raise ValueError(f'Unknown merged list "{kind}".')
-        q = f"is:pr archived:false {self.scope(view)} {MERGED_SEARCHES[kind]} sort:updated-desc"
+        scope = f"{self.scope(view)} " if view else ""
+        q = f"is:pr archived:false {scope}{MERGED_SEARCHES[kind]} sort:updated-desc"
         search = self.github.graphql(MERGED_QUERY, {"q": q, "after": after or None, "first": MERGED_PAGE_SIZE})["search"]
         page = search["pageInfo"]
         return {"prs": [page_pr(n) for n in search["nodes"] if n and n.get("number")],

@@ -755,10 +755,11 @@ class Orchestrator:
         return {"ok": True, "node": self.poller.timeline(node_id)}
 
     def views(self):
-        """Your views from the config file, and the one showing."""
+        """Your views from the config file, and the one showing: "" is everything you're
+        involved in, which needs no view at all."""
         views = self.config["views"]
         current = self.db.current_view()
-        return {"views": views, "current": current if current in views else (views[0] if views else "")}
+        return {"views": views, "current": current if current in views else ""}
 
     def settings(self):
         return {"ok": True, "sections": SECTIONS, "fields": setting_fields(read_raw(self.config_path))}
@@ -786,7 +787,7 @@ class Orchestrator:
     def merged_history(self, view, kind, after=None):
         """A page of a view's older merges, for Show more; kept a few minutes so other tabs
         reuse it."""
-        key = (", ".join(view_targets(view)), kind, after or "")
+        key = (", ".join(view_targets(view)) if view else "", kind, after or "")
         now = time.time()
         hit = self.merged_cache.get(key)
         if hit and now - hit[0] < MERGED_CACHE_SECONDS:
