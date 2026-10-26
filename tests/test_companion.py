@@ -213,7 +213,7 @@ class Settings(CompanionCase):
         self.config_path.write_text(json.dumps({"roots": ["~/dev"]}))
         out = self.comp.save_settings({"views": ["o/r ,acme", "o/r, acme", "me"]}, {"views": []})
         self.assertEqual(out["settings"]["views"], ["o/r, acme", "me"])
-        self.assertEqual(json.loads(self.config_path.read_text()), {"roots": ["~/dev"], "views": ["o/r, acme", "me"]})
+        self.assertEqual(self.config_path.read_text(), '{\n  "roots": ["~/dev"],\n  "views": ["o/r, acme", "me"]\n}\n')
         self.assertEqual(self.comp.set_current_view("gone")["current"], "o/r, acme")
         self.assertEqual(self.comp.set_current_view("me")["current"], "me")
         for changes, expect in (({"views": ["acme is:open"]}, None), ({"roots": ["/"]}, None),
