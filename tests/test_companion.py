@@ -185,6 +185,8 @@ class ChangesRequested(CompanionCase):
         self.assertIn(("POST", "/repos/o/r/pulls/1/comments/500/replies", {"body": "Edited reply."}),
                       self.gh.calls)
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"], [])
+        # replied last on every open thread, before the poll sees the reply
+        self.assertEqual([s["kind"] for s in self.comp.page_state()["prs"]["o/r#1"]["steps"]], ["rerequest_review"])
 
     def test_live_session_gets_a_kept_fork_instead_of_a_turn(self):
         self.agent.live = True
