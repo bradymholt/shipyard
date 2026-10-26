@@ -342,6 +342,16 @@ try {
   await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   check((await hosted.page.evaluate(() => window.__opened || "")).endsWith("/pull/101") &&
     !(await hosted.page.locator("#sidebar").isVisible()), "a card click opens the PR on GitHub hosted, not the sidebar");
+  let limited = 0;
+  await hosted.context.route("https://api.github.com/graphql", (route) => ++limited && route.fulfill({ status: 403,
+    headers: { "retry-after": "120" }, json: { message: "You have exceeded a secondary rate limit. Please wait a few minutes." } }));
+  await hosted.page.evaluate(() => window.__dashboard.load(true));
+  await hosted.page.waitForSelector("#stale-banner:not(.hidden)");
+  const limitText = await hosted.page.locator("#stale-detail").textContent();
+  const sent = limited;
+  await hosted.page.evaluate(() => window.__dashboard.load(true));
+  check(limitText.includes("You have exceeded a secondary rate limit.") && limitText.includes("Retrying at") &&
+    sent > 0 && limited === sent, "a rate-limited 403 shows GitHub's message and holds off further calls");
   check(hosted.errors.length === 0, `no page errors hosted${hosted.errors.length ? `: ${hosted.errors.join(" | ")}` : ""}`);
 
   await browser.close();

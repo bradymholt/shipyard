@@ -1102,8 +1102,35 @@
     return err;
   }
 
+  // Every GitHub call waits out a rate limit instead of adding to it.
+  let rateLimitedUntil = 0;
+  let rateLimitMessage = "";
+  function rateLimitError() {
+    const at = new Date(rateLimitedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const err = new Error(`${rateLimitMessage} Retrying at ${at}.`);
+    err.retryAt = rateLimitedUntil;
+    return err;
+  }
+
+  // GitHub's secondary limit sends Retry-After or nothing, its hourly one x-ratelimit-reset;
+  // with neither, its docs say to wait at least a minute.
+  function rateLimitWait(res) {
+    const retryAfter = Number(res.headers.get("retry-after"));
+    if (retryAfter > 0) return retryAfter * 1000;
+    const reset = Number(res.headers.get("x-ratelimit-reset"));
+    if (res.headers.get("x-ratelimit-remaining") === "0" && reset) return Math.max(reset * 1000 - Date.now(), 1000);
+    return 60 * 1000;
+  }
+
+  function backOff(res, message) {
+    rateLimitedUntil = Date.now() + rateLimitWait(res);
+    rateLimitMessage = `GitHub rate limit: ${message.split(/(?<=\.)\s/)[0]}`;
+    return rateLimitError();
+  }
+
   // 502/503/504 and network drops are transient — retry with exponential backoff.
   async function gql(query, variables) {
+    if (Date.now() < rateLimitedUntil) throw rateLimitError();
     const RETRYABLE = new Set([502, 503, 504]);
     let lastErr;
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -1124,11 +1151,17 @@
         lastErr = new Error(`GitHub is temporarily unavailable (${res.status}). Try refreshing in a moment.`);
         continue;
       }
-      if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        const message = (await res.json().catch(() => null))?.message || res.statusText;
+        if (res.status === 429 || (res.status === 403 && (res.headers.get("retry-after") ||
+            res.headers.get("x-ratelimit-remaining") === "0" || /rate limit/i.test(message)))) throw backOff(res, message);
+        throw new Error(`GitHub API error: ${res.status}${message ? ` — ${message}` : ""}`);
+      }
       const json = await res.json();
       const allNull = json.data && Object.values(json.data).every((v) => v === null);
       if (json.errors?.length && (!json.data || allNull)) {
         const message = json.errors.map((e) => e.message).join("; ");
+        if (json.errors.some((e) => e.type === "RATE_LIMITED")) throw backOff(res, message);
         throw /bad credentials|requires authentication|resource not accessible/i.test(message)
           ? authError(message) : new Error(message);
       }
@@ -2182,6 +2215,7 @@
       state.loadErrorAuth = err.auth === true;
       state.githubRefreshFailed = true;
       console.warn("Shipyard: GitHub refresh failed —", err.message);
+      if (err.retryAt) setTimeout(() => load(true), err.retryAt - Date.now() + 1000);
       renderTokenStatus();
       updateGitHubStatus();
       render();
