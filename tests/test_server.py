@@ -18,9 +18,11 @@ class FakeCompanion:
         self.config = validate_config({})
         self.calls = []
         self.changed = threading.Event()
+        self.prs = {"o/r#1": {"chip": None}}
+        self.status = {"lastPoll": "t1"}
 
     def page_state(self):
-        return {"version": self.version, "prs": {"o/r#1": {"chip": None}}}
+        return {"version": self.version, "status": dict(self.status), "prs": self.prs}
 
     def wait_for_change(self, seen, timeout):
         self.changed.wait(timeout)
@@ -109,7 +111,7 @@ class Endpoints(ServerCase):
         status, out = self.request("POST", "/companion/card-action?card=x", {})
         self.assertEqual(status, 400)
 
-    def test_events_stream_sends_state_then_updates(self):
+    def test_events_stream_sends_state_only_when_it_changed(self):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         conn.request("GET", "/companion/events", headers={"Host": f"localhost:{self.port}"})
         res = conn.getresponse()
@@ -119,6 +121,8 @@ class Endpoints(ServerCase):
             lines = []
             while True:
                 line = res.fp.readline().decode()
+                if line.startswith(": keepalive"):
+                    return [line.strip()]
                 if line == "\n":
                     if lines and lines[0].startswith("event:"):
                         return lines
@@ -129,10 +133,20 @@ class Endpoints(ServerCase):
         first = read_event()
         self.assertEqual(first[0], "event: state")
         self.assertEqual(json.loads(first[1][len("data: "):])["version"], 1)
-        self.companion.version = 2
-        self.companion.changed.set()
-        second = read_event()
-        self.assertEqual(json.loads(second[1][len("data: "):])["version"], 2)
+
+        def bump(**changes):
+            for k, v in changes.items():
+                setattr(self.companion, k, v)
+            self.companion.version += 1
+            self.companion.changed.set()
+            return read_event()
+
+        self.assertEqual(bump()[0], ": keepalive")
+        poll = bump(status={"lastPoll": "t2"})
+        self.assertEqual((poll[0], json.loads(poll[1][len("data: "):])), ("event: poll", {"lastPoll": "t2"}))
+        second = bump(prs={"o/r#1": {"chip": {"kind": "nudge"}}})
+        self.assertEqual(second[0], "event: state")
+        self.assertEqual(json.loads(second[1][len("data: "):])["version"], 4)
         conn.close()
 
     def test_orchestrator_off(self):
