@@ -8,7 +8,11 @@
 
 <br/>
 
-Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Shipyard runs on your machine: a small companion process serves the dashboard, matches PRs to your local clones, opens them in your preferred app or IDE, and watches your PRs with your coding agent.
+Shipyard is a local dashboard that watches your GitHub pull requests and has your coding agent help get them merged. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place.
+
+When something happens to a PR (CI fails, your review is requested, a reviewer pushes back), Shipyard asks your coding agent (Claude Code or Codex) about it and turns the answer into a card with the buttons that fit: re-run the failed jobs, apply a fix, post a reply, approve. You decide; it prepares. Nothing posts under your name without showing you the text first.
+
+Everything runs on your machine: a small companion process serves the dashboard, makes the GitHub calls with your `gh` token, and matches PRs to your local clones so you can open them in your preferred app or IDE.
 
 Want a simple hosted dashboard with nothing to run? See [Harbor](https://github.com/bradymholt/harbor).
 
@@ -42,18 +46,18 @@ Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` an
 
 ## Features
 
+- **Shipping orchestrator:** the companion watches your PRs, asks your coding agent about the ones that changed, and shows its judgment as a card with the buttons that fit.
 - **Action-focused views:** My PRs and Reviews, with priority, updated, and created sorting.
 - **Board layout:** reviewer state, new commits since your review, drafts, approvals, and ready-to-merge work at a glance, with lanes that stack and collapse on a phone.
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
 - **Next actions:** a **Next** row at the bottom of each card that has a next step (Address feedback, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's timeline.
-- **Shipping orchestrator:** the companion watches your PRs, asks your coding agent about the ones that changed, and shows its judgment as a card with the buttons that fit. You decide; it prepares.
 - **Local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
 
 ## Running Shipyard
 
-Shipyard runs `shipyard.py`, the companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git, Python 3, and a signed-in [GitHub CLI](#github-access); start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
+Shipyard runs `shipyard.py`, the companion process that serves the dashboard, watches your PRs with your coding agent, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git, Python 3, and a signed-in [GitHub CLI](#github-access); start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
 
 On macOS, you can keep it running in the background instead. Copy the example config, set `roots` to your folders, and install it as a login agent:
 
