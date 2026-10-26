@@ -146,6 +146,15 @@ class PageState(CompanionCase):
         self.assertEqual((pr["pr"]["number"], pr["pr"]["headRefName"]), (1, "feature"))
 
 
+class AfterAction(CompanionCase):
+    def test_rereads_the_pr_for_the_page_before_the_poll_does(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.gh.put(pr_node(state="MERGED"), "author:@me")
+        self.comp.do_action("o/r#1", "merge", {})
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["pr"]["state"], "MERGED")
+
+
 class ChangesRequested(CompanionCase):
     def setUp(self):
         super().setUp()

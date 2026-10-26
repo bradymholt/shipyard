@@ -653,6 +653,7 @@ class Companion:
             self.db.save_pr(snap)
         self.record_review(snap, action, payload)
         self.record_pending(snap, action, payload)
+        self.reread_for_page(snap)
         self.db.log(key, result)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
@@ -683,6 +684,21 @@ class Companion:
         self.db.save_pr(snap)
         if action == "apply_fix":
             self.refresh_worktrees()  # the fix may have created the branch's worktree
+
+    def reread_for_page(self, snap):
+        """Show the page what an action changed now. Search can lag behind an action, so
+        the poll's signature check may not re-read the PR for a while."""
+        try:
+            fresh = self.poller.details([snap["id"]], self.viewer)
+        except Exception as e:  # the action itself already went through
+            print(f"Warning: re-reading {snap['key']} after an action failed: {e}")
+            return
+        if fresh:
+            snap["page"] = fresh[0]["page"]
+            self.db.save_pr(snap)
+
+    def merged_history(self, view, kind, after=None):
+        return {"ok": True, **self.poller.merged(view, kind, after)}
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
@@ -726,6 +742,7 @@ class Companion:
         snap = self.snapshot_or_error(card["key"])
         result = actions.undo(self.github, handled["action"], snap, handled.get("payload"))
         self.record_pending(snap, f"undo_{handled['action']}", handled.get("payload") or {})
+        self.reread_for_page(snap)
         self.db.log(card["key"], f"undid: {result}")
         self.db.update_card(card_id, status="done", result=f"undone: {result}")
         self.poke()
