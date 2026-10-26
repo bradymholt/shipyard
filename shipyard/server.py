@@ -1,5 +1,6 @@
 """The companion's HTTP side: serves the page, /worktrees.json, the companion's state
-(once as JSON and as a Server-Sent Events stream), and the POSTs behind every button.
+(once as JSON and as a Server-Sent Events stream), the page's GitHub GraphQL calls, and
+the POSTs behind every button.
 
 Binds to localhost. Every request must carry a localhost Host header (against DNS
 rebinding), and every mutation must also come from the page's own origin with the
@@ -11,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import worktrees
 from .config import DEFAULT_CONFIG, page_config
+from .github import GitHubError
 
 MAX_BODY = 1_000_000
 SSE_KEEPALIVE = 15
@@ -21,6 +23,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     config = DEFAULT_CONFIG
     session_token = ""
     companion = None
+    github = None
+    RATE_LIMIT_HEADERS = ("Retry-After", "X-RateLimit-Remaining", "X-RateLimit-Reset")
     STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png",
                     "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
@@ -150,10 +154,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS:
+        if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS | {"/github/graphql"}:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
+        if parsed.path == "/github/graphql":
+            return self._github_graphql()
         q = parse_qs(parsed.query)
         arg = lambda name: (q.get(name) or [""])[0]  # noqa: E731
         if parsed.path in self.COMPANION_ACTIONS:
@@ -175,6 +181,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             result = worktrees.launch_agent(arg("path"), self.roots, self.config, arg("session") or None)
         return self._json(result, 200 if result.get("ok") else 500)
+
+    def _github_graphql(self):
+        try:
+            body = self._body()
+            if not isinstance(body.get("query"), str):
+                raise ValueError("Missing GraphQL query.")
+            status, headers, payload = self.github.forward_graphql(
+                {"query": body["query"], "variables": body.get("variables") or {}})
+        except ValueError as e:
+            return self._json({"ok": False, "error": str(e)}, 400)
+        except GitHubError as e:  # no gh token
+            status, headers, payload = 401, {}, json.dumps({"message": str(e)}).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        for name in self.RATE_LIMIT_HEADERS:
+            if headers.get(name):
+                self.send_header(name, headers.get(name))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def _companion(self, name, arg, body):
         def card_id():

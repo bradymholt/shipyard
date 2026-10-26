@@ -3,8 +3,8 @@ smoke test (tests/ui/smoke.mjs) or to look at the sidebar without touching GitHu
 
     python3 tests/ui/demo_server.py 4399
 
-The page's own GitHub calls still go to api.github.com; smoke.mjs answers them with
-matching fixtures."""
+The page's own GitHub calls go to the companion's /github/graphql, which smoke.mjs
+answers in the browser with matching fixtures; here it answers 503."""
 import functools
 import http.server
 import json
@@ -26,6 +26,11 @@ from shipyard.agents.claude_code import ClaudeCode  # noqa: E402
 from shipyard.companion import Companion  # noqa: E402
 from shipyard.config import REPO_DIR, validate_config  # noqa: E402
 from shipyard.server import Handler  # noqa: E402
+
+
+class OfflineGitHub:
+    def forward_graphql(self, body):
+        return 503, {}, b'{"message": "The demo server does not call GitHub."}'
 
 
 def ago(**kw):
@@ -143,6 +148,7 @@ def main():
     Handler.config = comp.config
     Handler.session_token = "demo-token"
     Handler.companion = comp
+    Handler.github = OfflineGitHub()
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))
     httpd.daemon_threads = True

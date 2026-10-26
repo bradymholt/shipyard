@@ -20,7 +20,7 @@ cd shipyard
 python3 shipyard.py ~/dev
 ```
 
-Open http://localhost:4321, add a [GitHub token](#github-token), then add a repository, organization, or username to your views. See [Running Shipyard](#running-shipyard) for configuration and running at login.
+Open http://localhost:4321 and add a repository, organization, or username to your views. See [Running Shipyard](#running-shipyard) for configuration and running at login.
 
 ## Screenshots
 
@@ -36,11 +36,9 @@ Track the PRs you owe a review, split into what's still waiting on you and what 
 
 ![Shipyard review board](docs/review-board.png)
 
-## GitHub token
+## GitHub access
 
-A fine-grained personal access token limited to the repositories you use is recommended. Pull requests read access is enough for viewing; write access is needed to toggle auto-merge or mark a draft ready for review. A classic token needs the `repo` scope for private repositories.
-
-Your token and recent dashboard data stay in your browser's local storage. The token is sent only to `api.github.com`.
+Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` and run `gh auth login`. The companion reads it with `gh auth token` and makes every GitHub call itself, so the token never reaches the browser. Recent dashboard data stays in your browser's local storage.
 
 ## Features
 
@@ -55,7 +53,7 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 
 ## Running Shipyard
 
-Shipyard runs `shipyard.py`, the companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git and Python 3; start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
+Shipyard runs `shipyard.py`, the companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git, Python 3, and a signed-in [GitHub CLI](#github-access); start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
 
 On macOS, you can keep it running in the background instead. Copy the example config, set `roots` to your folders, and install it as a login agent:
 
@@ -136,7 +134,7 @@ Click a card (or its Next row) to open the sidebar: the PR's state and launch bu
 - **Buttons:** Continue in your agent, Re-run failed jobs, Post reply, Submit as review, Re-request review, Merge, and so on. Anything that posts under your name shows the full, editable text first, and Apply fix shows the diff first. An **Ask** field puts one question to the PR's session (as a fork).
 - **PR session:** the pinned session (the one whose transcript ran `gh pr create` for the PR), whether it's active, turns yours vs Shipyard's, the last exchange, and Re-pin.
 
-The companion reads its GitHub token from `gh auth token` (install the [GitHub CLI](https://cli.github.com/) and run `gh auth login`); the page's token stays in the browser. Passes run your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) headlessly with read-only tools, on your existing subscription. State lives in `shipyard.db` next to the config. Run with `--no-orchestrator` to skip all of this and keep only the page and worktree links.
+Passes run your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) headlessly with read-only tools, on your existing subscription. State lives in `shipyard.db` next to the config. Run with `--no-orchestrator` to skip all of this and keep only the page and worktree links; the page still reads GitHub through the companion.
 
 #### Rule and trust settings
 

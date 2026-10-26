@@ -134,12 +134,13 @@ function check(cond, message) {
 async function openPage(browser, port, viewport = { width: 1440, height: 900 }) {
   const context = await browser.newContext({ viewport });
   await context.addInitScript(() => {
-    localStorage.setItem("ghpr.token", "test-token");
     localStorage.setItem("ghpr.repos", JSON.stringify(["o/r"]));
     localStorage.setItem("ghpr.currentRepo", "o/r");
   });
   const queries = [];
-  await context.route("https://api.github.com/graphql", (route) => {
+  const direct = [];
+  await context.route("https://api.github.com/**", (route) => { direct.push(route.request().url()); return route.abort(); });
+  await context.route("**/github/graphql", (route) => {
     const body = JSON.parse(route.request().postData());
     queries.push(body);
     return route.fulfill({ json: { data: answer(body) } });
@@ -152,7 +153,7 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }) 
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto(`http://localhost:${port}/`);
   await page.waitForSelector(".card[data-key]");
-  return { page, errors, context, queries };
+  return { page, errors, context, queries, direct };
 }
 
 const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row .next-label`).first().textContent().catch(() => null);
@@ -163,7 +164,7 @@ try {
   const browser = await chromium.launch();
 
   console.log("companion mode");
-  const { page, errors, queries } = await openPage(browser, COMPANION_PORT);
+  const { page, errors, queries, direct } = await openPage(browser, COMPANION_PORT);
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
@@ -320,6 +321,8 @@ try {
   check(!(await sb.isVisible()), "Esc closes the sidebar");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
+  check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
+
   console.log("narrow window");
   const narrow = await openPage(browser, COMPANION_PORT, { width: 420, height: 900 });
   await narrow.page.locator('.card[data-key="o/r#101"] .card-meta').click();
@@ -333,7 +336,7 @@ try {
 
   console.log("rate limit");
   let limited = 0;
-  await narrow.context.route("https://api.github.com/graphql", (route) => ++limited && route.fulfill({ status: 403,
+  await narrow.context.route("**/github/graphql", (route) => ++limited && route.fulfill({ status: 403,
     headers: { "retry-after": "120" }, json: { message: "You have exceeded a secondary rate limit. Please wait a few minutes." } }));
   await narrow.page.evaluate(() => window.__dashboard.load(true));
   await narrow.page.waitForSelector("#stale-banner:not(.hidden)");

@@ -6,6 +6,7 @@ import sys
 
 from .companion import Companion
 from .config import CONFIG_FILE, REPO_DIR, load_config
+from .github import GitHub
 from .server import Handler
 from .worktrees import normalize_roots, warn_unavailable_roots
 
@@ -48,8 +49,9 @@ def main(argv=None):
     Handler.roots = roots
     Handler.config = config
     Handler.session_token = secrets.token_urlsafe(32)
+    Handler.github = GitHub()
     if not no_orchestrator:
-        Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE)
+        Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=Handler.github)
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))

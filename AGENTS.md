@@ -38,8 +38,9 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
   so it is loaded but never rewritten. Nothing else depends on this file; the app never
   calls it. Keep platform-specific service code here rather than in `shipyard.py`.
 
-Dashboard data and the GitHub token live in the browser's local storage; the token is
-sent only to `api.github.com`.
+Every GitHub call goes through the companion with the `gh auth token` token: the page
+posts its GraphQL to `/github/graphql` and never holds a token. Dashboard data lives in
+the browser's local storage.
 
 ## Running it
 
