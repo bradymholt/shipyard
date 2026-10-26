@@ -698,7 +698,7 @@ class Companion:
             self.db.save_pr(snap)
 
     def merged_history(self, view, kind, after=None):
-        return {"ok": True, **self.poller.merged(view, kind, after)}
+        return {"ok": True, **self.poller.merged(view, kind, after), "owners": dict(self.poller.owner_types)}
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
@@ -902,6 +902,7 @@ class Companion:
                 "activity": self.db.activity(key),
                 "autoApprove": auto if auto and (auto["by"] != "default" or snap.get("my_review")) else None,
                 "pr": snap.get("page"),
+                "lists": self.poller.lists.get(snap["id"], []),
             }
         adapter = self.adapter
         return {

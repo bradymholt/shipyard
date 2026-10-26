@@ -28,7 +28,7 @@ class FakeGitHub:
 
     def graphql(self, query, variables=None):
         if "search(" in query:
-            nodes = next(v for k, v in self.lists.items() if k in variables["q"])
+            nodes = self.lists[max((k for k in self.lists if k in variables["q"]), key=len)]
             return {"viewer": {"login": VIEWER},
                     "search": {"pageInfo": {"hasNextPage": False}, "nodes": copy.deepcopy(nodes)}}
         if "nodes(ids" in query:
@@ -144,6 +144,7 @@ class PageState(CompanionCase):
         pr = self.poll()["o/r#1"]
         self.assertEqual((pr["state"], pr["dropped"], pr["openThreads"]), ("OPEN", False, 1))
         self.assertEqual((pr["pr"]["number"], pr["pr"]["headRefName"]), (1, "feature"))
+        self.assertEqual(pr["lists"], ["mine"])
 
 
 class AfterAction(CompanionCase):

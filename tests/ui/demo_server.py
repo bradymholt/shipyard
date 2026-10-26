@@ -3,8 +3,9 @@ smoke test (tests/ui/smoke.mjs) or to look at the sidebar without touching GitHu
 
     python3 tests/ui/demo_server.py 4399
 
-The page's own GitHub calls go to the companion's /github/graphql, which smoke.mjs
-answers in the browser with matching fixtures; here it answers 503."""
+The page's remaining GitHub calls (the sidebar's timeline) go to /github/graphql, which
+smoke.mjs answers in the browser; here it answers 503."""
+import copy
 import functools
 import http.server
 import json
@@ -33,8 +34,40 @@ class OfflineGitHub:
         return 503, {}, b'{"message": "The demo server does not call GitHub."}'
 
 
+class DemoGitHub(FakeGitHub):
+    """Applies the merges and review requests the smoke test makes, since the server
+    re-reads a PR right after an action, and answers the merged-history searches."""
+
+    def __init__(self):
+        super().__init__()
+        self.merged = {"author:@me": [], "reviewed-by:@me": []}
+
+    def graphql(self, query, variables=None):
+        q = (variables or {}).get("q", "")
+        if "is:merged" in q:
+            nodes = self.merged["reviewed-by:@me" if "reviewed-by:@me" in q else "author:@me"]
+            return {"search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": copy.deepcopy(nodes)}}
+        if "mergePullRequest" in query:
+            node = self.nodes[variables["id"]]
+            node.update(state="MERGED", mergedAt=ago(minutes=0))
+            self.put(node)
+        return super().graphql(query, variables)
+
+    def rest(self, method, path, body=None):
+        if path.endswith("/requested_reviewers"):
+            number = int(path.split("/")[-2])
+            node = next(n for n in self.nodes.values() if n["number"] == number)
+            node["reviewRequests"]["nodes"] += [{"requestedReviewer": {"__typename": "User", "login": r}}
+                                                for r in (body or {}).get("reviewers") or []]
+        return super().rest(method, path, body)
+
+
 def ago(**kw):
     return (datetime.now(timezone.utc) - timedelta(**kw)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def approved(at, oid):
+    return {"databaseId": 12, "state": "APPROVED", "submittedAt": at, "commit": {"oid": oid}, "onBehalfOf": {"nodes": []}}
 
 
 def main():
@@ -45,8 +78,9 @@ def main():
     merged_wt = tmp / "dev" / "r" / ".claude" / "worktrees" / "old-feature"
     merged_wt.mkdir(parents=True)
 
-    gh = FakeGitHub()
+    gh = DemoGitHub()
     gh.put(pr_node(101, head="h101", branch="me/webhook-retry", decision="CHANGES_REQUESTED",
+                   title="Add retry to the webhook sender",
                    reviews=[{"state": "CHANGES_REQUESTED", "author": "rev", "body": "A couple of things."}],
                    threads=[{"body": "Why retry 5 times? GitHub already retries.", "comment_id": 501,
                              "path": "webhooks.py", "line": 12,
@@ -79,7 +113,24 @@ def main():
                    my_review={"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": ago(days=1),
                               "commit": {"oid": "old"}},
                    threads=[{"body": "Handle empty export", "author": "me"}], updated=ago(hours=5)),
-           "review-requested:@me")
+           "review-requested:@me", "reviewed-by:@me")
+    gh.put(pr_node(203, author="cy", head="h203", branch="cy/follow-up", standing=[("CHANGES_REQUESTED", "me")],
+                   threads=[{"body": "Rename this", "author": "me", "replies": ["cy"]}, {"body": "And this", "author": "me"}],
+                   my_review={"databaseId": 10, "state": "COMMENTED", "submittedAt": ago(days=1),
+                              "commit": {"oid": "h203"}, "onBehalfOf": {"nodes": []}}), "reviewed-by:@me")
+    gh.put(pr_node(204, author="di", head="h204", branch="di/drive-by",
+                   my_review={"databaseId": 11, "state": "COMMENTED", "submittedAt": ago(days=1),
+                              "commit": {"oid": "h204"}, "onBehalfOf": {"nodes": []}}), "reviewed-by:@me")
+    gh.merged["author:@me"] = [pr_node(99, head="h99", branch="me/old-feature", state="MERGED", merged_at=ago(hours=20))]
+    gh.merged["reviewed-by:@me"] = [
+        pr_node(97, author="cy", head="h97", state="MERGED", merged_at=ago(hours=5),
+                threads=[{"body": "Why?", "author": "me", "replies": ["cy"]}], my_review=approved(ago(hours=6), "h97")),
+        pr_node(96, author="cy", head="h96", state="MERGED", merged_at=ago(hours=1),
+                comments=[{"author": "cy", "at": ago(hours=1)}], my_review=approved(ago(hours=2), "h96")),
+        pr_node(95, author="cy", head="h95", state="MERGED", merged_at=ago(hours=1),
+                comments=[{"author": "cy", "at": ago(hours=3)}, {"author": "me", "at": ago(hours=2)}],
+                my_review=approved(ago(hours=4), "h95")),
+    ]
 
     transcript = tmp / "s-open.jsonl"
     transcript.write_text("".join(json.dumps({"type": "user", "message": {"role": "user", "content": t}}) + "\n"
@@ -138,7 +189,7 @@ def main():
 
     comp = Companion(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
     comp.poll_once()
-    lookups.update(state="MERGED", reviewDecision="APPROVED", updatedAt=ago(minutes=10),
+    lookups.update(state="MERGED", reviewDecision="APPROVED", updatedAt=ago(minutes=10), mergedAt=ago(minutes=10),
                    latestReviews={"nodes": [{"databaseId": 98, "state": "APPROVED", "submittedAt": ago(minutes=10),
                                              "body": "Approving, though I'd prefer a Map here.",
                                              "author": {"login": "jm"}, "commit": {"oid": "h98"}}]})

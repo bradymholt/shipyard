@@ -275,6 +275,7 @@ class Poller:
         self.github = github
         self.signatures = {}  # PR node id -> last light signature
         self.owner_types = {}  # login -> "org" | "user"
+        self.lists = {}  # PR node id -> names of the SEARCHES it was on in the last poll
 
     def search(self, q):
         nodes, viewer, after = [], None, None
@@ -331,11 +332,13 @@ class Poller:
         """(viewer, changed snapshots, ids still open). `known_open` is the set of node
         ids the caller holds as open; any that dropped out of every list are re-read so a
         merge or close is seen."""
-        viewer, light = None, {}
-        for q in SEARCHES.values():
+        viewer, light, lists = None, {}, {}
+        for name, q in SEARCHES.items():
             viewer, nodes = self.search(q)
             for n in nodes:
                 light[n["id"]] = n
+                lists.setdefault(n["id"], []).append(name)
+        self.lists = lists
         changed = [i for i, n in light.items() if self.signatures.get(i) != signature(n)]
         gone = [i for i in known_open if i not in light]
         snaps = self.details(changed + gone, viewer) if viewer else []

@@ -724,10 +724,7 @@
     REPOS: "ghpr.repos",
     REPO: "ghpr.currentRepo",
     FILTER: "ghpr.filter",
-    CACHE_PREFIX: "ghpr.cache.",
   };
-  const CACHE_VERSION = 7;
-  const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
   const $ = (sel) => document.querySelector(sel);
   const listBody = $("#list-body");
@@ -744,13 +741,12 @@
     merged: [],           // my recently merged PRs, shown as context on the My PRs tab
     reviewedPrs: [],      // open PRs I reviewed
     reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
+    mergedHistory: { mine: [], review: [] },  // the view's merged searches, from the server
     mergedCursor: null,        // how far back each merged feed has been walked
     reviewedMergedCursor: null,
-    reviewHistoryLoaded: false,
-    targetedLoaded: false,
-    loadError: null,
-    loadErrorAuth: false,
+    targetedLoaded: false,     // true once the server has polled GitHub
     viewer: null,
+    ownerTypes: {},            // login -> "org" | "user", from the server's merged searches
     filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, workspace }
@@ -759,85 +755,22 @@
     agent: null,          // coding agent whose latest session a checkout can resume
     rules: null,          // the companion's "rules" config (which chips are on)
     companionState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
-    loading: false,
-    targetedFresh: false,
-    reviewHistoryFresh: false,
-    githubUpdatedAt: null,
+    loadingHistory: false,
     historyFetchedAt: null,  // when the merged feeds were last searched
-    githubRefreshFailed: false,
   };
 
   function resetData() {
-    state.loadError = null;
-    state.loadErrorAuth = false;
-    state.prs = [];
-    state.merged = [];
-    state.reviewedPrs = [];
-    state.reviewedMerged = [];
+    state.mergedHistory = { mine: [], review: [] };
     state.mergedCursor = null;
     state.reviewedMergedCursor = null;
-    mergedExtra = 0;
-    state.reviewHistoryLoaded = false;
-    state.targetedLoaded = false;
-    state.targetedFresh = false;
-    state.reviewHistoryFresh = false;
-    state.githubUpdatedAt = null;
     state.historyFetchedAt = null;
-    state.githubRefreshFailed = false;
-    stopGitHubAgeTimer();
-    $("#viewer-info").textContent = "";
-    updateGitHubStatus();
+    mergedExtra = 0;
+    applyServerPrs();
   }
 
   const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
   const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
   const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
-  const cacheKey = (target = getCurrentRepo()) => `${LS.CACHE_PREFIX}${target}`;
-
-  function restoreDashboardCache() {
-    const target = getCurrentRepo();
-    if (!target) return false;
-    try {
-      const cached = JSON.parse(localStorage.getItem(cacheKey(target)) || "null");
-      if (!cached || cached.version !== CACHE_VERSION || Date.now() - cached.savedAt > CACHE_MAX_AGE) {
-        localStorage.removeItem(cacheKey(target));
-        return false;
-      }
-      if (!Array.isArray(cached.prs) || !Array.isArray(cached.merged) ||
-          !Array.isArray(cached.reviewedPrs) || !Array.isArray(cached.reviewedMerged)) return false;
-      state.viewer = cached.viewer || null;
-      state.prs = cached.prs;
-      state.merged = cached.merged;
-      state.reviewedPrs = cached.reviewedPrs;
-      state.reviewedMerged = cached.reviewedMerged;
-      state.reviewHistoryLoaded = cached.reviewHistoryLoaded === true;
-      state.targetedLoaded = true;
-      state.githubUpdatedAt = cached.savedAt;
-      restartGitHubAgeTimer();
-      $("#viewer-info").textContent = state.viewer ? `Signed in as ${state.viewer}` : "";
-      return true;
-    } catch {
-      localStorage.removeItem(cacheKey(target));
-      return false;
-    }
-  }
-
-  function saveDashboardCache() {
-    const target = getCurrentRepo();
-    if (!target || !state.targetedLoaded) return;
-    try {
-      localStorage.setItem(cacheKey(target), JSON.stringify({
-        version: CACHE_VERSION,
-        savedAt: state.githubUpdatedAt || Date.now(),
-        viewer: state.viewer,
-        prs: state.prs,
-        merged: state.merged.slice(0, MERGED_CACHE_CAP),
-        reviewedPrs: state.reviewedPrs,
-        reviewedMerged: state.reviewedMerged.slice(0, MERGED_CACHE_CAP),
-        reviewHistoryLoaded: state.reviewHistoryLoaded,
-      }));
-    } catch { /* storage unavailable or full: live data still works */ }
-  }
 
   function githubAge(updatedAt) {
     const seconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
@@ -853,59 +786,46 @@
   // Past the auto-refresh interval, a refresh was missed and what's on screen is old.
   const STALE_AFTER = 5 * 60 * 1000;
 
-  function updateGitHubStatus(refreshing = false) {
-    const el = $("#last-updated");
-    const failed = state.githubRefreshFailed && !refreshing;
-    // The companion's poll counts as a check: the page re-reads whatever it saw change.
-    const checkedAt = Math.max(state.githubUpdatedAt || 0,
-      companionLive() ? Date.parse(state.companionState.status?.lastPoll || "") || 0 : 0);
-    const stale = !failed && !!state.githubUpdatedAt && Date.now() - checkedAt > STALE_AFTER;
-    const status = $("#github-status");
-    status.classList.toggle("hidden", refreshing || !state.githubUpdatedAt);
-    status.classList.toggle("failed", failed);
-    status.classList.toggle("stale", stale);
-    $("#load-bar").classList.toggle("hidden", !refreshing);
-    if (failed) {
-      el.textContent = state.githubUpdatedAt
-        ? `Refresh failed · ${githubAge(state.githubUpdatedAt)}`
-        : "Refresh failed";
-    } else {
-      el.textContent = state.githubUpdatedAt ? `Updated ${githubAge(checkedAt)}` : "";
-    }
-    el.title = failed ? state.loadError || "The last refresh failed." : "";
-    renderStaleBanner(refreshing);
+  const lastPollAt = () => Date.parse(state.companionState?.status?.lastPoll || "") || 0;
+  // Why the server's last poll of GitHub failed, if it did; lastPoll stays at the last success.
+  function githubProblem() {
+    const github = state.companionState?.status?.github;
+    return github && github !== "ok" && github !== "starting" ? github : null;
   }
 
-  // A failed refresh on top of restored cache would otherwise look like live data:
+  function updateGitHubStatus() {
+    const el = $("#last-updated");
+    const updatedAt = lastPollAt();
+    const problem = githubProblem();
+    const stale = !problem && !!updatedAt && Date.now() - updatedAt > STALE_AFTER;
+    const status = $("#github-status");
+    status.classList.toggle("hidden", state.loadingHistory || (!updatedAt && !problem));
+    status.classList.toggle("failed", !!problem);
+    status.classList.toggle("stale", stale);
+    $("#load-bar").classList.toggle("hidden", !state.loadingHistory);
+    el.textContent = problem
+      ? updatedAt ? `Refresh failed · ${githubAge(updatedAt)}` : "Refresh failed"
+      : updatedAt ? `Updated ${githubAge(updatedAt)}` : "";
+    el.title = problem || "";
+    renderStaleBanner();
+  }
+
+  // A failed poll on top of earlier data would otherwise look like live data:
   // the board renders normally and only the sub-bar age hints that nothing updated.
-  function renderStaleBanner(refreshing = false) {
+  function renderStaleBanner() {
     const banner = $("#stale-banner");
-    const show = state.githubRefreshFailed && !refreshing && state.targetedLoaded;
+    const problem = githubProblem();
+    const show = !!problem && state.targetedLoaded;
     banner.classList.toggle("hidden", !show);
     if (!show) return;
-    $("#stale-headline").textContent = state.loadErrorAuth
+    $("#stale-headline").textContent = /\(401\)/.test(problem)
       ? "Not updating — GitHub rejected Shipyard's gh token"
       : "Not updating — the last GitHub refresh failed";
-    const age = state.githubUpdatedAt ? `Showing data from ${githubAge(state.githubUpdatedAt)}. ` : "";
-    $("#stale-detail").textContent = `${age}${state.loadError || ""}`;
+    const updatedAt = lastPollAt();
+    $("#stale-detail").textContent = `${updatedAt ? `Showing data from ${githubAge(updatedAt)}. ` : ""}${problem}`;
   }
 
-  let githubAgeTimer = null;
-  function stopGitHubAgeTimer() {
-    clearInterval(githubAgeTimer);
-    githubAgeTimer = null;
-  }
-
-  function restartGitHubAgeTimer() {
-    stopGitHubAgeTimer();
-    if (state.githubUpdatedAt) {
-      githubAgeTimer = setInterval(() => updateGitHubStatus(state.loading), 10 * 1000);
-    }
-  }
-  // "org" | "user" | undefined, from the ownerQualifier cache
-  const ownerType = (login) => {
-    try { return JSON.parse(localStorage.getItem("ghpr.ownerTypes") || "{}")[login]; } catch { return undefined; }
-  };
+  const ownerType = (login) => state.ownerTypes[login];
 
   // ---------- icons ----------
   const ICONS = {
@@ -969,51 +889,12 @@
   }
 
   // ---------- GitHub API ----------
-  const PR_FIELDS = `
-    id number title url isDraft createdAt updatedAt mergedAt headRefName baseRefName headRefOid
-    additions deletions changedFiles
-    autoMergeRequest { enabledAt }
-    labels(first: 10) { nodes { name color } }
-    viewerCanEnableAutoMerge viewerCanDisableAutoMerge
-    repository { nameWithOwner }
-    author { login avatarUrl }
-    reviewDecision
-    comments { totalCount }
-    reviewRequests(first: 10) {
-      nodes {
-        requestedReviewer {
-          __typename
-          ... on User { login avatarUrl }
-          ... on Team { name }
-        }
-      }
-    }
-    latestReviews(first: 10) {
-      nodes { state author { login avatarUrl } commit { oid } }
-    }
-    commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
-      __typename
-      ... on CheckRun { name conclusion detailsUrl }
-      ... on StatusContext { context state targetUrl }
-    } } } } } }`;
-
-  // Two comment lists per thread make this the costliest part of a search (GitHub bills
-  // each nested list per parent), so only the review searches ask for it.
-  const THREAD_FIELDS = `
-    reviewThreads(first: 20) { nodes { isResolved opener: comments(first: 1) { nodes { author { login } } } comments(last: 1) { nodes { author { login } } } } }`;
-
-  // Smaller pages keep each query under GitHub's timeout (large repos otherwise 502);
-  // we page up to MAX_PRS to preserve the "most recent 100" behavior.
-  const PAGE_SIZE = 25;
-  const MAX_PRS = 100;
   // Merged history has no date cutoff: a few show at first, and each "Show more"
-  // reveals another batch, paging the API further back whenever the local list runs out.
+  // reveals another batch, paging the server's search further back whenever the local list runs out.
   const MERGED_INITIAL = 3;
   const MERGED_STEP = 10;
   // A page can be spent entirely on merges that get filtered out, so walk a few.
   const MERGED_MAX_PAGES_PER_CLICK = 4;
-  // Persisting the whole walked-back history would blow the cache budget.
-  const MERGED_CACHE_CAP = 50;
   const HISTORY_EVERY_MS = 15 * 60 * 1000;
   let mergedExtra = 0;
   let mergedLoading = false;
@@ -1032,51 +913,6 @@
     }
     return byMergedAt(out);
   };
-
-  const OWNER_QUERY = `
-    query($q: String!, $after: String) {
-      viewer { login }
-      search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
-        issueCount
-        pageInfo { hasNextPage endCursor }
-        nodes { ... on PullRequest { ${PR_FIELDS} } }
-      }
-    }`;
-
-  const REQUESTED_REVIEW_QUERY = `
-    query($q: String!, $after: String) {
-      viewer { login }
-      search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
-        issueCount
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          ... on PullRequest {
-            ${PR_FIELDS}
-            pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
-          }
-        }
-      }
-    }`;
-
-  const REVIEW_OWNER_QUERY = `
-    query($q: String!, $after: String) {
-      viewer { login }
-      search(query: $q, type: ISSUE, first: ${PAGE_SIZE}, after: $after) {
-        issueCount
-        pageInfo { hasNextPage endCursor }
-        nodes {
-          ... on PullRequest {
-            ${PR_FIELDS}
-            viewerLatestReview { state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
-            latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
-            commits(last: 1) { nodes { commit { oid } } }
-            pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
-            recentComments: comments(last: 10) { nodes { author { login } createdAt } }
-            ${THREAD_FIELDS}
-          }
-        }
-      }
-    }`;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1182,18 +1018,6 @@
     await gql(`mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { id } } }`, { id: prId });
   }
 
-  // Search needs org: vs user: depending on account type; look it up once and cache.
-  async function ownerQualifier(login) {
-    const cache = JSON.parse(localStorage.getItem("ghpr.ownerTypes") || "{}");
-    if (cache[login]) return cache[login];
-    const data = await gql(`query($login: String!) { repositoryOwner(login: $login) { __typename } }`, { login });
-    if (!data.repositoryOwner) throw new Error(`"${login}" is not a GitHub user or organization, or the token lacks access.`);
-    const qualifier = data.repositoryOwner.__typename === "Organization" ? "org" : "user";
-    cache[login] = qualifier;
-    localStorage.setItem("ghpr.ownerTypes", JSON.stringify(cache));
-    return qualifier;
-  }
-
   function requireTarget() {
     const target = getCurrentRepo();
     if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
@@ -1203,115 +1027,62 @@
   // A view is one or more comma-separated targets (repos, orgs, or users).
   const viewTargets = (view) => view.split(",").map((t) => t.trim()).filter(Boolean);
 
-  // Search qualifiers scoping a query to the current view; GitHub ORs repeated
-  // repo:/org:/user: qualifiers.
-  async function scopePrefix(view) {
-    const parts = await Promise.all(viewTargets(view).map(async (target) =>
-      target.includes("/") ? `repo:${target}` : `${await ownerQualifier(target)}:${target}`));
-    return parts.join(" ");
-  }
-
-  async function searchPRs(q, max = MAX_PRS, query = OWNER_QUERY, after = null) {
-    const prs = [];
-    let viewer = null, total = 0;
-    do {
-      const data = await gql(query, { q: `${q} sort:updated-desc`, after });
-      viewer = data.viewer.login;
-      total = data.search.issueCount;
-      prs.push(...data.search.nodes.filter((n) => n && n.number));
-      after = data.search.pageInfo.hasNextPage ? data.search.pageInfo.endCursor : null;
-    } while (after && prs.length < max);
-    return { viewer, prs, total, after };
-  }
-
-  // Search qualifiers for each merged-history feed, so "Show more" can resume the walk.
+  // Each merged feed's cursor, so "Show more" can resume the server's search.
   const MERGED_SEARCHES = {
-    mine: { suffix: "is:merged author:@me", query: OWNER_QUERY, listKey: "merged", cursorKey: "mergedCursor" },
-    review: { suffix: "is:merged reviewed-by:@me -author:@me", query: REVIEW_OWNER_QUERY, listKey: "reviewedMerged", cursorKey: "reviewedMergedCursor" },
+    mine: { cursorKey: "mergedCursor" },
+    review: { cursorKey: "reviewedMergedCursor" },
   };
 
   async function fetchMergedPage(kind, after) {
-    const { suffix, query } = MERGED_SEARCHES[kind];
-    const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
-    return searchPRs(`${base} ${suffix}`, PAGE_SIZE, query, after);
+    const params = new URLSearchParams({ view: requireTarget(), kind });
+    if (after) params.set("after", after);
+    const res = await fetch(`companion/merged?${params}`, { cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) throw new Error(data.error || `Shipyard request failed (${res.status}).`);
+    Object.assign(state.ownerTypes, data.owners);
+    return data;
   }
 
-  // The cheap default: only my PRs and PRs awaiting my review, plus my last
-  // couple of merged PRs (shown as recently-merged context) - not every open PR.
-  async function fetchTargeted(withHistory) {
-    const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
-    const [mine, review, merged] = await Promise.all([
-      searchPRs(`${base} is:open author:@me`),
-      searchPRs(`${base} is:open review-requested:@me`, MAX_PRS, REQUESTED_REVIEW_QUERY),
-      withHistory ? fetchMergedPage("mine", null) : { prs: [], after: null },
-    ]);
-    const seen = new Set();
-    const prs = [];
-    for (const pr of [...mine.prs, ...review.prs]) {
-      const key = `${pr.repository?.nameWithOwner || ""}#${pr.number}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      prs.push(pr);
-    }
-    return {
-      viewer: mine.viewer || review.viewer || merged.viewer,
-      prs,
-      merged: byMergedAt(merged.prs),
-      mergedCursor: merged.after,
-    };
+  // A draft or auto-merge change made here shows until the server's poll reads it back.
+  const LOCAL_EDIT_MS = 2 * 60 * 1000;
+  const localEdits = new Map();  // PR id -> { fields, at }
+  function editLocally(pr, fields) {
+    Object.assign(pr, fields);
+    localEdits.set(pr.id, { fields, at: Date.now() });
+    companionCall("companion/check-now").catch(() => {});
+  }
+  function withLocalEdits(pr) {
+    const edit = localEdits.get(pr.id);
+    if (edit && Date.now() - edit.at > LOCAL_EDIT_MS) localEdits.delete(pr.id);
+    return localEdits.has(pr.id) ? { ...pr, ...edit.fields } : { ...pr };
   }
 
-  async function fetchReviewHistory(withHistory) {
-    const base = `is:pr archived:false ${await scopePrefix(requireTarget())}`;
-    const [reviewed, reviewedMerged] = await Promise.all([
-      searchPRs(`${base} is:open reviewed-by:@me -author:@me`, MAX_PRS, REVIEW_OWNER_QUERY),
-      withHistory ? fetchMergedPage("review", null) : { prs: [], after: null },
-    ]);
-    const notAuthoredByViewer = (pr) => pr.author?.login !== reviewed.viewer;
-    return {
-      prs: reviewed.prs.filter(notAuthoredByViewer),
-      merged: byMergedAt(reviewedMerged.prs.filter(notAuthoredByViewer)),
-      mergedCursor: reviewedMerged.after,
-    };
-  }
-
-  // One PR by id carries every list's fields, so a re-read can stand in for any copy.
-  const NODES_QUERY = `
-    query($ids: [ID!]!) {
-      nodes(ids: $ids) {
-        ... on PullRequest {
-          ${PR_FIELDS}
-          state
-          viewerLatestReview { state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
-          latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
-          pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
-          recentComments: comments(last: 10) { nodes { author { login } createdAt } }
-          ${THREAD_FIELDS}
-        }
+  // Sort the server's PRs into the page's lists. The server polls every PR you're
+  // involved in, so a view only narrows them.
+  function applyServerPrs() {
+    const cs = state.companionState;
+    state.targetedLoaded = !!cs?.status?.lastPoll;
+    if (!state.targetedLoaded) return;
+    state.viewer = cs.viewer;
+    $("#viewer-info").textContent = state.viewer ? `Signed in as ${state.viewer}` : "";
+    const prs = [], reviewed = [], merged = [], reviewedMerged = [];
+    for (const [key, cp] of Object.entries(cs.prs || {})) {
+      if (!cp.pr || !inScope(key)) continue;
+      const pr = withLocalEdits(cp.pr);
+      const lists = cp.lists || [];
+      if (pr.state === "OPEN") {
+        if (lists.includes("mine") || lists.includes("requested")) prs.push(pr);
+        if (lists.includes("reviewed")) reviewed.push(pr);
+      } else if (pr.mergedAt) {
+        if (pr.author?.login === state.viewer) merged.push(pr);
+        else if (pr.viewerLatestReview) reviewedMerged.push(pr);
       }
-    }`;
-
-  // Re-read PRs and put each where it now belongs: an open one replaces its copies, a
-  // merged one moves to the merged feeds, a closed one drops out.
-  async function refreshPrs(ids, wasReviewed = new Set(state.reviewedPrs.map(prKey))) {
-    const nodes = [];
-    for (let i = 0; i < ids.length; i += 25) {
-      nodes.push(...(await gql(NODES_QUERY, { ids: ids.slice(i, i + 25) })).nodes.filter((n) => n?.number));
     }
-    for (const node of nodes) {
-      const key = prKey(node);
-      if (node.state === "OPEN") {
-        const swap = (list) => list.map((p) => (prKey(p) === key ? node : p));
-        state.prs = swap(state.prs);
-        state.reviewedPrs = swap(state.reviewedPrs);
-        continue;
-      }
-      state.prs = state.prs.filter((p) => prKey(p) !== key);
-      state.reviewedPrs = state.reviewedPrs.filter((p) => prKey(p) !== key);
-      if (!node.mergedAt) continue;
-      if (node.author?.login === state.viewer) state.merged = mergeMergedLists([node], state.merged);
-      else if (wasReviewed.has(key)) state.reviewedMerged = mergeMergedLists([node], state.reviewedMerged);
-    }
+    const byUpdated = (a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "");
+    state.prs = prs.sort(byUpdated);
+    state.reviewedPrs = reviewed.sort(byUpdated);
+    state.merged = mergeMergedLists(merged, state.mergedHistory.mine);
+    state.reviewedMerged = mergeMergedLists(reviewedMerged, state.mergedHistory.review);
   }
 
   // ---------- rendering ----------
@@ -1724,7 +1495,7 @@
   async function revealMoreMerged() {
     mergedExtra += MERGED_STEP;
     const kind = mergedKind();
-    const { listKey, cursorKey } = MERGED_SEARCHES[kind];
+    const { cursorKey } = MERGED_SEARCHES[kind];
     const want = MERGED_INITIAL + mergedExtra;
     if (mergedItems().length >= want || !state[cursorKey] || mergedLoading) { render(); return; }
     mergedLoading = true;
@@ -1732,11 +1503,11 @@
     try {
       for (let page = 0; page < MERGED_MAX_PAGES_PER_CLICK; page++) {
         const { prs, after } = await fetchMergedPage(kind, state[cursorKey]);
-        state[listKey] = mergeMergedLists(state[listKey], prs);
+        state.mergedHistory[kind] = mergeMergedLists(state.mergedHistory[kind], prs);
         state[cursorKey] = after;
+        applyServerPrs();
         if (!after || mergedItems().length >= want) break;
       }
-      saveDashboardCache();
     } catch (err) {
       console.warn("Shipyard: loading more merged PRs failed —", err.message);
     } finally {
@@ -1899,82 +1670,6 @@
   function render() {
     renderBoard();
     renderSidebar();
-    syncWithCompanion();
-  }
-
-  // The page and the companion each poll GitHub about once a minute, so either can see a
-  // change first: a new PR, a re-request, a push, a finished CI run. Whichever is behind
-  // catches up at once. A finished check doesn't move updatedAt, so for the same head a
-  // settled CI state counts as newer than a pending one.
-  const CHECK_AGAIN_MS = 15000;
-  const CHECKING_MS = 120000;
-  const REFRESH_EVERY_MS = 20000;
-  const SETTLED = new Set(["SUCCESS", "FAILURE", "ERROR"]);
-  const checks = new Map();  // what the page saw of a PR -> { first, last } times it asked the companion to look
-  const refreshedFor = new Set();  // what the companion saw that the page already refreshed to catch
-  let lastRefresh = 0;
-  const companionFollows = (pr) => !pr.mergedAt && (pr.author?.login === state.viewer || reviewItem(pr));
-  const pageSeen = (pr) => `${prKey(pr)}@${pr.updatedAt}@${rollupState(pr) || ""}`;
-  function companionBehind(pr) {
-    const cp = companionPr(pr);
-    if (!cp) return true;
-    if (!pr.updatedAt || !cp.updated) return false;
-    if (pr.updatedAt !== cp.updated) return pr.updatedAt > cp.updated;
-    const ci = rollupState(pr) || null;
-    return pr.headRefOid === cp.head && ci !== cp.ci && SETTLED.has(ci) && !SETTLED.has(cp.ci);
-  }
-  function pageBehind(pr) {
-    const cp = companionPr(pr);
-    if (!cp?.updated || !pr.updatedAt) return false;
-    if (pr.updatedAt !== cp.updated) return cp.updated > pr.updatedAt;
-    const ci = rollupState(pr) || null;
-    return pr.headRefOid === cp.head && ci !== cp.ci && SETTLED.has(cp.ci) && !SETTLED.has(ci);
-  }
-  function checkingPr(pr) {
-    const c = checks.get(pageSeen(pr));
-    return !!c && Date.now() - c.first < CHECKING_MS && companionBehind(pr) &&
-      !companionSteps(pr).length && !companionPr(pr)?.running && companionPr(pr)?.chip?.kind !== "nudge";
-  }
-  function syncWithCompanion() {
-    if (!state.companionState) return;
-    const now = Date.now();
-    const prs = [...state.prs, ...state.reviewedPrs].filter(companionFollows);
-    const due = prs.filter((pr) => {
-      if (!companionBehind(pr)) return false;
-      const c = checks.get(pageSeen(pr));
-      return !c || (now - c.first < CHECKING_MS && now - c.last >= CHECK_AGAIN_MS);
-    });
-    if (due.length) {
-      for (const pr of due) checks.set(pageSeen(pr), { first: checks.get(pageSeen(pr))?.first || now, last: now });
-      companionCall("companion/check-now").catch(() => {});
-      setTimeout(render, CHECK_AGAIN_MS);
-    }
-    const seenKey = (key, cp) => `${key}@${cp.updated}@${cp.ci}@${cp.state}`;
-    const stale = prs.filter((pr) => (pageBehind(pr) || (companionPr(pr)?.state && companionPr(pr).state !== "OPEN")) &&
-      !refreshedFor.has(seenKey(prKey(pr), companionPr(pr))));
-    // A PR the companion follows that the page has never listed (a new review request,
-    // say) needs a search; one it already lists only needs re-reading.
-    const listed = new Set([...state.prs, ...state.reviewedPrs, ...state.merged, ...state.reviewedMerged].map(prKey));
-    const unlisted = Object.entries(state.companionState.prs || {}).filter(([key, cp]) =>
-      cp.state === "OPEN" && !cp.dropped && !listed.has(key) && inScope(key) && !refreshedFor.has(seenKey(key, cp)));
-    if ((stale.length || unlisted.length) && !state.loading && now - lastRefresh >= REFRESH_EVERY_MS) {
-      for (const pr of stale) refreshedFor.add(seenKey(prKey(pr), companionPr(pr)));
-      for (const [key, cp] of unlisted) refreshedFor.add(seenKey(key, cp));
-      lastRefresh = now;
-      if (unlisted.length) load(true);
-      else refreshStale(stale);
-    }
-  }
-
-  async function refreshStale(prs) {
-    try {
-      await refreshPrs(prs.map((pr) => pr.id));
-    } catch (err) {
-      console.warn("Shipyard: re-reading changed PRs failed —", err.message);
-      return;
-    }
-    saveDashboardCache();
-    render();
   }
 
   function inScope(key) {
@@ -2084,9 +1779,7 @@
       return `
       <div class="lane${collapsed ? " collapsed" : ""}">
         ${header}
-        ${laneHtml || (reviewBoard && i === 1 && !state.reviewHistoryLoaded
-          ? '<div class="lane-empty">Loading…</div>'
-          : `<div class="lane-empty">${EMPTY_ICON}<span>${laneEmptyText(name, reviewBoard)}</span></div>`)}
+        ${laneHtml || `<div class="lane-empty">${EMPTY_ICON}<span>${laneEmptyText(name, reviewBoard)}</span></div>`}
         ${laneAction}
       </div>`;
     }).join("") + "</div>";
@@ -2099,13 +1792,12 @@
       return `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
     }).join(", ");
 
-    // While the current view's PRs are still being fetched, show the spinner (or
-    // an error) rather than the empty "No pull requests match." message.
-    const dataReady = state.targetedLoaded;
-    if (!dataReady) {
+    // Until the server's first poll, show the spinner (or why it failed) rather than
+    // the empty "No pull requests match." message.
+    if (!state.targetedLoaded) {
       if (!getCurrentRepo()) return;  // not configured: keep the setup prompt
       $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
-      listBody.innerHTML = state.loadError
+      listBody.innerHTML = githubProblem()
         ? loadErrorHtml()
         : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
       return;
@@ -2114,84 +1806,41 @@
       ? `${count} review pull request${count === 1 ? "" : "s"}`
       : `${count} open pull request${count === 1 ? "" : "s"}`;
     $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
-    const reviewHistoryLoading = state.filter === "review" && !state.reviewHistoryLoaded;
-    listBody.innerHTML = html || (reviewHistoryLoading
-      ? state.loadError
-        ? loadErrorHtml()
-        : '<div class="loading"><div class="spinner"></div>Loading review history…</div>'
-      : `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`);
+    listBody.innerHTML = html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`;
   }
 
   function loadErrorHtml() {
-    return `<div class="error-box">${esc(state.loadError)}</div>`;
+    return `<div class="error-box">${esc(githubProblem())}</div>`;
   }
 
-  // `history` also re-searches the merged feeds, which otherwise refresh every
-  // HISTORY_EVERY_MS: a PR that merges in between is re-read on its own when it leaves
-  // the open lists.
-  async function load(force = false, history = false) {
-    if (state.loading) return;
-    const needTargeted = force || !state.targetedLoaded || !state.targetedFresh;
-    const needReviewHistory = force || !state.reviewHistoryLoaded || !state.reviewHistoryFresh;
-    if (!needTargeted && !needReviewHistory) { render(); return; }
-    const withHistory = history || !state.historyFetchedAt || Date.now() - state.historyFetchedAt >= HISTORY_EVERY_MS;
-    const before = [...state.prs, ...state.reviewedPrs];
-    const wasReviewed = new Set(state.reviewedPrs.map(prKey));
-    state.loading = true;
-    state.loadError = null;
-    state.loadErrorAuth = false;
-    state.githubRefreshFailed = false;
-    updateGitHubStatus(true);
-    const hasVisibleData = state.targetedLoaded;
-    if (!hasVisibleData) {
-      listBody.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
-    }
+  // The server polls GitHub for the open lists. The page fetches the view's merged
+  // history from it every HISTORY_EVERY_MS, and `force` also asks the server to poll now.
+  async function load(force = false) {
+    if (!getCurrentRepo()) return;
+    if (force) companionCall("companion/check-now").catch(() => {});
+    const due = force || !state.historyFetchedAt || Date.now() - state.historyFetchedAt >= HISTORY_EVERY_MS;
+    if (!due || state.loadingHistory) return;
+    const view = getCurrentRepo();
+    state.loadingHistory = true;
+    updateGitHubStatus();
     try {
-      const requests = [];
-      if (needTargeted) {
-        requests.push(fetchTargeted(withHistory).then(({ viewer, prs, merged, mergedCursor }) => {
-          state.viewer = viewer;
-          state.prs = prs;
-          state.merged = mergeMergedLists(merged, state.merged);
-          if (!state.mergedCursor) state.mergedCursor = mergedCursor;
-          state.targetedLoaded = true;
-          state.targetedFresh = true;
-        }));
-      }
-      if (needReviewHistory) {
-        requests.push(fetchReviewHistory(withHistory).then(({ prs, merged, mergedCursor }) => {
-          state.reviewedPrs = prs;
-          state.reviewedMerged = mergeMergedLists(merged, state.reviewedMerged);
-          if (!state.reviewedMergedCursor) state.reviewedMergedCursor = mergedCursor;
-          state.reviewHistoryLoaded = true;
-          state.reviewHistoryFresh = true;
-        }));
-      }
-      await Promise.all(requests);
-      if (withHistory) state.historyFetchedAt = Date.now();
-      const listed = new Set([...state.prs, ...state.reviewedPrs].map(prKey));
-      const left = before.filter((pr) => !listed.has(prKey(pr)));
-      if (left.length) {
-        await refreshPrs(left.map((pr) => pr.id), wasReviewed)
-          .catch((err) => console.warn("Shipyard: re-reading PRs that left the lists failed —", err.message));
-      }
-      state.githubUpdatedAt = Date.now();
-      state.githubRefreshFailed = false;
-      restartGitHubAgeTimer();
-      saveDashboardCache();
-      updateGitHubStatus();
-      $("#viewer-info").textContent = `Signed in as ${state.viewer}`;
-      render();
+      const [mine, review] = await Promise.all([fetchMergedPage("mine"), fetchMergedPage("review")]);
+      if (view !== getCurrentRepo()) return;
+      state.mergedHistory = {
+        mine: mergeMergedLists(mine.prs, state.mergedHistory.mine),
+        review: mergeMergedLists(review.prs, state.mergedHistory.review),
+      };
+      if (!state.mergedCursor) state.mergedCursor = mine.after;
+      if (!state.reviewedMergedCursor) state.reviewedMergedCursor = review.after;
+      state.historyFetchedAt = Date.now();
     } catch (err) {
-      state.loadError = err.message;
-      state.loadErrorAuth = err.auth === true;
-      state.githubRefreshFailed = true;
-      console.warn("Shipyard: GitHub refresh failed —", err.message);
-      if (err.retryAt) setTimeout(() => load(true), err.retryAt - Date.now() + 1000);
+      console.warn("Shipyard: loading merged history failed —", err.message);
+    } finally {
+      state.loadingHistory = false;
+      applyServerPrs();
       updateGitHubStatus();
       render();
-    } finally {
-      state.loading = false;
+      if (view !== getCurrentRepo()) load();
     }
   }
 
@@ -2218,7 +1867,6 @@
 
   function removeView(v) {
     const wasCurrent = getCurrentRepo() === v;
-    localStorage.removeItem(cacheKey(v));
     const remaining = getRepos().filter((r) => r !== v);
     setRepos(remaining);
     if (wasCurrent) {
@@ -2229,9 +1877,8 @@
     renderRepoSelect();
     renderViewsList();
     if (wasCurrent) {
-      const restored = restoreDashboardCache();
       render();
-      load(restored);
+      load();
     } else {
       render();
     }
@@ -2244,8 +1891,8 @@
 
   $("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#settings-dialog").showModal(); });
   $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
-  $("#refresh-btn").addEventListener("click", () => { load(true, true); loadWorktrees(); });
-  $("#stale-retry-btn").addEventListener("click", () => { load(true, true); loadWorktrees(); });
+  $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
+  $("#stale-retry-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
 
   // ---------- new task ----------
   // The repo picker offers local clones under the current view only, so it matches the
@@ -2364,18 +2011,16 @@
     renderRepoSelect();
     renderViewsList();
     resetData();
-    const restored = restoreDashboardCache();
     render();
-    load(restored);
+    load();
   });
   $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
 
   $("#repo-select").addEventListener("change", (e) => {
     localStorage.setItem(LS.REPO, e.target.value);
     resetData();
-    const restored = restoreDashboardCache();
     render();
-    load(restored);
+    load();
   });
 
   // List view hangs merges off their own card outside #list-body, so both roots listen.
@@ -2456,8 +2101,7 @@
       draftBtn.textContent = "…";
       try {
         await markReadyForReview(draftBtn.dataset.pr);
-        if (draftPr) draftPr.isDraft = false;
-        saveDashboardCache();
+        if (draftPr) editLocally(draftPr, { isDraft: false });
         render();
       } catch (err) {
         alert(`Mark ready: ${err.message}`);
@@ -2475,11 +2119,9 @@
       await setAutoMerge(btn.dataset.pr, enable);
       const pr = state.prs.find((p) => p.id === btn.dataset.pr);
       if (pr) {
-        pr.autoMergeRequest = enable ? { enabledAt: new Date().toISOString() } : null;
-        pr.viewerCanEnableAutoMerge = !enable;
-        pr.viewerCanDisableAutoMerge = enable;
+        editLocally(pr, { autoMergeRequest: enable ? { enabledAt: new Date().toISOString() } : null,
+          viewerCanEnableAutoMerge: !enable, viewerCanDisableAutoMerge: enable });
         btn.outerHTML = autoMergeChip(pr);
-        saveDashboardCache();
       } else {
         render();
       }
@@ -2590,13 +2232,11 @@
 
   const needsYou = (pr) => {
     const chip = nextChip(pr);
-    return !!chip && chip.tone !== "muted" && !chip.optional && !checkingPr(pr);
+    return !!chip && chip.tone !== "muted" && !chip.optional;
   };
 
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr) {
-    if (checkingPr(pr))
-      return `<button type="button" class="next-row muted" data-open="${esc(prKey(pr))}" title="Shipyard is checking this PR"><span class="next-prefix">→ Next:</span><span class="next-spinner"></span><span class="next-label">Checking…</span></button>`;
     const chip = nextChip(pr);
     const cp = companionPr(pr);
     const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
@@ -2937,9 +2577,7 @@
     let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
     if (!html && cp) html = derivedCardHtml(pr, companionSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
     if (!html) {
-      html = checkingPr(pr)
-        ? `<div class="sb-empty">Shipyard is picking this PR up; its next step shows here in a moment.</div>`
-        : !cp && open
+      html = !cp && open
         ? `<div class="sb-empty">Shipyard follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
         : `<div class="sb-empty">Nothing to do right now.</div>`;
     }
@@ -3092,7 +2730,6 @@
     if (btn) { btn.disabled = true; btn.textContent = "…"; }
     try {
       await fn();
-      setTimeout(() => { if (getCurrentRepo()) load(true); }, 2500);
     } catch (err) {
       showError(err.message, title);
     } finally {
@@ -3234,6 +2871,8 @@
         state.companionState = JSON.parse(e.data);
       } catch { return; }
       if (state.companionState.config?.rules) state.rules = state.companionState.config.rules;
+      applyServerPrs();
+      updateGitHubStatus();
       render();
     });
     companionEvents.addEventListener("poll", (e) => {
@@ -3241,9 +2880,8 @@
       try {
         state.companionState.status.lastPoll = JSON.parse(e.data).lastPoll;
       } catch { return; }
-      updateGitHubStatus(state.loading);
+      updateGitHubStatus();
       refreshAgoLabels();
-      syncWithCompanion();
     });
   }
 
@@ -3258,25 +2896,26 @@
     return `<span class="dot ok"></span>Connected${agent}`;
   }
 
-  // While the companion's poll is live it stands in for the page's: the page re-reads
-  // what it reports changed (hidden or not) and searches again only as a safety net.
-  // While it reconnects, the page polls while visible.
-  const COMPANION_SAFETY_MS = 15 * 60 * 1000;
-  const SELF_POLL_MS = 50 * 1000;
-  function refreshIfDue() {
-    if (!getCurrentRepo()) return;
-    const age = Date.now() - (state.githubUpdatedAt || 0);
-    if (companionLive() ? age >= COMPANION_SAFETY_MS : !document.hidden && age >= SELF_POLL_MS) load(true);
+  // The server polls about once a minute; coming back to the tab asks it to look now.
+  const FOCUS_POLL_MS = 30 * 1000;
+  function refreshOnFocus() {
+    if (document.hidden) return;
+    pollWorktrees();
+    if (companionLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
+      companionCall("companion/check-now").catch(() => {});
+    }
+    load();
   }
 
   // ---------- init ----------
   renderRepoSelect();
   renderViewsList();
-  localStorage.removeItem("ghpr.token");
+  for (const key of Object.keys(localStorage)) {
+    if (key === "ghpr.token" || key === "ghpr.ownerTypes" || key.startsWith("ghpr.cache.")) localStorage.removeItem(key);
+  }
   if (getCurrentRepo()) {
-    const restored = restoreDashboardCache();
-    if (restored) render();
-    load(restored);
+    render();
+    load();
   } else {
     $("#settings-dialog").showModal();
   }
@@ -3284,14 +2923,11 @@
   connectCompanionEvents();
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
-  setInterval(refreshIfDue, 60 * 1000);
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) return;
-    pollWorktrees();
-    refreshIfDue();
-  });
+  setInterval(load, 60 * 1000);
+  setInterval(updateGitHubStatus, 10 * 1000);
+  document.addEventListener("visibilitychange", refreshOnFocus);
 
-  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees, openSidebar, closeSidebar };
+  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees, openSidebar, closeSidebar, updateGitHubStatus };
 })();
 </script>
 </body>
