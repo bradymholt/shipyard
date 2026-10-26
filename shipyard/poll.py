@@ -3,6 +3,7 @@ signature (updatedAt, head, checks, review decision, draft) moved. Check results
 bump a PR's updatedAt, which is why the signature carries them too.
 
 Each PR becomes a plain snapshot dict; events.py diffs two of them."""
+import re
 
 SEARCHES = {
     "mine": "is:pr is:open archived:false author:@me",
@@ -68,6 +69,48 @@ DETAIL_QUERY = f"""
 query($ids: [ID!]!) {{
   nodes(ids: $ids) {{ ... on PullRequest {{ {DETAIL_FIELDS} }} }}
 }}"""
+
+# Merged history is per view, so the page asks for it rather than the poll keeping it.
+MERGED_SEARCHES = {
+    "mine": "is:merged author:@me",
+    "review": "is:merged reviewed-by:@me -author:@me",
+}
+MERGED_PAGE_SIZE = 25
+
+MERGED_QUERY = """
+query($q: String!, $after: String) {
+  search(query: $q, type: ISSUE, first: %d, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes { ... on PullRequest {
+      id number title url state isDraft createdAt updatedAt mergedAt
+      headRefName baseRefName headRefOid additions deletions changedFiles
+      autoMergeRequest { enabledAt }
+      labels(first: 10) { nodes { name color } }
+      viewerCanEnableAutoMerge viewerCanDisableAutoMerge
+      repository { nameWithOwner }
+      author { login avatarUrl }
+      reviewDecision
+      comments(last: 10) { totalCount nodes { createdAt author { login } } }
+      viewerLatestReview { state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
+      reviewRequests(first: 10) { nodes { requestedReviewer {
+        __typename ... on User { login avatarUrl } ... on Team { slug name } } } }
+      latestReviews(first: 10) { nodes { state author { login avatarUrl } commit { oid } } }
+      latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
+      pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
+      reviewThreads(first: 20) { nodes { isResolved
+        comments(first: 1) { nodes { author { login } } }
+        latest: comments(last: 1) { nodes { author { login } } } } }
+      commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
+        __typename
+        ... on CheckRun { name conclusion detailsUrl }
+        ... on StatusContext { context state targetUrl }
+      } } } } } }
+    } }
+  }
+}""" % MERGED_PAGE_SIZE
+
+OWNER_QUERY = "query($login: String!) { repositoryOwner(login: $login) { __typename } }"
+TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
 FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
 RUNNING = {"IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "EXPECTED"}
@@ -231,6 +274,7 @@ class Poller:
     def __init__(self, github):
         self.github = github
         self.signatures = {}  # PR node id -> last light signature
+        self.owner_types = {}  # login -> "org" | "user"
 
     def search(self, q):
         nodes, viewer, after = [], None, None
@@ -243,6 +287,37 @@ class Poller:
                 break
             after = page["endCursor"]
         return viewer, nodes
+
+    def owner_qualifier(self, login):
+        """Search needs org: or user: depending on the account type."""
+        if login not in self.owner_types:
+            owner = self.github.graphql(OWNER_QUERY, {"login": login}).get("repositoryOwner")
+            if not owner:
+                raise LookupError(f'"{login}" is not a GitHub user or organization, or the token lacks access.')
+            self.owner_types[login] = "org" if owner["__typename"] == "Organization" else "user"
+        return self.owner_types[login]
+
+    def scope(self, view):
+        """Search qualifiers for a view: comma-separated repos, orgs, or users, which GitHub ORs."""
+        targets = [t.strip() for t in (view or "").split(",") if t.strip()]
+        if not targets:
+            raise ValueError("No repo, org, or user to search.")
+        parts = []
+        for t in targets:
+            if not TARGET.fullmatch(t):
+                raise ValueError(f'"{t}" is not a repo, org, or user.')
+            parts.append(f"repo:{t}" if "/" in t else f"{self.owner_qualifier(t)}:{t}")
+        return " ".join(parts)
+
+    def merged(self, view, kind, after=None):
+        """One page of a view's merged history, newest first, in the page's shape."""
+        if kind not in MERGED_SEARCHES:
+            raise ValueError(f'Unknown merged list "{kind}".')
+        q = f"is:pr archived:false {self.scope(view)} {MERGED_SEARCHES[kind]} sort:updated-desc"
+        search = self.github.graphql(MERGED_QUERY, {"q": q, "after": after or None})["search"]
+        page = search["pageInfo"]
+        return {"prs": [page_pr(n) for n in search["nodes"] if n and n.get("number")],
+                "after": page["endCursor"] if page["hasNextPage"] else None}
 
     def details(self, ids, viewer):
         out = []

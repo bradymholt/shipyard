@@ -101,6 +101,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(self.companion.page_state())
         if path == "/companion/events":
             return self._events()
+        if path == "/companion/merged":
+            q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
         if path == "/companion/sessions":
             q = parse_qs(parsed.query)
             return self._companion_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))

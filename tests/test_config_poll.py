@@ -115,6 +115,29 @@ class FakeGitHub:
         return {"nodes": [self.details[i] for i in variables["ids"]]}
 
 
+class MergedHistory(unittest.TestCase):
+    def test_scopes_the_search_to_the_view_and_looks_up_owners_once(self):
+        calls = []
+
+        class GitHub:
+            def graphql(self, query, variables):
+                calls.append(variables)
+                if "repositoryOwner" in query:
+                    return {"repositoryOwner": {"__typename": "Organization" if variables["login"] == "acme" else "User"}}
+                return {"search": {"pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+                                   "nodes": [pr_node(state="MERGED"), {}]}}
+
+        poller = Poller(GitHub())
+        out = poller.merged("acme, o/r,someone", "review")
+        self.assertEqual(calls[-1]["q"], "is:pr archived:false org:acme repo:o/r user:someone "
+                                         "is:merged reviewed-by:@me -author:@me sort:updated-desc")
+        self.assertEqual(([p["number"] for p in out["prs"]], out["after"]), ([1], "c1"))
+        poller.merged("acme", "mine", "c1")
+        self.assertEqual(sum("login" in c for c in calls), 2)
+        with self.assertRaises(ValueError):
+            poller.merged("acme is:open", "mine")
+
+
 class PollerTest(unittest.TestCase):
     def test_details_only_for_moved_prs_and_vanished_ones(self):
         a, b = pr_node(1), pr_node(2)
