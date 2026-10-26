@@ -192,7 +192,7 @@ If a plist in `~/Library/LaunchAgents` is a symlink, something else already owns
 
 ## Development
 
-There is no build step or dependency installation. Run `python3 shipyard.py ~/dev` and reload the page after editing `index.html`. Issues and pull requests are welcome.
+There is no build step or dependency installation. Run `python3 shipyard.py ~/dev` and reload the page after editing `index.html`, `app.css`, or `js/`. Issues and pull requests are welcome.
 
 ```bash
 python3 -m unittest discover tests     # companion: events, rules, passes, actions, git, server

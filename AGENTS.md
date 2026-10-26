@@ -10,8 +10,14 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
 
 ## Architecture
 
-- **`index.html`** — the entire frontend. Vanilla HTML + CSS + JS in one file, no
-  framework, no bundler, no build step, no dependencies to install. Edit it directly.
+- **The page** — vanilla HTML, CSS, and JS: no framework, no bundler, no build step, no
+  dependencies to install. Edit the files directly. `index.html` is the markup, `app.css`
+  the styles, and `js/` native ES modules, loaded from `js/main.js`: `base.js` (shared
+  `state` and DOM handles; it imports nothing, so code that runs at load can rely on it),
+  `server.js` (requests, the event stream, views, checkouts), `data.js` (PR lists and
+  merged history), `prs.js` (review state, next steps, lanes), `board.js`, `sidebar.js`,
+  `settings.js`, and `html.js` (icons, escaping, formatting). A module can't assign to
+  another's export, so shared mutable values live on `state`.
 - **`shipyard.py`** — thin launcher for the local companion (Python 3 stdlib
   only). Keep it as the entry point: the run command, the launchd plist, and these docs
   all point at it.
@@ -58,7 +64,7 @@ There is nothing to build or install.
 ## Design system
 
 Colors, fonts, and spacing tokens are CSS custom properties in the `:root` block at the
-top of `index.html` (`--green`, `--fg-muted`, `--purple`, `--sans`, etc.). **Use these
+top of `app.css` (`--green`, `--fg-muted`, `--purple`, `--sans`, etc.). **Use these
 variables — never hardcode a hex color or font stack.** When adding UI, match the weight
 and size of nearby elements so new pieces don't outshout existing ones (e.g. row meta is
 `11px/500-600`, the PR title is `15px/600`).
@@ -73,7 +79,7 @@ done; while a new check is failing, debug it with a short script that runs just 
 the full suite. Keep
 unrelated work out of the commit, and stop rather than merge when something looks wrong.
 
-The local companion serves `index.html` from the main checkout, so a merge reaches it only
+The local companion serves the page from the main checkout, so a merge reaches it only
 after that checkout pulls. Finish with `git pull --ff-only` there. The reload-on-save watcher
 restarts the companion when the pull changes `shipyard.py` or `shipyard/`; if the companion is
 still on its old process afterward, run `python3 shipyard-launchd.py restart`.
