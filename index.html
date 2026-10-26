@@ -2564,11 +2564,28 @@
 
   const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
+  const REVIEW_STATES = { approve: "APPROVED", APPROVE: "APPROVED", comment_unresolved: "COMMENTED",
+    COMMENT: "COMMENTED", REQUEST_CHANGES: "CHANGES_REQUESTED" };
+
   // Show a re-request right away, so the card moves to Waiting before GitHub's data catches up.
   function markRequested(pr, reviewers) {
     const added = (reviewers || []).filter((r) => !reviewRequested(pr, r)).map((r) => ({ requestedReviewer:
       r.startsWith("team:") ? { __typename: "Team", name: r.slice(5) } : { __typename: "User", login: r } }));
     pr.reviewRequests = { nodes: [...(pr.reviewRequests?.nodes || []), ...added] };
+  }
+
+  // Likewise for a review you just submitted, so the card moves to Review submitted.
+  function markReviewed(pr, reviewState) {
+    const key = prKey(pr);
+    const review = { state: reviewState, submittedAt: new Date().toISOString(),
+      commit: { oid: pr.headRefOid }, onBehalfOf: { nodes: [] } };
+    let reviewed = state.reviewedPrs.find((p) => prKey(p) === key);
+    if (!reviewed) state.reviewedPrs = [...state.reviewedPrs, (reviewed = { ...pr })];
+    for (const copy of new Set([pr, reviewed])) {
+      copy.reviewRequests = { nodes: (copy.reviewRequests?.nodes || [])
+        .filter((n) => n.requestedReviewer?.login !== state.viewer) };
+      copy.viewerLatestReview = review;
+    }
   }
 
   // Likewise for a merge, so the card drops to Recently merged without waiting for a sync.
@@ -3222,6 +3239,8 @@
         const cardId = btn.dataset.card || btn.dataset.doneCard;
         const card = (cp?.cards || []).find((c) => String(c.id) === cardId);
         if (action === "rerequest_review") markRequested(pr, payload.reviewers || card?.payload?.reviewers);
+        const reviewState = REVIEW_STATES[action === "submit_review" ? payload.event : action];
+        if (reviewState && pr) markReviewed(pr, reviewState);
         if (action === "merge" && pr) markMerged(pr);
         if (card) cp.cards = cp.cards.filter((c) => c !== card);
         render();

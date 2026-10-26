@@ -29,6 +29,7 @@ AUTO_POLICY = {
     "approve": {"sources": {"re_review"}, "mine": False},
 }
 # How the log names an automatic action it held back, and one it already took.
+REVIEW_STATES = {"APPROVE": "APPROVED", "COMMENT": "COMMENTED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}
 AUTO_WORDS = {
     "approve": ("the approval", "approved"),
     "rerun_checks": ("the re-run", "re-ran checks on"),
@@ -518,6 +519,7 @@ class Companion:
             self.db.update_card(card_id, status="open")
             self.db.log(snap["key"], f"tried to {action.replace('_', ' ')} automatically: {e}")
             return False
+        self.record_review(snap, action, payload)
         self.db.count_auto_run(snap["key"], action)
         self.db.log(snap["key"], f"{result} automatically: {reason}" if reason else f"{result} automatically")
         self.db.update_card(card_id, status="handled", handled={
@@ -645,12 +647,27 @@ class Companion:
             requested = snap.get("requested") or []
             snap["requested"] = requested + [r for r in payload.get("reviewers") or [] if r not in requested]
             self.db.save_pr(snap)
+        self.record_review(snap, action, payload)
         self.db.log(key, result)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
         self.poke()
         self.publish()
         return {"ok": True, "result": result}
+
+    def record_review(self, snap, action, payload):
+        """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
+        if action == "submit_review":
+            state = REVIEW_STATES.get(payload.get("event"), "COMMENTED")
+        else:
+            state = {"approve": "APPROVED", "comment_unresolved": "COMMENTED"}.get(action)
+        if not state:
+            return
+        snap["my_review"] = {"id": None, "state": state, "dismissed_from": None,
+                             "submitted": now_iso(), "commit": snap.get("head")}
+        snap["requested"] = [r for r in snap.get("requested") or [] if r != self.viewer]
+        snap["requested_me"] = False
+        self.db.save_pr(snap)
 
     def card_action(self, card_id, index, payload_override):
         card = self.db.card(card_id)
