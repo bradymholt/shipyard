@@ -78,8 +78,11 @@ class Companion:
         self.github = github or GitHub()
         self.poller = Poller(self.github)
         self.poll_seconds = poll_seconds
-        self.viewer = None
-        self.status = {"github": "starting", "lastPoll": None}
+        # The last poll's lists and time, so the board shows right away after a restart.
+        memory = self.db.poll_memory() or {}
+        self.poller.restore(memory)
+        self.viewer = memory.get("viewer") if self.poller.lists else None
+        self.status = {"github": "starting", "lastPoll": memory.get("lastPoll") if self.viewer else None}
         self.worktree_map = {}
         self.live_cache = {}
         self.info_cache = {}
@@ -189,6 +192,7 @@ class Companion:
         self.retry_waiting_actions()
         self.db.prune()
         self.status = {"github": "ok", "lastPoll": now_iso()}
+        self.db.set_poll_memory({**self.poller.memory(), "viewer": viewer, "lastPoll": self.status["lastPoll"]})
         self.publish()
 
     def ingest(self, snap):

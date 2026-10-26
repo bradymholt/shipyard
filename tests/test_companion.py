@@ -140,6 +140,21 @@ class CompanionCase(unittest.TestCase):
         self.fail("passes did not finish")
 
 
+class Restart(CompanionCase):
+    def test_restores_the_last_poll_and_skips_unchanged_prs(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.comp.db.close()
+        again = Companion(validate_config({}), [self.checkout], self.db_path, github=self.gh)
+        self.addCleanup(again.db.close)
+        state = again.page_state()
+        self.assertEqual((state["viewer"], state["prs"]["o/r#1"]["lists"]), (VIEWER, ["mine"]))
+        self.assertTrue(state["status"]["lastPoll"])
+        with mock.patch.object(again.poller, "details", wraps=again.poller.details) as details:
+            again.poll_once()
+        self.assertEqual(details.call_args.args[0], [])
+
+
 class SessionToken(CompanionCase):
     def test_outlives_a_restart(self):
         token = self.comp.db.session_token()
