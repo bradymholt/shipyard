@@ -15,7 +15,8 @@ Answer with one JSON object and nothing else:
   "proposals": [
     {{"action": "rerun_checks", "confidence": "high|medium|low", "reason": "only if it looks flaky; say why", "payload": {{}}}},
     {{"action": "apply_fix", "confidence": "high|medium|low", "reason": "what the fix does",
-      "payload": {{"diff": "a unified diff against HEAD, only when the fix is small and certain"}}}},
+      "payload": {{"diff": "a unified diff against HEAD, only when the fix is small and certain",
+                  "message": "the commit message: an imperative subject under 72 characters naming the change, like 'Freeze time in the flaky date specs'"}}}},
     {{"action": "continue", "confidence": "high", "reason": "the fix needs real work", "payload": {{}}}}
   ]}}
 Include only the proposals that fit.

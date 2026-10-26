@@ -209,7 +209,7 @@ def apply_fix(gh, snap, payload, ctx):
                 raise ActionError(f"The diff doesn't apply cleanly: {error}")
     finally:
         os.unlink(patch)
-    message = payload.get("message") or "Fix CI (proposed in Shipyard)"
+    message = payload.get("message") or "Fix the failing CI checks"
     for args in (("commit", "-m", message), ("push", "origin", f"HEAD:{snap['branch']}")):
         error = worktrees.mutate_git(path, *args, timeout=120)
         if error:

@@ -14,6 +14,7 @@ How a pass runs:
 A resume never adds a turn to a session that is live: it runs in a fork of it (or a fresh
 session, for agents that can't fork), which is kept and linked from the card.
 """
+import re
 from pathlib import Path
 
 TEMPLATES = Path(__file__).resolve().parent / "passes"
@@ -147,6 +148,14 @@ def raw_event_text(name, snap):
     return f"Shipyard event {name} on {head}."
 
 
+def fix_message(reason):
+    """A commit subject from a fix's reason, for an answer that gave no message."""
+    subject = re.split(r"[.;,:]\s|\s[-\u2013\u2014]\s", reason.strip(), maxsplit=1)[0].strip().rstrip(".")
+    if len(subject) > 72:
+        subject = subject[:72].rsplit(" ", 1)[0]
+    return subject or "Fix the failing CI checks"
+
+
 def clean_answer(answer):
     """Keep only known actions and well-formed proposals."""
     proposals = []
@@ -155,8 +164,11 @@ def clean_answer(answer):
             continue
         confidence = p.get("confidence") if p.get("confidence") in ("low", "medium", "high") else "low"
         payload = p.get("payload") if isinstance(p.get("payload"), dict) else {}
+        reason = str(p.get("reason") or "")[:600]
+        if p["action"] == "apply_fix":
+            payload["message"] = str(payload.get("message") or "").strip()[:500] or fix_message(reason)
         proposals.append({"action": p["action"], "confidence": confidence,
-                          "reason": str(p.get("reason") or "")[:600], "payload": payload})
+                          "reason": reason, "payload": payload})
     out = {"summary": str(answer.get("summary") or "").strip()[:2000], "proposals": proposals}
     if isinstance(answer.get("addressed"), int) and isinstance(answer.get("total"), int):
         out["addressed"], out["total"] = answer["addressed"], answer["total"]

@@ -332,6 +332,14 @@ class CiFailed(CompanionCase):
         self.assertEqual(card["auto_held"], "more checks failed while it waited")
         self.assertEqual(card["auto_action"], "rerun_checks")
 
+    def test_fix_without_a_commit_message_gets_one_from_its_reason(self):
+        self.agent.answers["CI failure"] = {"summary": "Typo.", "proposals": [
+            {"action": "apply_fix", "confidence": "high", "reason": "Fixes the typo in app.py, so rspec loads.",
+             "payload": {"diff": "x"}}]}
+        self.gh.put(self.red(), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.assertEqual(card["proposals"][0]["payload"]["message"], "Fixes the typo in app.py")
+
     def test_applied_fix_hides_fix_ci_before_the_next_poll(self):
         self.trust("rerun_checks", False)
         self.gh.put(self.red(), "author:@me")
