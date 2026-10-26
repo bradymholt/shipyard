@@ -91,6 +91,17 @@ class ApplyFix(GitCase):
         self.assertIn("new.txt", git(path, "show", "--stat", "HEAD"))
         self.assertEqual(git(self.clone, "ls-remote", "origin", "me/fix").split()[0], git(path, "rev-parse", "HEAD"))
 
+    def test_checks_out_a_branch_that_is_only_on_origin(self):
+        from shipyard import actions
+        git(self.clone, "push", "-q", "origin", "origin/main:refs/heads/me/remote")
+        head = git(self.clone, "rev-parse", "origin/main")
+        snap = {"head": head, "branch": "me/remote", "repo": self.repo, "mine": True}
+        diff = "--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-print(1)\n+print(10)\n"
+        out = actions.apply_fix(None, snap, {"diff": diff}, {"worktree": None, "roots": self.roots})
+        self.assertEqual(out, "applied the fix and pushed")
+        path = worktrees.worktree_path(str(self.clone), "me/remote")
+        self.assertEqual(git(self.clone, "ls-remote", "origin", "me/remote").split()[0], git(path, "rev-parse", "HEAD"))
+
     def test_refuses_a_checkout_on_another_branch(self):
         from shipyard import actions
         path = worktrees.new_task_worktree(self.repo, "me/fix3", self.roots)["path"]

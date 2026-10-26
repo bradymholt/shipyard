@@ -626,7 +626,7 @@ class Companion:
 
     def action_context(self, snap):
         wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
-        return {"worktree": wt if snap["mine"] else None}
+        return {"worktree": wt if snap["mine"] else None, "roots": self.roots}
 
     # ---------- page requests
     def snapshot_or_error(self, key):
