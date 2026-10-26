@@ -3,7 +3,7 @@ import { state } from "./base.js";
 import { connectServerEvents, getCurrentRepo, moveLocalViews, refreshOnFocus } from "./server.js";
 import { updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
-import { openSettings, renderRepoSelect, renderViewsList } from "./settings.js";
+import { renderRepoSelect, renderViewsList, route } from "./settings.js";
 import { closeSidebar, openSidebar } from "./sidebar.js";
 
 for (const key of Object.keys(localStorage)) {
@@ -16,11 +16,12 @@ moveLocalViews().finally(() => {
   if (getCurrentRepo()) {
     render();
   } else {
-    openSettings();
+    location.hash = "#settings";
   }
 });
 
 connectServerEvents();
+route();
 
 
 setInterval(updateGitHubStatus, 10 * 1000);

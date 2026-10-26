@@ -51,7 +51,7 @@ pushes, filtered to the current view, including your latest merges, which the se
 searches every 15 minutes and pushes as their own event. It asks `/api/merged` only
 for a view's older merges (Show more), reads a PR's timeline from `/api/timeline`,
 and acts through `/api/pr-action`.
-Settings live in `shipyard.config.json`, and the settings dialog edits them too. Its fields
+Settings live in `shipyard.config.json`, and the settings page (`#settings`) edits them too. Its fields
 come from `FIELDS` in `shipyard/settings.py`: each has a path into the file, a default, and
 how the page shows it. A save splices one value into the file's own JSON at that path (a
 reset deletes it), validates the result, and writes the raw form back, never the validated
