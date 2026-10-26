@@ -72,6 +72,9 @@ class FakeAgent:
     def session_file(self, path, sid):
         return None
 
+    def session_files(self, path):
+        return []
+
     def user_messages(self, text):
         return []
 
@@ -168,6 +171,23 @@ class SharedCosts(CompanionCase):
             cwds = self.comp.shared_process_scan()
             cwds(), cwds()
         self.assertEqual(scan.call_count, 1)
+
+    def test_a_missed_session_lookup_waits_for_new_transcripts(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.comp.db.set_pin("o/r#1", None, None, None)
+        snap = self.comp.db.pr("o/r#1")
+        files = []
+        with mock.patch.object(self.agent, "find_pr_session", return_value=None) as lookup, \
+                mock.patch.object(self.agent, "session_files", side_effect=lambda path: files):
+            self.comp.ensure_pin(snap)
+            self.comp.ensure_pin(snap)
+            self.assertEqual(lookup.call_count, 1)
+            transcript = Path(self.checkout) / "s.jsonl"
+            transcript.write_text("{}")
+            files.append(("s", transcript))
+            self.comp.ensure_pin(snap)
+            self.assertEqual(lookup.call_count, 2)
 
     def test_merged_history_is_reused_until_asked_fresh(self):
         page = {"prs": [], "after": None}
