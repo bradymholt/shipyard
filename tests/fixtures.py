@@ -15,18 +15,22 @@ def check_run(name, conclusion, job=11, run=22):
 def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci="SUCCESS",
             contexts=None, requested=(), reviews=(), threads=(), draft=False, my_review=None,
             updated="2026-10-20T10:00:00Z", requested_at=None, committed="2026-10-20T09:00:00Z",
-            created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=(), running=0):
+            created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=(), running=0,
+            title=None, merged_at=None, standing=()):
     """A PullRequest node shaped like the companion's detail query returns."""
     requested_at = requested_at or {}
     return copy.deepcopy({
-        "id": f"PR_{repo}_{number}", "number": number, "title": f"PR {number}",
+        "id": f"PR_{repo}_{number}", "number": number, "title": title or f"PR {number}",
         "url": f"https://github.com/{repo}/pull/{number}", "state": state, "isDraft": draft,
-        "createdAt": created, "updatedAt": updated, "mergedAt": None, "closedAt": None,
+        "createdAt": created, "updatedAt": updated, "mergedAt": merged_at, "closedAt": None,
         "body": "Does a thing.", "headRefName": branch, "headRefOid": head, "baseRefName": "main",
         "additions": 10, "deletions": 2, "changedFiles": 3,
         "repository": {"nameWithOwner": repo}, "author": {"login": author},
         "reviewDecision": decision, "mergeable": "MERGEABLE", "autoMergeRequest": None,
+        "labels": {"nodes": []}, "viewerCanEnableAutoMerge": True, "viewerCanDisableAutoMerge": False,
         "viewerLatestReview": my_review,
+        "latestOpinionatedReviews": {"nodes": [{"state": s, "author": {"login": a}} for s, a in standing]},
+        "pendingReviews": {"nodes": []},
         "reviewRequests": {"nodes": [{"requestedReviewer": {"__typename": "User", "login": r}}
                                      for r in requested]},
         "latestReviews": {"nodes": [
@@ -40,9 +44,11 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
                                      "createdAt": updated, "diffHunk": t.get("hunk"),
                                      "author": {"login": t.get("author", "rev")}}] +
                                    [{"databaseId": 900 + i, "body": "reply", "createdAt": updated,
-                                     "author": {"login": who}} for who in t.get("replies", ())]}}
+                                     "author": {"login": who}} for who in t.get("replies", ())]},
+             "latest": {"nodes": [{"author": {"login": ([t.get("author", "rev")] + list(t.get("replies", ())))[-1]}}]}}
             for i, t in enumerate(threads)]},
-        "comments": {"nodes": [{"createdAt": c.get("at", updated), "author": {"login": c["author"]}}
+        "comments": {"totalCount": len(comments),
+                     "nodes": [{"createdAt": c.get("at", updated), "author": {"login": c["author"]}}
                                for c in comments]},
         "commits": {"nodes": [{"commit": {
             "oid": head, "committedDate": committed,
