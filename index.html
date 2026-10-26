@@ -2856,7 +2856,7 @@
     if (p.action === "apply_fix") {
       // Never the default: the diff shows first, and the button stays plain.
       button = shownDiffs.has(field)
-        ? `<pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
+        ? `<div class="nc-reason">Commit: ${esc(p.payload?.message || "")}</div><pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
         : `<button type="button" data-show-diff="${field}">Show diff</button>`;
     }
     const where = p.action === "post_reply" && p.payload?.comment_id
