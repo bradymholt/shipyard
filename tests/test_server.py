@@ -52,7 +52,7 @@ class ServerCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        Path(tmp.name, "index.html").write_text("<!doctype html>")
+        Path(tmp.name, "index.html").write_text("<!doctype html><head></head>")
         self.companion = FakeCompanion()
         patches = [mock.patch.object(Handler, "companion", self.companion),
                    mock.patch.object(Handler, "session_token", "tok"),
@@ -85,11 +85,13 @@ class ServerCase(unittest.TestCase):
 
 
 class Endpoints(ServerCase):
-    def test_config_carries_rules_and_token(self):
-        status, cfg = self.request("GET", "/config.json")
-        self.assertEqual(status, 200)
-        self.assertEqual(cfg["companionToken"], "tok")
-        self.assertEqual(cfg["rules"]["nudge"], {"after_hours": 24})
+    def test_page_carries_token_and_rules(self):
+        status, html = self.request("GET", "/")
+        boot = html.decode().split('<script id="shipyard-boot" type="application/json">')[1].split("</script>")[0]
+        self.assertEqual((status, json.loads(boot)["token"]), (200, "tok"))
+        self.assertEqual(json.loads(boot)["rules"]["nudge"], {"after_hours": 24})
+        status, _ = self.request("GET", "/config.json")
+        self.assertEqual(status, 404)
 
     def test_state_and_host_check(self):
         status, state = self.request("GET", "/companion/state")

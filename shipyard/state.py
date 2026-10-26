@@ -1,8 +1,9 @@
 """The companion's memory, in one SQLite file next to shipyard.config.json: the last
 snapshot of each PR, events already handled, pins, snoozes, cards, passes, activity,
-how often each action ran automatically on each PR, and whether each may be approved
-on a re-review."""
+how often each action ran automatically on each PR, whether each may be approved
+on a re-review, and the page's session token."""
 import json
+import secrets
 import sqlite3
 import threading
 import time
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS auto_runs (key TEXT NOT NULL, action TEXT NOT NULL, c
   PRIMARY KEY (key, action));
 CREATE TABLE IF NOT EXISTS auto_approve (key TEXT PRIMARY KEY, enabled INTEGER NOT NULL, by TEXT NOT NULL,
   why TEXT, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS cards_key ON cards (key, status);
 CREATE INDEX IF NOT EXISTS passes_key ON passes (key);
 CREATE INDEX IF NOT EXISTS activity_key ON activity (key, id);
@@ -73,6 +75,18 @@ class State:
     def close(self):
         with self.lock:
             self.db.close()
+
+    def session_token(self):
+        """The token the page sends with every POST. It outlives restarts, so an open tab
+        keeps working when saving the companion's code reloads it."""
+        with self.lock:
+            row = self.db.execute("SELECT value FROM meta WHERE key = 'session_token'").fetchone()
+            if row:
+                return row[0]
+            token = secrets.token_urlsafe(32)
+            self.db.execute("INSERT INTO meta (key, value) VALUES ('session_token', ?)", (token,))
+            self.db.commit()
+            return token
 
     def _exec(self, sql, args=()):
         with self.lock:

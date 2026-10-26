@@ -736,6 +736,9 @@
     command: ["code", "{path}"],
   };
 
+  // The server writes its session token and config into the page it serves.
+  const BOOT = JSON.parse(document.getElementById("shipyard-boot")?.textContent || "{}");
+
   const state = {
     prs: [],              // targeted set: my PRs plus open PRs awaiting my review
     merged: [],           // my recently merged PRs, shown as context on the My PRs tab
@@ -750,10 +753,10 @@
     filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, workspace }
-    companionToken: "",  // per-process token required for mutations
-    launcher: DEFAULT_LAUNCHER,
-    agent: null,          // coding agent whose latest session a checkout can resume
-    rules: null,          // the companion's "rules" config (which chips are on)
+    companionToken: BOOT.token || "",  // required for mutations
+    launcher: BOOT.launcher || DEFAULT_LAUNCHER,
+    agent: BOOT.agent || null,  // coding agent whose latest session a checkout can resume
+    rules: BOOT.rules || null,  // the companion's "rules" config (which chips are on)
     companionState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
     loadingHistory: false,
     historyFetchedAt: null,  // when the merged feeds were last searched
@@ -1118,43 +1121,19 @@
     return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
   }
 
-  async function loadCompanionConfig() {
-    try {
-      const cfg = await fetch("config.json", { cache: "no-store" });
-      if (!cfg.ok) return false;
-      const c = await cfg.json();
-      if (!c.companionToken) return false;
-      state.launcher = c.launcher || DEFAULT_LAUNCHER;
-      state.agent = c.agent || null;
-      state.rules = c.rules || null;
-      state.companionToken = c.companionToken;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async function companionPost(url, retry = true, body = undefined) {
-    if (!state.companionToken && !(await loadCompanionConfig())) {
-      throw new Error("Shipyard session unavailable. Refresh the page and try again.");
-    }
+  function companionPost(url, body = undefined) {
     const headers = { "X-Shipyard-Token": state.companionToken };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    const res = await fetch(url, {
+    return fetch(url, {
       method: "POST",
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    // The companion may have restarted and generated a new in-memory token.
-    if (res.status === 403 && retry && await loadCompanionConfig()) {
-      return companionPost(url, false, body);
-    }
-    return res;
   }
 
   // POST to the companion and return its JSON, throwing its error message on failure.
   async function companionCall(url, body = {}) {
-    return companionJson(await companionPost(url, true, body));
+    return companionJson(await companionPost(url, body));
   }
 
   async function companionGet(url) {
@@ -2713,7 +2692,8 @@
       try {
         state.companionState = JSON.parse(e.data);
       } catch { return; }
-      if (state.companionState.config?.rules) state.rules = state.companionState.config.rules;
+      const config = state.companionState.config;
+      if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER });
       applyServerPrs();
       applyWorktrees();
       updateGitHubStatus();
@@ -2763,7 +2743,6 @@
   } else {
     $("#settings-dialog").showModal();
   }
-  loadCompanionConfig().then(render);
   connectCompanionEvents();
   setInterval(load, 60 * 1000);
   setInterval(updateGitHubStatus, 10 * 1000);
