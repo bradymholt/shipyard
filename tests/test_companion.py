@@ -330,6 +330,16 @@ class CiFailed(CompanionCase):
         self.assertEqual(card["auto_held"], "more checks failed while it waited")
         self.assertEqual(card["auto_action"], "rerun_checks")
 
+    def test_applied_fix_hides_fix_ci_before_the_next_poll(self):
+        self.trust("rerun_checks", False)
+        self.gh.put(self.red(), "author:@me")
+        self.assertIn("fix_ci", [s["kind"] for s in self.poll()["o/r#1"]["steps"]])
+        with mock.patch("shipyard.companion.actions.run", return_value="applied the fix and pushed"):
+            self.comp.do_action("o/r#1", "apply_fix", {"diff": "x"})
+        self.assertNotIn("fix_ci", [s["kind"] for s in self.comp.page_state()["prs"]["o/r#1"]["steps"]])
+        self.gh.put(self.red(head="bbb"), "author:@me")  # the fix failed CI too
+        self.assertIn("fix_ci", [s["kind"] for s in self.poll()["o/r#1"]["steps"]])
+
     def test_trusted_fix_holds_when_it_edits_files_outside_the_pr(self):
         self.trust("apply_fix")
         diff = "--- a/other.py\n+++ b/other.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"

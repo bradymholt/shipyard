@@ -155,14 +155,17 @@ class Companion:
             return self.version
 
     # ---------- polling
-    def poll_once(self):
-        viewer, snaps, listed = self.poller.poll(self.db.open_node_ids())
-        self.viewer = viewer
+    def refresh_worktrees(self):
         try:
             found = worktrees.discover(self.roots, None)
             self.worktree_map = {f"{w['repo'] or ''}#{w['branch']}": w for w in found}
         except Exception as e:
             print(f"Warning: worktree discovery failed: {e}")
+
+    def poll_once(self):
+        viewer, snaps, listed = self.poller.poll(self.db.open_node_ids())
+        self.viewer = viewer
+        self.refresh_worktrees()
         for snap in snaps:
             if snap["state"] == "OPEN" and snap["id"] not in listed:
                 snap["dropped"] = True  # still open, but no longer yours to act on
@@ -520,6 +523,7 @@ class Companion:
             self.db.log(snap["key"], f"tried to {action.replace('_', ' ')} automatically: {e}")
             return False
         self.record_review(snap, action, payload)
+        self.record_fix(snap, action)
         self.db.count_auto_run(snap["key"], action)
         self.db.log(snap["key"], f"{result} automatically: {reason}" if reason else f"{result} automatically")
         self.db.update_card(card_id, status="handled", handled={
@@ -648,12 +652,22 @@ class Companion:
             snap["requested"] = requested + [r for r in payload.get("reviewers") or [] if r not in requested]
             self.db.save_pr(snap)
         self.record_review(snap, action, payload)
+        self.record_fix(snap, action)
         self.db.log(key, result)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
         self.poke()
         self.publish()
         return {"ok": True, "result": result}
+
+    def record_fix(self, snap, action):
+        """Hide "Fix CI" and pick up the worktree the fix may have created, until the poll
+        sees the pushed commit."""
+        if action != "apply_fix":
+            return
+        snap["fix_pushed"] = True
+        self.db.save_pr(snap)
+        self.refresh_worktrees()
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
