@@ -3225,7 +3225,6 @@
       if (field && TEXT_ACTIONS.has(action)) payload.body = fieldValue(field) || "";
       if (action === "submit_review") payload.event = fieldValue(`${field}-event`) || "COMMENT";
       if (btn.dataset.reviewers) payload.reviewers = btn.dataset.reviewers.split(",");
-      if (action === "apply_fix" && !confirm("Apply this diff in your checkout, commit it, and push to the PR's branch?")) return;
       return busy(btn, async () => {
         if (btn.dataset.prAction) {
           const done = btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : "";
