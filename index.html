@@ -1118,7 +1118,6 @@
     return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
   }
 
-  let lastWtSig = "";  // signature of the last worktrees.json, so polling only re-renders on change
   async function loadCompanionConfig() {
     try {
       const cfg = await fetch("config.json", { cache: "no-store" });
@@ -1174,37 +1173,14 @@
     return data;
   }
 
-  async function loadWorktrees() {
-    try {
-      const res = await fetch("worktrees.json", { cache: "no-store" });
-      if (res.ok) {
-        const map = {};
-        for (const w of await res.json()) {
-          if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
-        }
-        state.worktrees = map;
-        lastWtSig = JSON.stringify(map);
-      }
-    } catch { /* server restarting: pollWorktrees catches up */ }
-    render();
-  }
+  // The server re-scans checkouts with every poll and after its own branch actions;
+  // this asks for one now, for changes made outside Shipyard.
+  const rescanWorktrees = () => companionCall("companion/rescan-worktrees").catch(() => {});
 
-  // Poll the companion so "where is this branch, and is the main clone dirty" stays
-  // current while the tab is open. Visible-only, skips overlapping fetches, and
-  // re-renders only when the data actually changed (so it doesn't disturb the DOM).
-  let wtPollInFlight = false;
-  async function pollWorktrees() {
-    if (document.hidden || wtPollInFlight) return;
-    wtPollInFlight = true;
-    try {
-      const res = await fetch("worktrees.json", { cache: "no-store" });
-      if (!res.ok) return;
-      const map = {};
-      for (const w of await res.json()) if (w.branch) map[`${w.repo || ""}#${w.branch}`] = w;
-      const sig = JSON.stringify(map);
-      if (sig !== lastWtSig) { lastWtSig = sig; state.worktrees = map; render(); }
-    } catch { /* transient (companion busy/away) — keep the last known state */ }
-    finally { wtPollInFlight = false; }
+  function applyWorktrees() {
+    const map = {};
+    for (const w of state.companionState?.worktrees || []) map[`${w.repo || ""}#${w.branch}`] = w;
+    state.worktrees = map;
   }
 
   function worktreeFor(pr) {
@@ -1305,7 +1281,7 @@
       return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton(wt)}</span>`;
     }
 
-    // A review worktree is detached, so it has no branch entry in worktrees.json.
+    // A review worktree is detached, so it has no branch entry among the pushed worktrees.
     const cp = companionPr(pr);
     if (cp?.path) {
       return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
@@ -1784,8 +1760,8 @@
 
   $("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#settings-dialog").showModal(); });
   $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
-  $("#refresh-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
-  $("#stale-retry-btn").addEventListener("click", () => { load(true); loadWorktrees(); });
+  $("#refresh-btn").addEventListener("click", () => { load(true); rescanWorktrees(); });
+  $("#stale-retry-btn").addEventListener("click", () => { load(true); rescanWorktrees(); });
 
   // ---------- new task ----------
   // The repo picker offers local clones under the current view only, so it matches the
@@ -1878,7 +1854,6 @@
       if (res.ok && data.ok) {
         await openInApp(launchTarget(data));
         $("#new-task-dialog").close();
-        loadWorktrees();
       } else {
         ntError(data.error || `Failed (${res.status})`);
       }
@@ -1972,7 +1947,6 @@
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok) {
           await openInApp(launchTarget(data));
-          loadWorktrees();
         } else {
           showError(data.error || `Couldn't open in your main clone (${res.status}).`, "Can't open in main clone");
         }
@@ -2741,6 +2715,7 @@
       } catch { return; }
       if (state.companionState.config?.rules) state.rules = state.companionState.config.rules;
       applyServerPrs();
+      applyWorktrees();
       updateGitHubStatus();
       render();
     });
@@ -2769,7 +2744,7 @@
   const FOCUS_POLL_MS = 30 * 1000;
   function refreshOnFocus() {
     if (document.hidden) return;
-    pollWorktrees();
+    rescanWorktrees();
     if (companionLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
       companionCall("companion/check-now").catch(() => {});
     }
@@ -2790,13 +2765,11 @@
   }
   loadCompanionConfig().then(render);
   connectCompanionEvents();
-  loadWorktrees();
-  setInterval(pollWorktrees, 60000);
   setInterval(load, 60 * 1000);
   setInterval(updateGitHubStatus, 10 * 1000);
   document.addEventListener("visibilitychange", refreshOnFocus);
 
-  window.__dashboard = { load, render, state, loadWorktrees, pollWorktrees, openSidebar, closeSidebar, updateGitHubStatus };
+  window.__dashboard = { load, render, state, openSidebar, closeSidebar, updateGitHubStatus };
 })();
 </script>
 </body>

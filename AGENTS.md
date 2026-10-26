@@ -15,8 +15,9 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
 - **`shipyard.py`** — thin launcher for the local companion (Python 3 stdlib
   only). Keep it as the entry point: the run command, the launchd plist, and these docs
   all point at it.
-- **`shipyard/`** — the companion. It serves the page, `/worktrees.json`, and branch and
-  worktree actions, and watches your PRs as a shipping orchestrator. The flow runs one
+- **`shipyard/`** — the companion. It serves the page, pushes your local checkouts with
+  its state, runs branch and worktree actions, and watches your PRs as a shipping
+  orchestrator. The flow runs one
   way: `poll.py` (GitHub GraphQL, token from `gh auth token`) produces snapshots,
   `events.py` diffs them into named events, `rules.py` turns events into chips, passes,
   and proposed cards, and `companion.py` runs passes through `agents/` (one adapter per

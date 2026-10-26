@@ -37,6 +37,10 @@ class FakeCompanion:
         self.calls.append(("card", card, index, payload))
         return {"ok": True}
 
+    def rescan_worktrees(self):
+        self.calls.append(("rescan",))
+        return {"ok": True}
+
     def timeline(self, node_id):
         return {"ok": True, "node": {"id": node_id}}
 
@@ -150,6 +154,12 @@ class Endpoints(ServerCase):
         self.assertEqual(second[0], "event: state")
         self.assertEqual(json.loads(second[1][len("data: "):])["version"], 4)
         conn.close()
+
+    def test_rescans_worktrees_on_request_and_has_no_worktrees_json(self):
+        status, _ = self.request("POST", "/companion/rescan-worktrees", {})
+        self.assertEqual((status, self.companion.calls), (200, [("rescan",)]))
+        status, _ = self.request("GET", "/worktrees.json")
+        self.assertEqual(status, 404)
 
     def test_timeline_and_no_graphql_proxy(self):
         status, out = self.request("GET", "/companion/timeline?id=PR_1")
