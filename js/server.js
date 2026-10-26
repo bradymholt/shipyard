@@ -1,4 +1,4 @@
-// Talking to the companion: requests, its event stream, saved views, and local checkouts.
+// Talking to the server: requests, its event stream, saved views, and local checkouts.
 import { DEFAULT_LAUNCHER, state } from "./base.js";
 import { clip, esc, refreshAgoLabels, showError } from "./html.js";
 import { applyServerPrs, githubProblem, lastPollAt, resetData, updateGitHubStatus } from "./data.js";
@@ -9,10 +9,10 @@ export const getRepos = () => state.views.views;
 
 export const getCurrentRepo = () => state.views.current || getRepos()[0] || "";
 
-// Settings live in the companion's config file. `expect` is what this page last saw, so a
+// Settings live in the server's config file. `expect` is what this page last saw, so a
 // hand edit to the file since then is reported instead of overwritten.
 export function saveSettings(set, expect) {
-  return companionCall("companion/settings", { set, expect });
+  return apiCall("api/settings", { set, expect });
 }
 
 // Show the change now; the server's push then confirms it in every open tab.
@@ -24,7 +24,7 @@ export async function saveViews(views, current) {
   savingViews++;
   try {
     if (JSON.stringify(views) !== JSON.stringify(before.views)) await saveSettings({ views }, { views: before.views });
-    const saved = await companionCall("companion/current-view", { view: current });
+    const saved = await apiCall("api/current-view", { view: current });
     state.views = { views: saved.views, current: saved.current };
     return true;
   } catch (err) {
@@ -38,8 +38,8 @@ export async function saveViews(views, current) {
   }
 }
 
-export function companionPost(url, body = undefined) {
-  const headers = { "X-Shipyard-Token": state.companionToken };
+export function apiPost(url, body = undefined) {
+  const headers = { "X-Shipyard-Token": state.sessionToken };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   return fetch(url, {
     method: "POST",
@@ -48,22 +48,22 @@ export function companionPost(url, body = undefined) {
   });
 }
 
-// POST to the companion and return its JSON, throwing its error message on failure.
-export async function companionCall(url, body = {}) {
-  return companionJson(await companionPost(url, body));
+// POST to the server and return its JSON, throwing its error message on failure.
+export async function apiCall(url, body = {}) {
+  return apiJson(await apiPost(url, body));
 }
 
-export async function companionGet(url) {
+export async function apiGet(url) {
   let res;
   try {
     res = await fetch(url, { cache: "no-store" });
   } catch {
     throw new Error("Couldn't reach Shipyard. Is it still running?");
   }
-  return companionJson(res);
+  return apiJson(res);
 }
 
-async function companionJson(res) {
+async function apiJson(res) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ok === false) throw new Error(data.error || `Shipyard request failed (${res.status}).`);
   return data;
@@ -71,11 +71,11 @@ async function companionJson(res) {
 
 // The server re-scans checkouts with every poll and after its own branch actions;
 // this asks for one now, for changes made outside Shipyard.
-export const rescanWorktrees = () => companionCall("companion/rescan-worktrees").catch(() => {});
+export const rescanWorktrees = () => apiCall("api/rescan-worktrees").catch(() => {});
 
 function applyWorktrees() {
   const map = {};
-  for (const w of state.companionState?.worktrees || []) map[`${w.repo || ""}#${w.branch}`] = w;
+  for (const w of state.serverState?.worktrees || []) map[`${w.repo || ""}#${w.branch}`] = w;
   state.worktrees = map;
 }
 
@@ -83,23 +83,23 @@ export function worktreeFor(pr) {
   return state.worktrees[`${pr.repository?.nameWithOwner || ""}#${pr.headRefName}`];
 }
 
-// The companion pushes its whole state (chips, cards, sessions, activity) over SSE
+// The server pushes its whole state (chips, cards, sessions, activity) over SSE
 // whenever something changes; EventSource reconnects on its own if it restarts.
-let companionEvents = null;
+let serverEvents = null;
 
-const companionLive = () => !!state.companionState && companionEvents?.readyState === EventSource.OPEN;
+const serverLive = () => !!state.serverState && serverEvents?.readyState === EventSource.OPEN;
 
-export function connectCompanionEvents() {
-  if (companionEvents || typeof EventSource === "undefined") return;
-  companionEvents = new EventSource("companion/events");
-  companionEvents.addEventListener("error", () => render());
-  companionEvents.addEventListener("state", (e) => {
+export function connectServerEvents() {
+  if (serverEvents || typeof EventSource === "undefined") return;
+  serverEvents = new EventSource("api/events");
+  serverEvents.addEventListener("error", () => render());
+  serverEvents.addEventListener("state", (e) => {
     const polledAt = lastPollAt();
     try {
-      state.companionState = JSON.parse(e.data);
+      state.serverState = JSON.parse(e.data);
     } catch { return; }
     if (lastPollAt() !== polledAt || githubProblem()) state.refreshing = false;
-    const config = state.companionState.config;
+    const config = state.serverState.config;
     if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER });
     applyViews();
     applyServerPrs();
@@ -107,17 +107,17 @@ export function connectCompanionEvents() {
     updateGitHubStatus();
     render();
   });
-  companionEvents.addEventListener("merged", (e) => {
+  serverEvents.addEventListener("merged", (e) => {
     try {
       state.recentMerged = JSON.parse(e.data);
     } catch { return; }
     applyServerPrs();
     render();
   });
-  companionEvents.addEventListener("poll", (e) => {
-    if (!state.companionState?.status) return;
+  serverEvents.addEventListener("poll", (e) => {
+    if (!state.serverState?.status) return;
     try {
-      state.companionState.status.lastPoll = JSON.parse(e.data).lastPoll;
+      state.serverState.status.lastPoll = JSON.parse(e.data).lastPoll;
     } catch { return; }
     state.refreshing = false;
     updateGitHubStatus();
@@ -127,7 +127,7 @@ export function connectCompanionEvents() {
 
 // Views changed in another tab, or the server's answer to a save from this one.
 function applyViews() {
-  const views = state.companionState.views;
+  const views = state.serverState.views;
   if (!views || savingViews || JSON.stringify(views) === JSON.stringify(state.views)) return;
   const was = getCurrentRepo();
   state.views = views;
@@ -136,13 +136,13 @@ function applyViews() {
   if (getCurrentRepo() !== was) resetData();
 }
 
-export function companionStatusHtml() {
-  const status = state.companionState?.status;
+export function serverStatusHtml() {
+  const status = state.serverState?.status;
   if (!status) return "";
-  if (!companionLive()) return '<span class="dot off"></span>Shipyard not running · reconnecting…';
+  if (!serverLive()) return '<span class="dot off"></span>Shipyard not running · reconnecting…';
   const agent = status.agent && !status.agent.available ? ` · ${esc(status.agent.name)} CLI not found` : "";
   if (status.github && status.github !== "ok" && status.github !== "starting") {
-    return `<span class="dot off"></span><span class="companion-err" title="${esc(status.github)}">Can't reach GitHub: ${esc(clip(status.github, 80))}</span>${agent}`;
+    return `<span class="dot off"></span><span class="server-err" title="${esc(status.github)}">Can't reach GitHub: ${esc(clip(status.github, 80))}</span>${agent}`;
   }
   return `<span class="dot ok"></span>Connected${agent}`;
 }
@@ -153,8 +153,8 @@ const FOCUS_POLL_MS = 30 * 1000;
 // A poll re-scans checkouts too, so ask for one or the other.
 export function refreshOnFocus() {
   if (document.hidden) return;
-  if (companionLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
-    companionCall("companion/check-now").catch(() => {});
+  if (serverLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
+    apiCall("api/check-now").catch(() => {});
   } else {
     rescanWorktrees();
   }

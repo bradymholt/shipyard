@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from shipyard.companion import Companion
+from shipyard.orchestrator import Orchestrator
 from shipyard.config import validate_config
 from shipyard.state import State
 
@@ -98,7 +98,7 @@ class FakeAgent:
         return {"session_id": produced, "answer": answer}
 
 
-class CompanionCase(unittest.TestCase):
+class OrchestratorCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -109,10 +109,10 @@ class CompanionCase(unittest.TestCase):
         self.gh = FakeGitHub()
         self.agent = FakeAgent(self.checkout)
         patches = [
-            mock.patch("shipyard.companion.adapter_for", return_value=self.agent),
-            mock.patch("shipyard.companion.worktrees.discover", return_value=[
+            mock.patch("shipyard.orchestrator.adapter_for", return_value=self.agent),
+            mock.patch("shipyard.orchestrator.worktrees.discover", return_value=[
                 {"repo": "o/r", "branch": "feature", "path": self.checkout, "main": False}]),
-            mock.patch("shipyard.companion.worktrees.review_worktree",
+            mock.patch("shipyard.orchestrator.worktrees.review_worktree",
                        return_value={"ok": True, "path": self.checkout}),
         ]
         for p in patches:
@@ -120,7 +120,7 @@ class CompanionCase(unittest.TestCase):
             self.addCleanup(p.stop)
         self.raw = {}
         self.db_path = base / "shipyard.db"
-        self.comp = Companion(validate_config({}), [str(base)], self.db_path, github=self.gh,
+        self.comp = Orchestrator(validate_config({}), [str(base)], self.db_path, github=self.gh,
                               config_path=self.config_path)
         self.addCleanup(self.comp.db.close)
         self.addCleanup(self.comp.stop)
@@ -145,12 +145,12 @@ class CompanionCase(unittest.TestCase):
         self.fail("passes did not finish")
 
 
-class Restart(CompanionCase):
+class Restart(OrchestratorCase):
     def test_restores_the_last_poll_and_skips_unchanged_prs(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()
         self.comp.db.close()
-        again = Companion(validate_config({}), [self.checkout], self.db_path, github=self.gh)
+        again = Orchestrator(validate_config({}), [self.checkout], self.db_path, github=self.gh)
         self.addCleanup(again.db.close)
         state = again.page_state()
         self.assertEqual((state["viewer"], state["prs"]["o/r#1"]["lists"]), (VIEWER, ["mine"]))
@@ -160,16 +160,16 @@ class Restart(CompanionCase):
         self.assertEqual(details.call_args.args[0], [])
 
 
-class SessionToken(CompanionCase):
+class SessionToken(OrchestratorCase):
     def test_outlives_a_restart(self):
         token = self.comp.db.session_token()
         self.comp.db.close()
         self.assertEqual(State(self.db_path).session_token(), token)
 
 
-class SharedCosts(CompanionCase):
+class SharedCosts(OrchestratorCase):
     def test_one_process_scan_per_state_build(self):
-        with mock.patch("shipyard.companion.process_cwds", return_value=set()) as scan:
+        with mock.patch("shipyard.orchestrator.process_cwds", return_value=set()) as scan:
             cwds = self.comp.shared_process_scan()
             cwds(), cwds()
         self.assertEqual(scan.call_count, 1)
@@ -208,7 +208,7 @@ class SharedCosts(CompanionCase):
             self.assertEqual(search.call_count, 1)
 
 
-class Settings(CompanionCase):
+class Settings(OrchestratorCase):
     def test_views_save_to_the_config_file_and_keep_the_rest(self):
         self.config_path.write_text(json.dumps({"roots": ["~/dev"]}))
         out = self.comp.save_settings({"views": ["o/r ,acme", "o/r, acme", "me"]}, {"views": []})
@@ -230,7 +230,7 @@ class Settings(CompanionCase):
         self.assertEqual(self.comp.views(), {"views": ["acme"], "current": "acme"})
 
 
-class PageState(CompanionCase):
+class PageState(OrchestratorCase):
     def test_carries_pr_state_and_open_thread_count_for_the_page(self):
         self.gh.put(pr_node(threads=[{"body": "a"}, {"body": "b", "resolved": True}]), "author:@me")
         pr = self.poll()["o/r#1"]
@@ -240,7 +240,7 @@ class PageState(CompanionCase):
         self.assertEqual([w["branch"] for w in self.comp.page_state()["worktrees"]], ["feature"])
 
 
-class AfterAction(CompanionCase):
+class AfterAction(OrchestratorCase):
     def test_rereads_the_pr_for_the_page_before_the_poll_does(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()
@@ -256,7 +256,7 @@ class AfterAction(CompanionCase):
         self.assertFalse(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
 
 
-class ChangesRequested(CompanionCase):
+class ChangesRequested(OrchestratorCase):
     def setUp(self):
         super().setUp()
         self.raw = {"rules": {"passes": {"feedback": "auto"}}}
@@ -341,7 +341,7 @@ class ChangesRequested(CompanionCase):
         self.assertEqual(self.poll()["o/r#1"]["cards"], [])
 
 
-class CiFailed(CompanionCase):
+class CiFailed(OrchestratorCase):
     def setUp(self):
         super().setUp()
         self.agent.answers["CI failure"] = {
@@ -455,7 +455,7 @@ class CiFailed(CompanionCase):
         self.trust("rerun_checks", False)
         self.gh.put(self.red(), "author:@me")
         self.assertIn("fix_ci", [s["kind"] for s in self.poll()["o/r#1"]["steps"]])
-        with mock.patch("shipyard.companion.actions.run", return_value="applied the fix and pushed"):
+        with mock.patch("shipyard.orchestrator.actions.run", return_value="applied the fix and pushed"):
             self.comp.do_action("o/r#1", "apply_fix", {"diff": "x"})
         self.assertNotIn("fix_ci", [s["kind"] for s in self.comp.page_state()["prs"]["o/r#1"]["steps"]])
         self.gh.put(self.red(head="bbb"), "author:@me")  # the fix failed CI too
@@ -482,7 +482,7 @@ class CiFailed(CompanionCase):
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"][0]["kind"], "pass")
 
 
-class Reviews(CompanionCase):
+class Reviews(OrchestratorCase):
     def test_pre_review_runs_fresh_in_review_worktree_and_pins_it(self):
         self.agent.answers["first-pass code review"] = {
             "summary": "Solid; one edge case.",
@@ -524,7 +524,7 @@ class Reviews(CompanionCase):
         self.assertEqual(self.comp.db.pr("o/r#5")["my_review"]["state"], "APPROVED")
 
     def test_re_review_without_a_review_worktree_makes_one(self):
-        from shipyard.companion import worktrees
+        from shipyard.orchestrator import worktrees
         review = {"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-19T00:00:00Z",
                   "commit": {"oid": "old"}}
         self.gh.put(pr_node(number=6, author="bob", requested=[VIEWER], my_review=review), "review-requested:@me")
@@ -671,7 +671,7 @@ class Reviews(CompanionCase):
         self.assertFalse(any("rerun" in c[1] for c in self.gh.calls))
 
 
-class Proposals(CompanionCase):
+class Proposals(OrchestratorCase):
     def test_push_after_changes_requested_proposes_re_request(self):
         node = pr_node(decision="CHANGES_REQUESTED", reviews=[{"state": "CHANGES_REQUESTED", "author": "jm"}])
         self.gh.put(node, "author:@me")
@@ -688,7 +688,7 @@ class Proposals(CompanionCase):
         # the step goes at once, before a poll sees the request
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["steps"], [])
 
-class Dropped(CompanionCase):
+class Dropped(OrchestratorCase):
     def test_pr_that_leaves_every_list_is_read_once_then_left(self):
         node = pr_node(number=5, author="alice", requested=[VIEWER])
         self.gh.put(node, "review-requested:@me")
@@ -699,7 +699,7 @@ class Dropped(CompanionCase):
         self.assertNotIn(node["id"], self.comp.db.open_node_ids())
 
 
-class PageRequests(CompanionCase):
+class PageRequests(OrchestratorCase):
     def test_snooze_chip_and_repin(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()
@@ -718,7 +718,7 @@ class PageRequests(CompanionCase):
 
     def test_pin_found_once_the_worktree_appears_after_the_first_poll(self):
         self.gh.put(pr_node(), "author:@me")
-        with mock.patch("shipyard.companion.worktrees.discover", return_value=[]):
+        with mock.patch("shipyard.orchestrator.worktrees.discover", return_value=[]):
             self.poll()
         self.assertIsNone(self.comp.db.pin("o/r#1"))
         self.poll()
@@ -767,20 +767,20 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class ReloadConfig(CompanionCase):
+class ReloadConfig(OrchestratorCase):
     def test_a_hand_edit_is_picked_up_and_a_bad_one_is_ignored(self):
         edited = validate_config({"rules": {"merge": False}})
-        with mock.patch("shipyard.companion.config_mtime", return_value=1.0), \
-                mock.patch("shipyard.companion.read_config", return_value=edited):
+        with mock.patch("shipyard.orchestrator.config_mtime", return_value=1.0), \
+                mock.patch("shipyard.orchestrator.read_config", return_value=edited):
             self.comp.reload_config()
         self.assertFalse(self.comp.config["rules"]["merge"])
-        with mock.patch("shipyard.companion.config_mtime", return_value=2.0), \
-                mock.patch("shipyard.companion.read_config", side_effect=ValueError("bad")):
+        with mock.patch("shipyard.orchestrator.config_mtime", return_value=2.0), \
+                mock.patch("shipyard.orchestrator.read_config", side_effect=ValueError("bad")):
             self.comp.reload_config()
         self.assertIs(self.comp.config, edited)
 
 
-class Prune(CompanionCase):
+class Prune(OrchestratorCase):
     def test_a_forgotten_pr_takes_its_rows_with_it(self):
         db = self.comp.db
         self.gh.put(pr_node(ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=1, run=2)]), "author:@me")

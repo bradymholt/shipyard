@@ -1,4 +1,4 @@
-"""Passes: a bounded reading task with a structured answer. The companion fills a
+"""Passes: a bounded reading task with a structured answer. The server fills a
 template from shipyard/passes/, runs the agent headlessly through its adapter, and
 parses the answer into a Next card. The agent proposes; it never acts.
 

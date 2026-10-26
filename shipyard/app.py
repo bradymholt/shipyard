@@ -3,7 +3,7 @@ import functools
 import http.server
 import sys
 
-from .companion import Companion
+from .orchestrator import Orchestrator
 from .config import CONFIG_FILE, REPO_DIR, load_config
 from .github import GitHub
 from .server import Handler
@@ -45,9 +45,9 @@ def main(argv=None):
     warn_unavailable_roots(roots)
     Handler.roots = roots
     Handler.config = config
-    Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=GitHub())
-    Handler.companion.move_old_views()
-    Handler.session_token = Handler.companion.db.session_token()
+    Handler.orchestrator = Orchestrator(config, roots, REPO_DIR / DB_FILE, github=GitHub())
+    Handler.orchestrator.move_old_views()
+    Handler.session_token = Handler.orchestrator.db.session_token()
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))
@@ -60,11 +60,11 @@ def main(argv=None):
     if agent:
         print(f"Resumes sessions in: {agent['name']} via {agent['mode']}")
     print("Watching your PRs on GitHub (token from `gh auth token`); state in " + DB_FILE)
-    Handler.companion.start()
+    Handler.orchestrator.start()
     print("Press Ctrl+C to stop.")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        Handler.companion.stop()
+        Handler.orchestrator.stop()

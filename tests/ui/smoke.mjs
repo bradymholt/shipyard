@@ -2,7 +2,7 @@
 //
 //   node tests/ui/smoke.mjs [screenshot-dir]
 //
-// Starts tests/ui/demo_server.py (the real companion server over fake GitHub and agent
+// Starts tests/ui/demo_server.py (the real Shipyard server over fake GitHub and agent
 // data) and checks what renders. Needs Playwright with Chromium.
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -24,7 +24,7 @@ const { chromium } = loadPlaywright();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
 const shots = process.argv[2] || null;
-const COMPANION_PORT = 4399;
+const DEMO_PORT = 4399;
 
 function start(cmd, args, ready) {
   const child = spawn(cmd, args, { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
@@ -60,7 +60,7 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }, 
   await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ body: "" }));
   const page = await context.newPage();
   const mergedCalls = [];
-  page.on("request", (r) => { if (r.url().includes("/companion/merged")) mergedCalls.push(r.url()); });
+  page.on("request", (r) => { if (r.url().includes("/api/merged")) mergedCalls.push(r.url()); });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
@@ -73,11 +73,11 @@ const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row
 
 const children = [];
 try {
-  children.push(await start("python3", ["tests/ui/demo_server.py", String(COMPANION_PORT)], /demo companion on/));
+  children.push(await start("python3", ["tests/ui/demo_server.py", String(DEMO_PORT)], /demo server on/));
   const browser = await chromium.launch();
 
-  console.log("companion mode");
-  const { page, errors, direct, mergedCalls } = await openPage(browser, COMPANION_PORT, undefined, true);
+  console.log("board");
+  const { page, errors, direct, mergedCalls } = await openPage(browser, DEMO_PORT, undefined, true);
   check(await page.evaluate(() => window.__dashboard.state.views.current === "o/r" && localStorage.getItem("ghpr.repos") === null),
     "views kept in the browser move to the server");
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
@@ -90,7 +90,7 @@ try {
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
   check(await page.locator('.card[data-key="o/r#104"] .next-row').count() === 0, "an idle draft gets no chip");
-  check((await chipText(page, 105))?.includes("Nudge · 1d"), "companion memory chip → Nudge · 1d");
+  check((await chipText(page, 105))?.includes("Nudge · 1d"), "server memory chip → Nudge · 1d");
   check(await page.locator('.card[data-key="o/r#105"] .next-row.optional').count() === 1, "a nudge is optional, so it doesn't count as needing you");
   check(await page.locator('.card[data-key="o/r#101"] .plan-dot').count() === 1, "plan-ready dot on a card with a pass");
   check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
@@ -103,7 +103,7 @@ try {
     "a merged PR keeps its approval feedback card, without re-request");
   if (shots) await page.screenshot({ path: `${shots}/sidebar-merged-approval.png` });
   await page.keyboard.press("Escape");
-  check((await page.locator("#companion-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
+  check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
     document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional)").length,
@@ -143,8 +143,8 @@ try {
   await reply.fill("Edited: dropping to 3 retries with jitter.");
   await sb.locator('button.nc-run[data-action="post_reply"]').click();
   await page.waitForFunction(() => !document.querySelector('#sidebar button.nc-run[data-action="post_reply"]'));
-  const posted = await page.evaluate(() => window.__dashboard.state.companionState.prs["o/r#101"].activity.map((a) => a.text));
-  check(posted.includes("posted a reply on a review thread"), "Post reply goes through the companion and the card closes");
+  const posted = await page.evaluate(() => window.__dashboard.state.serverState.prs["o/r#101"].activity.map((a) => a.text));
+  check(posted.includes("posted a reply on a review thread"), "Post reply goes through the server and the card closes");
   await sb.locator('button.nc-run[data-pr-action="rerequest_review"]').click();
   await page.waitForFunction(() => !document.querySelector('#sidebar [data-pr-action="rerequest_review"]'), null, { timeout: 2000 });
   check(await page.locator(".lane").nth(1).locator('.card[data-key="o/r#101"]').count() === 1, "Re-request review moves the card to Waiting right away");
@@ -203,7 +203,7 @@ try {
   check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
 
   console.log("narrow window");
-  const narrow = await openPage(browser, COMPANION_PORT, { width: 420, height: 900 });
+  const narrow = await openPage(browser, DEMO_PORT, { width: 420, height: 900 });
   check(await narrow.page.locator('.card[data-key="o/r#101"]').count() === 1, "a browser with nothing stored shows the server's saved view");
   await narrow.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await narrow.page.waitForSelector("#sidebar .sb-title");
@@ -217,7 +217,7 @@ try {
   console.log("GitHub failure");
   await narrow.page.evaluate(() => {
     const { state, updateGitHubStatus } = window.__dashboard;
-    state.companionState.status.github = "GitHub rate limit: You have exceeded a secondary rate limit. Retrying at 3:05 PM.";
+    state.serverState.status.github = "GitHub rate limit: You have exceeded a secondary rate limit. Retrying at 3:05 PM.";
     updateGitHubStatus();
   });
   await narrow.page.waitForSelector("#stale-banner:not(.hidden)");

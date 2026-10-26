@@ -17,7 +17,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
             updated="2026-10-20T10:00:00Z", requested_at=None, committed="2026-10-20T09:00:00Z",
             created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=(), running=0,
             title=None, merged_at=None, standing=()):
-    """A PullRequest node shaped like the companion's detail query returns."""
+    """A PullRequest node shaped like the server's detail query returns."""
     requested_at = requested_at or {}
     return copy.deepcopy({
         "id": f"PR_{repo}_{number}", "number": number, "title": title or f"PR {number}",

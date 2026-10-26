@@ -1,7 +1,7 @@
-"""Actions: the GitHub calls (and the one git push) the companion makes for a card.
+"""Actions: the GitHub calls (and the one git push) the server makes for a card.
 
 Each runs only when you press its button, or, for an action type you trusted in
-"auto", when the companion presses it for you. Anything that posts text under your
+"auto", when the server presses it for you. Anything that posts text under your
 name shows that text on the card first; post_reply is never automatic.
 """
 import os

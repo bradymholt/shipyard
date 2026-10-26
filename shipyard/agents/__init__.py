@@ -1,7 +1,7 @@
 """Coding-agent adapters.
 
 Everything that talks to a coding agent goes through one small interface, so the rest
-of the companion (rules, passes, the page) never knows which CLI is behind it:
+of the server (rules, passes, the page) never knows which CLI is behind it:
 
     sessions(paths)            latest session per checkout   {path: {id, updated}}
     list_sessions(path)        every session in a checkout, newest first

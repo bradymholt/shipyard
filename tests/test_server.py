@@ -12,7 +12,7 @@ from shipyard.config import validate_config
 from shipyard.server import Handler
 
 
-class FakeCompanion:
+class FakeOrchestrator:
     def __init__(self):
         self.version = 1
         self.config = validate_config({})
@@ -60,8 +60,8 @@ class ServerCase(unittest.TestCase):
         Path(tmp.name, "index.html").write_text("<!doctype html><head></head>")
         Path(tmp.name, "js").mkdir()
         Path(tmp.name, "js", "main.js").write_text("")
-        self.companion = FakeCompanion()
-        patches = [mock.patch.object(Handler, "companion", self.companion),
+        self.orchestrator = FakeOrchestrator()
+        patches = [mock.patch.object(Handler, "orchestrator", self.orchestrator),
                    mock.patch.object(Handler, "session_token", "tok"),
                    mock.patch.object(Handler, "roots", [tmp.name]),
                    mock.patch("shipyard.server.worktrees.discover", return_value=[])]
@@ -102,34 +102,34 @@ class Endpoints(ServerCase):
         self.assertEqual(status, 404)
 
     def test_state_and_host_check(self):
-        status, state = self.request("GET", "/companion/state")
+        status, state = self.request("GET", "/api/state")
         self.assertEqual((status, state["version"]), (200, 1))
-        status, _ = self.request("GET", "/companion/state", host="evil.example:80")
+        status, _ = self.request("GET", "/api/state", host="evil.example:80")
         self.assertEqual(status, 403)
 
     def test_mutations_need_origin_and_token(self):
-        status, _ = self.request("POST", "/companion/snooze?key=o/r%231", {"hours": 4},
+        status, _ = self.request("POST", "/api/snooze?key=o/r%231", {"hours": 4},
                                  headers={"X-Shipyard-Token": "wrong"})
         self.assertEqual(status, 403)
-        status, _ = self.request("POST", "/companion/snooze?key=o/r%231", {"hours": 4},
+        status, _ = self.request("POST", "/api/snooze?key=o/r%231", {"hours": 4},
                                  headers={"Origin": "http://evil.example"})
         self.assertEqual(status, 403)
-        status, out = self.request("POST", "/companion/snooze?key=o/r%231", {"hours": 4})
+        status, out = self.request("POST", "/api/snooze?key=o/r%231", {"hours": 4})
         self.assertEqual((status, out), (200, {"ok": True}))
-        self.assertEqual(self.companion.calls, [("snooze", "o/r#1", 4)])
+        self.assertEqual(self.orchestrator.calls, [("snooze", "o/r#1", 4)])
 
     def test_card_action_body_and_errors(self):
-        status, _ = self.request("POST", "/companion/card-action?card=3&index=1", {"payload": {"body": "x"}})
+        status, _ = self.request("POST", "/api/card-action?card=3&index=1", {"payload": {"body": "x"}})
         self.assertEqual(status, 200)
-        self.assertEqual(self.companion.calls[-1], ("card", 3, 1, {"body": "x"}))
-        status, out = self.request("POST", "/companion/pr-action?key=o/r%231&action=merge", {})
+        self.assertEqual(self.orchestrator.calls[-1], ("card", 3, 1, {"body": "x"}))
+        status, out = self.request("POST", "/api/pr-action?key=o/r%231&action=merge", {})
         self.assertEqual((status, out["error"]), (400, "not tracked"))
-        status, out = self.request("POST", "/companion/card-action?card=x", {})
+        status, out = self.request("POST", "/api/card-action?card=x", {})
         self.assertEqual(status, 400)
 
     def test_events_stream_sends_state_only_when_it_changed(self):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.request("GET", "/companion/events", headers={"Host": f"localhost:{self.port}"})
+        conn.request("GET", "/api/events", headers={"Host": f"localhost:{self.port}"})
         res = conn.getresponse()
         self.assertEqual(res.getheader("Content-Type"), "text/event-stream")
 
@@ -154,9 +154,9 @@ class Endpoints(ServerCase):
 
         def bump(**changes):
             for k, v in changes.items():
-                setattr(self.companion, k, v)
-            self.companion.version += 1
-            self.companion.changed.set()
+                setattr(self.orchestrator, k, v)
+            self.orchestrator.version += 1
+            self.orchestrator.changed.set()
             return read_event()
 
         self.assertEqual(bump()[0], ": keepalive")
@@ -169,13 +169,13 @@ class Endpoints(ServerCase):
         conn.close()
 
     def test_rescans_worktrees_on_request_and_has_no_worktrees_json(self):
-        status, _ = self.request("POST", "/companion/rescan-worktrees", {})
-        self.assertEqual((status, self.companion.calls), (200, [("rescan",)]))
+        status, _ = self.request("POST", "/api/rescan-worktrees", {})
+        self.assertEqual((status, self.orchestrator.calls), (200, [("rescan",)]))
         status, _ = self.request("GET", "/worktrees.json")
         self.assertEqual(status, 404)
 
     def test_timeline_and_no_graphql_proxy(self):
-        status, out = self.request("GET", "/companion/timeline?id=PR_1")
+        status, out = self.request("GET", "/api/timeline?id=PR_1")
         self.assertEqual((status, out["node"]), (200, {"id": "PR_1"}))
         status, _ = self.request("POST", "/github/graphql", {"query": "{ viewer { login } }"})
         self.assertEqual(status, 404)

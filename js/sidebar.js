@@ -1,12 +1,12 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
 import { $, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtTitle, GITHUB_ICON, showError, timeAgo } from "./html.js";
-import { companionCall, companionGet, companionPost, worktreeFor } from "./server.js";
+import { apiCall, apiGet, apiPost, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
-import { agentName, companionPr, companionSteps, failingChecks, findPr, isReviewPr, markMerged, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
+import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
 import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
 
-// One component whose sections appear when the companion is connected, like the
+// One component whose sections appear when the server is connected, like the
 // worktree icons: Header, Next, PR session, Review, Activity.
 export let sidebarKey = null;
 
@@ -65,7 +65,7 @@ async function loadDetail(key) {
   detailCache.set(key, { updatedAt: pr.updatedAt, loading: true, data: cached?.data || null });
   let entry;
   try {
-    const { node } = await companionGet(`companion/timeline?id=${encodeURIComponent(pr.id)}`);
+    const { node } = await apiGet(`api/timeline?id=${encodeURIComponent(pr.id)}`);
     entry = { updatedAt: pr.updatedAt, loading: false, data: node };
   } catch (err) {
     entry = { updatedAt: pr.updatedAt, loading: false, data: cached?.data || null, error: err.message };
@@ -99,7 +99,7 @@ function sessionLink(path, sessionId, inner, cls, key) {
 
 // The session every link for a PR opens: the pinned one, or none if nothing is pinned.
 export function sessionTarget(pr) {
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   return cp?.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
 }
 
@@ -120,14 +120,14 @@ function respondButton(pr) {
   if (!url || !template) return continueButton(pr);
   const prompt = template.replaceAll("{url}", pr.url).replaceAll("{repo}", pr.repository?.nameWithOwner || "")
     .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "");
-  const path = continueTarget(pr)?.path || worktreeFor(pr)?.path || companionPr(pr)?.path || "";
+  const path = continueTarget(pr)?.path || worktreeFor(pr)?.path || serverPr(pr)?.path || "";
   const href = url.replaceAll("{prompt}", encodeURIComponent(prompt)).replaceAll("{path}", encodeURIComponent(path));
   return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">Address in ${esc(agentName())}</a>`;
 }
 
 function sidebarHeader(pr) {
   const key = prKey(pr);
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   const wt = worktreeFor(pr);
   const comments = pr.comments?.totalCount || 0;
   const size = pr.additions != null
@@ -213,7 +213,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
     </div>`;
 }
 
-function companionCardHtml(pr, card, first) {
+function serverCardHtml(pr, card, first) {
   const cls = `next-card${first ? " first" : ""}`;
   const dismiss = `<button type="button" class="sb-close nc-x" data-dismiss="${card.id}" title="Dismiss" aria-label="Dismiss">${CLOSE_ICON}</button>`;
   const title = esc(PASS_LABELS[card.pass] || card.title || "Next");
@@ -244,7 +244,7 @@ function companionCardHtml(pr, card, first) {
         <button type="button" data-dismiss="${card.id}">Dismiss</button></div></div>`;
   }
   const chip = card.pass === "feedback"
-    ? companionSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
+    ? serverSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
   const rerequest = card.pass === "feedback" ? respondButton(pr) + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
   const openKept = card.kept
     ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
@@ -266,7 +266,7 @@ function rerequestButton(reviewers, cardId) {
   return `<button type="button" class="nc-run" data-pr-action="rerequest_review" data-reviewers="${esc(reviewers.join(","))}"${done}>Re-request review</button>`;
 }
 
-// With no card from the companion, the chip still implies the buttons that fit it.
+// With no card from the server, the chip still implies the buttons that fit it.
 function derivedCardHtml(pr, chip) {
   if (!chip) return "";
   const key = prKey(pr);
@@ -287,7 +287,7 @@ function derivedCardHtml(pr, chip) {
     body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
     actionsHtml = rerequest + continueButton(pr);
   } else if (chip.kind === "address_feedback") {
-    const open = companionPr(pr)?.openThreads || 0;
+    const open = serverPr(pr)?.openThreads || 0;
     const verb = chip.approval ? "approved with comments"
       : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
     body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
@@ -306,15 +306,15 @@ function derivedCardHtml(pr, chip) {
 
 function nextSection(pr) {
   const key = prKey(pr);
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   const open = !pr.mergedAt;
   // Your own asks and new sessions show under PR session.
   const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
-  let html = cards.map((c, i) => companionCardHtml(pr, c, i === 0)).join("");
-  if (!html && cp) html = derivedCardHtml(pr, companionSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
+  let html = cards.map((c, i) => serverCardHtml(pr, c, i === 0)).join("");
+  if (!html && cp) html = derivedCardHtml(pr, serverSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
   if (!html) {
     html = !cp && open
-      ? `<div class="sb-empty">Shipyard follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
+      ? `<div class="sb-empty">Shipyard follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.serverState ? "" : " yet"}.</div>`
       : `<div class="sb-empty">Nothing to do right now.</div>`;
   }
   html += (cp?.handled || []).map((c) => {
@@ -338,10 +338,10 @@ function nextSection(pr) {
 const AUTO_BY = { review: "Set by the pre-review", you: "Set by you" };
 
 function autoApproveSection(pr) {
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   const setting = cp?.autoApprove;
   if (!setting || pr.mergedAt || !isReviewPr(pr)) return "";
-  const rule = state.companionState?.config?.approveRereview;
+  const rule = state.serverState?.config?.approveRereview;
   const why = !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
     : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
     : setting.on ? "On because your last review approved it." : "Off because your last review didn't approve it.";
@@ -357,13 +357,13 @@ function askHtml(pr, cp) {
   const key = prKey(pr);
   const q = drafts.get(`ask-${key}`) || "";
   return `<form class="sb-ask" data-ask="${esc(key)}"><input type="text" data-field="ask-${esc(key)}" value="${esc(q)}" placeholder="Ask ${esc(agentName())} about this PR" autocomplete="off"><button type="submit">Ask</button></form>`
-    + (cp.cards || []).filter((c) => c.pass === "ask").map((c) => companionCardHtml(pr, c, false)).join("");
+    + (cp.cards || []).filter((c) => c.pass === "ask").map((c) => serverCardHtml(pr, c, false)).join("");
 }
 
 function sessionSection(pr) {
   if (!state.agent) return "";
   const key = prKey(pr);
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   const newSession = (cls) => `<button type="button" class="${cls}" data-run-pass="new_session" data-node="${esc(pr.id)}" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
   if (!cp) {
     return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
@@ -426,7 +426,7 @@ function activitySection(pr) {
   const key = prKey(pr);
   const entries = [
     ...timelineEntries(detailCache.get(key)?.data),
-    ...(companionPr(pr)?.activity || []).map((a) => ({ at: a.at, text: a.text, shipyard: true })),
+    ...(serverPr(pr)?.activity || []).map((a) => ({ at: a.at, text: a.text, shipyard: true })),
   ].filter((e) => e.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 25);
   if (!entries.length) return "";
   return `<div class="sb-section"><div class="sb-h">Activity</div><ul class="sb-activity">${entries.map((e) =>
@@ -461,7 +461,7 @@ export function renderSidebar() {
   }
 }
 
-// Run a companion request from a button, showing progress on it and any error in a dialog.
+// Run a server request from a button, showing progress on it and any error in a dialog.
 async function busy(btn, fn, title = "Couldn't do that") {
   const original = btn ? btn.innerHTML : "";
   if (btn) { btn.disabled = true; btn.textContent = "…"; }
@@ -489,10 +489,10 @@ $("#sidebar").addEventListener("change", async (e) => {
   if (t.dataset.field) drafts.set(t.dataset.field, t.value);
   if (t.dataset.snooze !== undefined && t.value !== "") {
     const hours = Number(t.value) || null;
-    await busy(null, () => companionCall(`companion/snooze?key=${encodeURIComponent(t.dataset.snooze)}`, { hours }));
+    await busy(null, () => apiCall(`api/snooze?key=${encodeURIComponent(t.dataset.snooze)}`, { hours }));
   }
   if (t.dataset.autoApprove !== undefined) {
-    await busy(null, () => companionCall(`companion/auto-approve?key=${encodeURIComponent(t.dataset.autoApprove)}`, { on: t.checked }));
+    await busy(null, () => apiCall(`api/auto-approve?key=${encodeURIComponent(t.dataset.autoApprove)}`, { on: t.checked }));
   }
 });
 
@@ -503,7 +503,7 @@ $("#sidebar").addEventListener("submit", async (e) => {
   const key = form.dataset.ask;
   const question = fieldValue(`ask-${key}`) || "";
   await busy(form.querySelector("button"), async () => {
-    await companionCall(`companion/ask?key=${encodeURIComponent(key)}`, { question });
+    await apiCall(`api/ask?key=${encodeURIComponent(key)}`, { question });
     drafts.delete(`ask-${key}`);
   }, "Couldn't ask");
 });
@@ -515,12 +515,12 @@ $("#sidebar").addEventListener("click", async (e) => {
   let btn;
   if (t("[data-close]")) return closeSidebar();
   if ((btn = t("[data-continue]"))) {
-    // Log it; the link itself opens the session (or the companion runs the command).
-    companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=continue`, {}).catch(() => {});
+    // Log it; the link itself opens the session (or the server runs the command).
+    apiCall(`api/pr-action?key=${encodeURIComponent(key)}&action=continue`, {}).catch(() => {});
     if (btn.dataset.agentSession) {
       e.preventDefault();
       await busy(btn, async () => {
-        const res = await companionPost(`open-agent?path=${encodeURIComponent(btn.dataset.agentPath)}&session=${encodeURIComponent(btn.dataset.agentSession)}`);
+        const res = await apiPost(`open-agent?path=${encodeURIComponent(btn.dataset.agentPath)}&session=${encodeURIComponent(btn.dataset.agentSession)}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) throw new Error(data.error || `Open in ${agentName()} failed (${res.status}).`);
       });
@@ -530,19 +530,19 @@ $("#sidebar").addEventListener("click", async (e) => {
   if ((btn = t("button.wt-open"))) return busy(btn, () => openInApp(btn.dataset.target));
   if ((btn = t("[data-show-diff]"))) { shownDiffs.add(btn.dataset.showDiff); return renderSidebar(); }
   if ((btn = t("[data-copy]"))) {
-    const card = (companionPr(pr)?.cards || []).find((c) => String(c.id) === btn.dataset.copy);
+    const card = (serverPr(pr)?.cards || []).find((c) => String(c.id) === btn.dataset.copy);
     try { await navigator.clipboard.writeText(card?.raw || ""); btn.textContent = "Copied"; } catch { showError("Copy failed; select the text instead."); }
     return;
   }
   if ((btn = t("[data-run-pass]"))) {
     const node = btn.dataset.node ? `&node=${encodeURIComponent(btn.dataset.node)}` : "";
-    return busy(btn, () => companionCall(`companion/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}${node}`), `Couldn't ask ${agentName()}`);
+    return busy(btn, () => apiCall(`api/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}${node}`), `Couldn't ask ${agentName()}`);
   }
-  if ((btn = t("[data-dismiss]"))) return busy(btn, () => companionCall(`companion/dismiss?card=${btn.dataset.dismiss}`));
-  if ((btn = t("[data-undo]"))) return busy(btn, () => companionCall(`companion/undo?card=${btn.dataset.undo}`), "Couldn't undo");
+  if ((btn = t("[data-dismiss]"))) return busy(btn, () => apiCall(`api/dismiss?card=${btn.dataset.dismiss}`));
+  if ((btn = t("[data-undo]"))) return busy(btn, () => apiCall(`api/undo?card=${btn.dataset.undo}`), "Couldn't undo");
   if ((btn = t("[data-repin]"))) {
     return busy(btn, async () => {
-      const res = await fetch(`companion/sessions?key=${encodeURIComponent(btn.dataset.repin)}`, { cache: "no-store" });
+      const res = await fetch(`api/sessions?key=${encodeURIComponent(btn.dataset.repin)}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't list sessions.");
       sessionChoices = { key: btn.dataset.repin, sessions: data.sessions };
@@ -551,11 +551,11 @@ $("#sidebar").addEventListener("click", async (e) => {
     });
   }
   if (t("[data-repin-cancel]")) { sessionChoices = null; return renderSidebar(); }
-  if ((btn = t("[data-unpin]"))) return busy(btn, () => companionCall(`companion/unpin?key=${encodeURIComponent(btn.dataset.unpin)}`));
+  if ((btn = t("[data-unpin]"))) return busy(btn, () => apiCall(`api/unpin?key=${encodeURIComponent(btn.dataset.unpin)}`));
   if ((btn = t("[data-pin]"))) {
     const session = fieldValue(`pin-${btn.dataset.pin}`);
     return busy(btn, async () => {
-      await companionCall(`companion/pin?key=${encodeURIComponent(btn.dataset.pin)}&session=${encodeURIComponent(session || "")}`);
+      await apiCall(`api/pin?key=${encodeURIComponent(btn.dataset.pin)}&session=${encodeURIComponent(session || "")}`);
       sessionChoices = null;
     });
   }
@@ -569,13 +569,13 @@ $("#sidebar").addEventListener("click", async (e) => {
     return busy(btn, async () => {
       if (btn.dataset.prAction) {
         const done = btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : "";
-        await companionCall(`companion/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${done}`, { payload });
+        await apiCall(`api/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${done}`, { payload });
       } else {
-        await companionCall(`companion/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
+        await apiCall(`api/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
       }
       if (field) drafts.delete(field);
-      // The companion's update and GitHub's catch up in a second or two; show the result now.
-      const cp = pr && companionPr(pr);
+      // The server's update and GitHub's catch up in a second or two; show the result now.
+      const cp = pr && serverPr(pr);
       const cardId = btn.dataset.card || btn.dataset.doneCard;
       const card = (cp?.cards || []).find((c) => String(c.id) === cardId);
       if (action === "rerequest_review") markRequested(pr, payload.reviewers || card?.payload?.reviewers);

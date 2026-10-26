@@ -1,6 +1,6 @@
 // Entry point: starts the page.
 import { $, state } from "./base.js";
-import { connectCompanionEvents, getCurrentRepo, moveLocalViews, refreshOnFocus } from "./server.js";
+import { connectServerEvents, getCurrentRepo, moveLocalViews, refreshOnFocus } from "./server.js";
 import { updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
 import { renderRepoSelect, renderViewsList } from "./settings.js";
@@ -20,7 +20,7 @@ moveLocalViews().finally(() => {
   }
 });
 
-connectCompanionEvents();
+connectServerEvents();
 
 
 setInterval(updateGitHubStatus, 10 * 1000);

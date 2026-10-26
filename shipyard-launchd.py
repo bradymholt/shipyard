@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Run the Shipyard companion at login, as a macOS launchd user agent.
+"""Run Shipyard at login, as a macOS launchd user agent.
 
 macOS only: launchd is the macOS service manager and has no equivalent
 elsewhere. Everything else in Shipyard is cross-platform.
 
     ./shipyard-launchd.py install     write the plists and start the agents
     ./shipyard-launchd.py status      state, pid, restart count, log sizes
-    ./shipyard-launchd.py restart     stop and start the companion
-    ./shipyard-launchd.py logs [-f]   show or follow the companion's output
+    ./shipyard-launchd.py restart     stop and start the server
+    ./shipyard-launchd.py logs [-f]   show or follow the server's output
     ./shipyard-launchd.py uninstall   stop the agents and remove the plists
 
-Two agents are involved: `local.shipyard` runs the companion, and
-`local.shipyard-restart` watches the companion's files and reloads it on save.
+Two agents are involved: `local.shipyard` runs the server, and
+`local.shipyard-restart` watches the server's files and reloads it on save.
 
 `install` is idempotent, so re-run it after moving the repo, upgrading Python,
 or creating `shipyard.config.json`. A plist that is a symlink is left alone and
@@ -32,7 +32,7 @@ from pathlib import Path
 LABEL = "local.shipyard"
 WATCH_LABEL = "local.shipyard-restart"
 REPO = Path(__file__).resolve().parent
-COMPANION = REPO / "shipyard.py"
+SERVER = REPO / "shipyard.py"
 PACKAGE = REPO / "shipyard"
 AGENT_DIR = Path.home() / "Library" / "LaunchAgents"
 PLIST = AGENT_DIR / f"{LABEL}.plist"
@@ -82,7 +82,7 @@ def choose_python(explicit: str | None) -> str:
 
 
 def agent_path(python: str) -> str:
-    # The companion shells out to git and the coding agent CLI, and launchd agents inherit almost no PATH.
+    # The server shells out to git and the coding agent CLI, and launchd agents inherit almost no PATH.
     home = str(Path(python).parent)
     return ":".join([home] + [p for p in BASE_PATH if p != home])
 
@@ -90,7 +90,7 @@ def agent_path(python: str) -> str:
 def service_plist(python: str) -> dict:
     return {
         "Label": LABEL,
-        "ProgramArguments": [python, str(COMPANION)],
+        "ProgramArguments": [python, str(SERVER)],
         "WorkingDirectory": str(REPO),
         "RunAtLoad": True,
         "KeepAlive": True,
@@ -102,9 +102,9 @@ def service_plist(python: str) -> dict:
 
 def watch_plist() -> dict:
     # The package directory changes when an editor saves one of its modules. The
-    # config isn't watched: the companion reloads it itself, so a save doesn't cut
+    # config isn't watched: the server reloads it itself, so a save doesn't cut
     # running passes short.
-    watched = [str(p) for p in (COMPANION, PACKAGE)]
+    watched = [str(p) for p in (SERVER, PACKAGE)]
     return {
         "Label": WATCH_LABEL,
         "ProgramArguments": ["/bin/sh", "-c", f"launchctl kickstart -k {target(LABEL)}"],
@@ -177,7 +177,7 @@ def report_stopped(fields: dict[str, str] | None, respawning: bool = False) -> i
     # throttles respawns to roughly ten seconds and parks the job in
     # `spawn scheduled` in between.
     if respawning or (exit_code.isdigit() and exit_code != "0"):
-        print(f"crash loop: the companion exited with code {exit_code or '?'} "
+        print(f"crash loop: the server exited with code {exit_code or '?'} "
               "and launchd keeps respawning it")
     else:
         print(f"not running: state = {(fields or {}).get('state', 'unknown')}, "
@@ -187,7 +187,7 @@ def report_stopped(fields: dict[str, str] | None, respawning: bool = False) -> i
 
 
 def wait_for_running() -> dict[str, str] | None:
-    """Poll until the companion reports running, or the budget runs out.
+    """Poll until the server reports running, or the budget runs out.
 
     launchd reports `spawn scheduled` for a moment after bootstrap, so a single
     sample right after loading can miss a service that is starting normally.
@@ -203,7 +203,7 @@ def wait_for_running() -> dict[str, str] | None:
 
 
 def verify_service() -> int:
-    """Confirm the companion is up and not respawning. Returns an exit code."""
+    """Confirm the server is up and not respawning. Returns an exit code."""
     before = wait_for_running()
     if before is None:
         print("not running: the agent did not load")
@@ -220,7 +220,7 @@ def verify_service() -> int:
 
     respawning = as_int(after.get("runs")) > as_int(before.get("runs"))
     if after.get("state") == "running" and not respawning:
-        print(f"companion    running (pid {after.get('pid', '?')})")
+        print(f"server       running (pid {after.get('pid', '?')})")
         return 0
     return report_stopped(after, respawning)
 
@@ -259,14 +259,14 @@ def warn_on_foreign_plist() -> None:
     data = read_plist(PLIST)
     if data is None:
         print(f"warning: {PLIST} could not be parsed as a plist")
-    elif str(COMPANION) not in (data.get("ProgramArguments") or []):
-        print(f"warning: {PLIST} does not run {COMPANION}; "
+    elif str(SERVER) not in (data.get("ProgramArguments") or []):
+        print(f"warning: {PLIST} does not run {SERVER}; "
               "edit it where it is managed, or remove it to let this script own it")
 
 
 def cmd_install(args: argparse.Namespace) -> int:
-    if not COMPANION.exists():
-        die(f"cannot find the companion at {COMPANION}")
+    if not SERVER.exists():
+        die(f"cannot find the server at {SERVER}")
 
     python = choose_python(args.python)
     if run([python, "-c", ""]).returncode != 0:
@@ -275,7 +275,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"interpreter  {python}")
-    print(f"companion    {COMPANION}")
+    print(f"server       {SERVER}")
     print(f"service      {PLIST}")
     ensure_plist(PLIST, service_plist(python))
     print(f"watcher      {WATCH_PLIST}")
@@ -287,7 +287,7 @@ def cmd_install(args: argparse.Namespace) -> int:
 
     load(LABEL, PLIST)
     # Verify before loading the watcher: a WatchPaths job can fire as it loads,
-    # and that kickstart would look like the companion respawning on its own.
+    # and that kickstart would look like the server respawning on its own.
     code = verify_service()
 
     load(WATCH_LABEL, WATCH_PLIST)
@@ -322,7 +322,7 @@ def describe(label: str, path: Path, on_demand: bool = False) -> dict[str, str] 
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    print(f"== {LABEL} (companion) ==")
+    print(f"== {LABEL} (server) ==")
     service = describe(LABEL, PLIST)
     for name, path in zip(("stdout", "stderr"), configured_logs(PLIST)):
         size = f"{path.stat().st_size} bytes" if path.exists() else "missing"
@@ -337,7 +337,7 @@ def cmd_status(args: argparse.Namespace) -> int:
               "  ./shipyard-launchd.py install")
         return 1
     if service.get("state") != "running":
-        print("\nThe companion is loaded but not running. Check what it printed "
+        print("\nThe server is loaded but not running. Check what it printed "
               "on the way down:\n  ./shipyard-launchd.py logs")
         return 1
     return 0
@@ -388,20 +388,20 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Manage the Shipyard companion as a macOS launchd agent.")
+        description="Manage Shipyard as a macOS launchd agent.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     install = sub.add_parser("install", help="write the plists and start the agents")
     install.add_argument("--python", metavar="PATH",
-                         help="absolute path to the interpreter to run the companion")
+                         help="absolute path to the interpreter to run the server")
     install.set_defaults(func=cmd_install)
 
     sub.add_parser("status", help="show state, pid, restart count, and logs") \
         .set_defaults(func=cmd_status)
-    sub.add_parser("restart", help="stop and start the companion") \
+    sub.add_parser("restart", help="stop and start the server") \
         .set_defaults(func=cmd_restart)
 
-    logs = sub.add_parser("logs", help="show the companion's output")
+    logs = sub.add_parser("logs", help="show the server's output")
     logs.add_argument("-f", "--follow", action="store_true", help="keep watching")
     logs.add_argument("-n", "--lines", type=int, default=20, help="lines to show")
     logs.set_defaults(func=cmd_logs)

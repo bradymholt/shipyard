@@ -2,7 +2,7 @@
 
 A focused dashboard for staying on top of GitHub pull requests — reviewer state, CI
 status, stacked PRs, and the work needing your attention, in one place. Runs locally,
-served by its companion process. The simple hosted dashboard it grew out of lives on
+served by its own local server. The simple hosted dashboard it grew out of lives on
 separately as Harbor (https://github.com/bradymholt/harbor); Shipyard has no hosted mode.
 
 Claude Code, Codex, and other agents all read this file. Never create a separate
@@ -18,41 +18,41 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
   merged history), `prs.js` (review state, next steps, lanes), `board.js`, `sidebar.js`,
   `settings.js`, and `html.js` (icons, escaping, formatting). A module can't assign to
   another's export, so shared mutable values live on `state`.
-- **`shipyard.py`** — thin launcher for the local companion (Python 3 stdlib
+- **`shipyard.py`** — thin launcher for the server (Python 3 stdlib
   only). Keep it as the entry point: the run command, the launchd plist, and these docs
   all point at it.
-- **`shipyard/`** — the companion. It serves the page, pushes your local checkouts with
+- **`shipyard/`** — the server. It serves the page, pushes your local checkouts with
   its state, runs branch and worktree actions, and watches your PRs as a shipping
   orchestrator. The flow runs one
   way: `poll.py` (GitHub GraphQL, token from `gh auth token`) produces snapshots,
   `events.py` diffs them into named events, `rules.py` turns events into chips, passes,
-  and proposed cards, and `companion.py` runs passes through `agents/` (one adapter per
+  and proposed cards, and `orchestrator.py` runs passes through `agents/` (one adapter per
   coding agent: Claude Code, Codex), stores everything in SQLite (`state.py`), and pushes
   the page's state over Server-Sent Events (`server.py`). `actions.py` holds the GitHub
   calls behind card buttons; `passes/*.md` are the prompt templates. Rules never call an
   agent directly, and nothing posts under the user's name without the page showing the
   text first. Binds to localhost; discovery is read-only.
-- **`shipyard.config.json`** — local companion config (scan roots, app launcher, coding agent,
+- **`shipyard.config.json`** — server config (scan roots, app launcher, coding agent,
   `rules`, and the `auto` trust flags). Copy from `shipyard.config.example.json`; every
   setting is validated in `shipyard/config.py`.
-- **`tests/`** — `python3 -m unittest discover tests` for the companion; `node
+- **`tests/`** — `python3 -m unittest discover tests` for the server; `node
   tests/ui/smoke.mjs` drives the page in Chromium against `tests/ui/demo_server.py` (the
   real server over fake GitHub and agent data).
-- **`shipyard-launchd.py`** — macOS-only setup helper that runs the companion as a
+- **`shipyard-launchd.py`** — macOS-only setup helper that runs the server as a
   `launchd` agent (`install`, `status`, `restart`, `logs`, `uninstall`). Manages two
-  labels: `local.shipyard` for the companion and `local.shipyard-restart`, a `WatchPaths`
+  labels: `local.shipyard` for the server and `local.shipyard-restart`, a `WatchPaths`
   agent that reloads it on save. A plist that is a symlink belongs to an external manager,
   so it is loaded but never rewritten. Nothing else depends on this file; the app never
   calls it. Keep platform-specific service code here rather than in `shipyard.py`.
 
-The companion makes every GitHub call, with the `gh auth token` token; the page never
-talks to GitHub or holds a token. The page builds its lists from the PRs the companion
-pushes, filtered to the current view, including your latest merges, which the companion
-searches every 15 minutes and pushes as their own event. It asks `/companion/merged` only
-for a view's older merges (Show more), reads a PR's timeline from `/companion/timeline`,
-and acts through `/companion/pr-action`.
+The server makes every GitHub call, with the `gh auth token` token; the page never
+talks to GitHub or holds a token. The page builds its lists from the PRs the server
+pushes, filtered to the current view, including your latest merges, which the server
+searches every 15 minutes and pushes as their own event. It asks `/api/merged` only
+for a view's older merges (Show more), reads a PR's timeline from `/api/timeline`,
+and acts through `/api/pr-action`.
 Settings the page edits live in `shipyard.config.json` next to the hand-edited ones: the
-page saves them through `/companion/settings`, which only accepts keys in `PAGE_SETTINGS`
+page saves them through `/api/settings`, which only accepts keys in `PAGE_SETTINGS`
 (`config.py`), checks them like any other setting, and refuses when the file changed since
 the page loaded. A new page setting goes in `PAGE_SETTINGS` and `validate_config`. Machine
 state (PRs, cards, pins, the token, which view is showing) lives in `shipyard.db`; display
@@ -85,7 +85,7 @@ done; while a new check is failing, debug it with a short script that runs just 
 the full suite. Keep
 unrelated work out of the commit, and stop rather than merge when something looks wrong.
 
-The local companion serves the page from the main checkout, so a merge reaches it only
+The server serves the page from the main checkout, so a merge reaches it only
 after that checkout pulls. Finish with `git pull --ff-only` there. The reload-on-save watcher
-restarts the companion when the pull changes `shipyard.py` or `shipyard/`; if the companion is
+restarts the server when the pull changes `shipyard.py` or `shipyard/`; if the server is
 still on its old process afterward, run `python3 shipyard-launchd.py restart`.

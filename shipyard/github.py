@@ -1,4 +1,4 @@
-"""A small GitHub client for the companion, which makes every GitHub call for the page.
+"""A small GitHub client for the server, which makes every GitHub call for the page.
 The token comes from `gh auth token` and never reaches the browser."""
 import json
 import shutil
@@ -55,7 +55,7 @@ class GitHub:
                 "Accept": accept,
                 "Content-Type": "application/json",
                 "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "shipyard-companion",
+                "User-Agent": "shipyard",
             })
             try:
                 with self._open(req, timeout=30) as res:

@@ -1,4 +1,4 @@
-"""The companion's HTTP side: serves the page, the companion's state with your local
+"""The server's HTTP side: serves the page, the server's state with your local
 checkouts (once as JSON and as a Server-Sent Events stream), the GitHub reads the page asks for
 (merged history, a PR's timeline), and the POSTs behind every button.
 
@@ -23,7 +23,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     roots = []
     config = DEFAULT_CONFIG
     session_token = ""
-    companion = None
+    orchestrator = None
     STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png",
                     "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
@@ -37,11 +37,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main",
                       "/open-default-main", "/open-app", "/open-agent"}
     CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main"}
-    COMPANION_ACTIONS = {"/companion/snooze", "/companion/pin", "/companion/unpin", "/companion/ask", "/companion/run-pass",
-                         "/companion/card-action", "/companion/dismiss", "/companion/undo",
-                         "/companion/pr-action", "/companion/auto-approve",
-                         "/companion/check-now", "/companion/rescan-worktrees", "/companion/settings",
-                         "/companion/current-view"}
+    API_ACTIONS = {"/api/snooze", "/api/pin", "/api/unpin", "/api/ask", "/api/run-pass",
+                         "/api/card-action", "/api/dismiss", "/api/undo",
+                         "/api/pr-action", "/api/auto-approve",
+                         "/api/check-now", "/api/rescan-worktrees", "/api/settings",
+                         "/api/current-view"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -106,19 +106,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
         if path in ("/", "/index.html"):
             return self._page()
-        if path == "/companion/state":
-            return self._json(self.companion.page_state())
-        if path == "/companion/events":
+        if path == "/api/state":
+            return self._json(self.orchestrator.page_state())
+        if path == "/api/events":
             return self._events()
-        if path == "/companion/timeline":
+        if path == "/api/timeline":
             q = parse_qs(parsed.query)
-            return self._companion_call(lambda c: c.timeline((q.get("id") or [""])[0]))
-        if path == "/companion/merged":
+            return self._api_call(lambda c: c.timeline((q.get("id") or [""])[0]))
+        if path == "/api/merged":
             q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
-            return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
-        if path == "/companion/sessions":
+            return self._api_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
+        if path == "/api/sessions":
             q = parse_qs(parsed.query)
-            return self._companion_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))
+            return self._api_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))
         if self._is_static(path):
             return super().do_GET()
         return self._not_found()
@@ -126,8 +126,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _page(self):
         """index.html with the session token and config written in, so the page can POST
         without first asking for them."""
-        boot = json.dumps({**page_config(self.companion.config), "token": self.session_token,
-                           "views": self.companion.views()}).replace("<", "\\u003c")
+        boot = json.dumps({**page_config(self.orchestrator.config), "token": self.session_token,
+                           "views": self.orchestrator.views()}).replace("<", "\\u003c")
         tag = f'<script id="shipyard-boot" type="application/json">{boot}</script>\n</head>'
         html = Path(self.directory, "index.html").read_text().replace("</head>", tag, 1)
         body = html.encode()
@@ -149,13 +149,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         seen = sent = sent_poll = sent_merged = None
         try:
             while True:
-                if seen != self.companion.version:
-                    seen = self.companion.version
+                if seen != self.orchestrator.version:
+                    seen = self.orchestrator.version
                     # Merged history is large and rarely changes, so it goes out on its own.
-                    if sent_merged != self.companion.merged_version:
-                        sent_merged = self.companion.merged_version
-                        self.wfile.write(f"event: merged\ndata: {json.dumps(self.companion.recent_merged)}\n\n".encode())
-                    state = self.companion.page_state()
+                    if sent_merged != self.orchestrator.merged_version:
+                        sent_merged = self.orchestrator.merged_version
+                        self.wfile.write(f"event: merged\ndata: {json.dumps(self.orchestrator.recent_merged)}\n\n".encode())
+                    state = self.orchestrator.page_state()
                     status = state.get("status") or {}
                     # Every poll bumps the version and lastPoll; only the rest is worth a re-render.
                     content = json.dumps({**state, "version": None,
@@ -171,7 +171,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 else:
                     self.wfile.write(b": keepalive\n\n")
                 self.wfile.flush()
-                self.companion.wait_for_change(seen, SSE_KEEPALIVE)
+                self.orchestrator.wait_for_change(seen, SSE_KEEPALIVE)
         except (BrokenPipeError, ConnectionResetError, OSError):
             return
 
@@ -182,9 +182,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return super().do_HEAD()
         return self._not_found()
 
-    def _companion_call(self, fn):
+    def _api_call(self, fn):
         try:
-            return self._json(fn(self.companion))
+            return self._json(fn(self.orchestrator))
         except (LookupError, ValueError) as e:
             return self._json({"ok": False, "error": str(e)}, 400)
         except Exception as e:  # GitHub or git failures: show the reason on the card
@@ -192,18 +192,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS:
+        if parsed.path not in self.BRANCH_ACTIONS | self.API_ACTIONS:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Request was not authorized. Reload the page and try again."}, 403)
         q = parse_qs(parsed.query)
         arg = lambda name: (q.get(name) or [""])[0]  # noqa: E731
-        if parsed.path in self.COMPANION_ACTIONS:
+        if parsed.path in self.API_ACTIONS:
             try:
                 body = self._body()
             except ValueError as e:
                 return self._json({"ok": False, "error": str(e)}, 400)
-            return self._companion(parsed.path.rsplit("/", 1)[1], arg, body)
+            return self._api(parsed.path.rsplit("/", 1)[1], arg, body)
         if parsed.path == "/new-task":
             result = worktrees.new_task_worktree(arg("repo"), arg("branch"), self.roots)
         elif parsed.path == "/new-branch-main":
@@ -217,10 +217,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             result = worktrees.launch_agent(arg("path"), self.roots, self.config, arg("session") or None)
         if result.get("ok") and parsed.path in self.CHECKOUT_ACTIONS:
-            self.companion.rescan_worktrees()
+            self.orchestrator.rescan_worktrees()
         return self._json(result, 200 if result.get("ok") else 500)
 
-    def _companion(self, name, arg, body):
+    def _api(self, name, arg, body):
         def card_id():
             try:
                 return int(arg("card"))
@@ -244,7 +244,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),
         }
-        return self._companion_call(calls[name])
+        return self._api_call(calls[name])
 
     def log_message(self, *args):
         pass

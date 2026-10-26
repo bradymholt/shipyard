@@ -1,4 +1,4 @@
-"""Run the real companion server against fake GitHub and agent data, for the browser
+"""Run the real Shipyard server against fake GitHub and agent data, for the browser
 smoke test (tests/ui/smoke.mjs) or to look at the sidebar without touching GitHub:
 
     python3 tests/ui/demo_server.py 4399
@@ -19,10 +19,10 @@ HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parent.parent), str(HERE.parent)]
 
 from fixtures import check_run, pr_node  # noqa: E402
-from test_companion import FakeAgent, FakeGitHub  # noqa: E402
+from test_orchestrator import FakeAgent, FakeGitHub  # noqa: E402
 
 from shipyard.agents.claude_code import ClaudeCode  # noqa: E402
-from shipyard.companion import Companion  # noqa: E402
+from shipyard.orchestrator import Orchestrator  # noqa: E402
 from shipyard.config import REPO_DIR, validate_config  # noqa: E402
 from shipyard.server import Handler  # noqa: E402
 
@@ -180,13 +180,13 @@ def main():
             "workspace": None, "dirty": False, "activity": 0, "session": {"id": "s-open", "updated": 0}},
            {"repo": "o/r", "branch": "me/old-feature", "path": str(merged_wt), "main": False,
             "workspace": None, "dirty": False, "activity": 0, "session": None}]
-    for target in ("shipyard.companion.adapter_for", "shipyard.server.worktrees.discover",
-                   "shipyard.companion.worktrees.discover", "shipyard.companion.worktrees.review_worktree"):
-        value = {"shipyard.companion.adapter_for": agent,
-                 "shipyard.companion.worktrees.review_worktree": {"ok": True, "path": str(checkout)}}.get(target, wts)
+    for target in ("shipyard.orchestrator.adapter_for", "shipyard.server.worktrees.discover",
+                   "shipyard.orchestrator.worktrees.discover", "shipyard.orchestrator.worktrees.review_worktree"):
+        value = {"shipyard.orchestrator.adapter_for": agent,
+                 "shipyard.orchestrator.worktrees.review_worktree": {"ok": True, "path": str(checkout)}}.get(target, wts)
         mock.patch(target, return_value=value).start()
 
-    comp = Companion(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
+    comp = Orchestrator(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
                      config_path=tmp / "shipyard.config.json")
     comp.poll_once()
     lookups.update(state="MERGED", reviewDecision="APPROVED", updatedAt=ago(minutes=10), mergedAt=ago(minutes=10),
@@ -198,11 +198,11 @@ def main():
     Handler.roots = [str(tmp / "dev")]
     Handler.config = comp.config
     Handler.session_token = "demo-token"
-    Handler.companion = comp
+    Handler.orchestrator = comp
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))
     httpd.daemon_threads = True
-    print(f"demo companion on http://localhost:{port}", flush=True)
+    print(f"demo server on http://localhost:{port}", flush=True)
     comp.drain_queue()
     try:
         httpd.serve_forever()

@@ -1,7 +1,7 @@
 // The settings dialog's views and the Start work dialog.
 import { $, state } from "./base.js";
 import { esc, REMOVE_ICON } from "./html.js";
-import { companionPost, getCurrentRepo, getRepos, saveViews } from "./server.js";
+import { apiPost, getCurrentRepo, getRepos, saveViews } from "./server.js";
 import { refreshNow, resetData, viewTargets } from "./data.js";
 import { launchTarget, openInApp, render } from "./board.js";
 
@@ -54,7 +54,7 @@ $("#stale-retry-btn").addEventListener("click", refreshNow);
 // The repo picker offers local clones under the current view only, so it matches the
 // view selector: a repo view contributes just itself; an org/username view contributes
 // every local clone under it. Repos you worked in most recently sort first — by the
-// companion's per-worktree activity stamp, so work done outside Shipyard counts too —
+// server's per-worktree activity stamp, so work done outside Shipyard counts too —
 // and the most recent one is preselected. Clones with no activity fall in alphabetically.
 function ntRepoOptionsHtml() {
   const localRepos = [...new Set(Object.values(state.worktrees).map((w) => w.repo).filter(Boolean))];
@@ -142,7 +142,7 @@ $("#new-task-form").addEventListener("submit", async (e) => {
     const query = blankSlate
       ? `${endpoint}?repo=${encodeURIComponent(repo)}`
       : `${endpoint}?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`;
-    const res = await companionPost(query);
+    const res = await apiPost(query);
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.ok) {
       await openInApp(launchTarget(data));

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local companion for Shipyard.
+"""Server for Shipyard.
 
 Serves the dashboard and a /worktrees.json endpoint so the page can offer links that
 open branches in your configured app or IDE, and watches your PRs on GitHub: it turns

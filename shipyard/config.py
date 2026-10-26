@@ -1,5 +1,5 @@
 """shipyard.config.json: folders to scan, the app launcher, the coding agent, and the
-rule and trust settings that decide what the companion does on its own.
+rule and trust settings that decide what the server does on its own.
 
     {
       "roots": ["~/dev"],      // folders to scan for git clones (required,
@@ -77,7 +77,7 @@ RULE_PROMPTS = {"address_feedback"}
 PASS_MODES = ("auto", "ask", False)
 
 # Trust flags: every action type but re-review approval and re-running flaky checks starts manual. "when" sets the confidence an
-# agent's proposal needs before the companion presses the button itself.
+# agent's proposal needs before the server presses the button itself.
 AUTO_DEFAULTS = {
     "rerun_checks": True,
     "enable_auto_merge": False,

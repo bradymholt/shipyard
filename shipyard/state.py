@@ -1,4 +1,4 @@
-"""The companion's memory, in one SQLite file next to shipyard.config.json: the last
+"""The server's memory, in one SQLite file next to shipyard.config.json: the last
 snapshot of each PR, events already handled, pins, snoozes, cards, passes, activity,
 how often each action ran automatically on each PR, whether each may be approved
 on a re-review, the page's session token, and which view is showing."""
@@ -51,7 +51,7 @@ class State:
         self.lock = threading.RLock()
         with self.lock:
             self.db.executescript(SCHEMA)
-            # A restart (under launchd, saving the companion's code reloads it) cuts running
+            # A restart (under launchd, saving the server's code reloads it) cuts running
             # passes short. Re-running one could add a second turn to your session, so
             # mark it failed; its card offers Try again.
             self.db.execute("UPDATE passes SET status = 'failed', error = 'interrupted by a restart' "
@@ -86,7 +86,7 @@ class State:
 
     def session_token(self):
         """The token the page sends with every POST. It outlives restarts, so an open tab
-        keeps working when saving the companion's code reloads it."""
+        keeps working when saving the server's code reloads it."""
         with self.lock:
             row = self.db.execute("SELECT value FROM meta WHERE key = 'session_token'").fetchone()
             if row:
