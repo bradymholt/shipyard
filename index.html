@@ -172,7 +172,6 @@
   /* ---------- page body ---------- */
   .container { max-width: 71.25rem; margin: 0 auto; padding: 1rem 1.25rem 3.5rem; }
 
-  #token-input { font: 400 0.75rem var(--mono); }
   .hint { color: var(--fg-muted); font-size: 0.75rem; }
   .hint code { font-family: var(--mono); font-size: 0.6875rem; background: var(--bg-inset); padding: 0 0.3125rem; border-radius: 0.25rem; }
   .hidden { display: none !important; }
@@ -188,8 +187,6 @@
   .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
   #new-task-form h2, #settings-form h2 { margin: 0 0 0.25rem; font: 700 1.0625rem var(--sans); }
   #new-task-form .hint { display: block; margin-bottom: 0.875rem; }
-  #settings-form .scope-hint { display: block; margin: 0.375rem 0 0; }
-  .settings-divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
   .views-list { list-style: none; margin: 0.375rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
   .view-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem 0.375rem 0.625rem; border: 1px solid var(--border); border-radius: 0.375rem; }
   .view-name { flex: 1; font: 400 0.75rem var(--mono); color: var(--fg); }
@@ -203,11 +200,10 @@
   .nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
   .nt-optional { font-weight: 400; font-size: 0.6875rem; color: var(--fg-faint); text-transform: none; }
   .nt-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
-  .nt-actions #token-status, .nt-actions .spacer { flex: 1; margin: 0; }
+  .nt-actions .spacer { flex: 1; margin: 0; }
   .nt-status { margin: 0.75rem 0 0; }
   .nt-status:empty { display: none; }
   .nt-status.error { color: var(--red-text); }
-  #token-status.token-bad { color: var(--red-text); font-weight: 600; }
 
   /* ---------- list ---------- */
   .stale-banner {
@@ -675,16 +671,6 @@
   <dialog id="settings-dialog">
     <form id="settings-form" method="dialog">
       <h2>Settings</h2>
-      <label class="nt-field">Access token
-        <input type="password" id="token-input" placeholder="ghp_… or github_pat_…" autocomplete="off">
-      </label>
-      <p class="hint scope-hint">Needs <code>repo</code> scope (classic) or Pull requests: read and write (fine-grained; write is used for the auto-merge toggle and marking drafts ready). Your token and recent dashboard data stay in this browser.</p>
-      <div class="nt-actions">
-        <span id="token-status" class="hint"></span>
-        <button type="button" id="clear-token-btn">Clear</button>
-        <button type="button" id="save-token-btn" class="primary">Save</button>
-      </div>
-      <hr class="settings-divider">
       <div class="nt-field">Views
         <ul id="views-list" class="views-list"></ul>
         <div class="add-view-row">
@@ -699,7 +685,6 @@
   <div id="stale-banner" class="stale-banner hidden">
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>
     <span class="stale-text"><strong id="stale-headline"></strong><span class="stale-detail" id="stale-detail"></span></span>
-    <button type="button" id="stale-token-btn" class="hidden">Update token</button>
     <button type="button" id="stale-retry-btn">Retry</button>
   </div>
 
@@ -714,7 +699,7 @@
 
   <div class="list">
     <div id="list-body">
-      <div class="empty">Add a token and a repo, org, or user in settings (⚙) to get started.</div>
+      <div class="empty">Add a repo, org, or user in settings (⚙) to get started.</div>
     </div>
   </div>
 
@@ -736,7 +721,6 @@
   "use strict";
 
   const LS = {
-    TOKEN: "ghpr.token",
     REPOS: "ghpr.repos",
     REPO: "ghpr.currentRepo",
     FILTER: "ghpr.filter",
@@ -808,7 +792,6 @@
     updateGitHubStatus();
   }
 
-  const getToken = () => localStorage.getItem(LS.TOKEN) || "";
   const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
   const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
   const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
@@ -816,7 +799,7 @@
 
   function restoreDashboardCache() {
     const target = getCurrentRepo();
-    if (!getToken() || !target) return false;
+    if (!target) return false;
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey(target)) || "null");
       if (!cached || cached.version !== CACHE_VERSION || Date.now() - cached.savedAt > CACHE_MAX_AGE) {
@@ -857,13 +840,6 @@
         reviewHistoryLoaded: state.reviewHistoryLoaded,
       }));
     } catch { /* storage unavailable or full: live data still works */ }
-  }
-
-  function clearDashboardCaches() {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(LS.CACHE_PREFIX)) localStorage.removeItem(key);
-    }
   }
 
   function githubAge(updatedAt) {
@@ -911,11 +887,10 @@
     banner.classList.toggle("hidden", !show);
     if (!show) return;
     $("#stale-headline").textContent = state.loadErrorAuth
-      ? "Not updating — GitHub rejected your token"
+      ? "Not updating — GitHub rejected the companion's gh token"
       : "Not updating — the last GitHub refresh failed";
     const age = state.githubUpdatedAt ? `Showing data from ${githubAge(state.githubUpdatedAt)}. ` : "";
     $("#stale-detail").textContent = `${age}${state.loadError || ""}`;
-    $("#stale-token-btn").classList.toggle("hidden", !state.loadErrorAuth);
   }
 
   let githubAgeTimer = null;
@@ -1137,22 +1112,23 @@
       if (attempt > 0) await sleep(400 * 2 ** (attempt - 1));
       let res;
       try {
-        res = await fetch("https://api.github.com/graphql", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ query, variables }),
-        });
+        res = await companionPost("github/graphql", true, { query, variables });
       } catch {
-        lastErr = new Error("Network error reaching GitHub. Check your connection.");
+        lastErr = new Error("Couldn't reach the Shipyard companion. Is it still running?");
         continue;
       }
-      if (res.status === 401) throw authError("GitHub rejected the saved token (401) — it was revoked, expired, or edited.");
+      if (res.status === 401) {
+        const message = (await res.json().catch(() => null))?.message;
+        throw authError(`GitHub rejected the companion's gh token (401)${message ? ` — ${message}` : ""}. Run \`gh auth login\`, then refresh.`);
+      }
       if (RETRYABLE.has(res.status)) {
         lastErr = new Error(`GitHub is temporarily unavailable (${res.status}). Try refreshing in a moment.`);
         continue;
       }
       if (!res.ok) {
-        const message = (await res.json().catch(() => null))?.message || res.statusText;
+        const body = await res.json().catch(() => null);
+        if (body?.ok === false) throw new Error(body.error);
+        const message = body?.message || res.statusText;
         if (res.status === 429 || (res.status === 403 && (res.headers.get("retry-after") ||
             res.headers.get("x-ratelimit-remaining") === "0" || /rate limit/i.test(message)))) throw backOff(res, message);
         throw new Error(`GitHub API error: ${res.status}${message ? ` — ${message}` : ""}`);
@@ -1210,7 +1186,6 @@
 
   function requireTarget() {
     const target = getCurrentRepo();
-    if (!getToken()) throw new Error("No access token set. Open settings (⚙) and save a token.");
     if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
     return target;
   }
@@ -2126,7 +2101,7 @@
     // an error) rather than the empty "No pull requests match." message.
     const dataReady = state.targetedLoaded;
     if (!dataReady) {
-      if (!getToken() || !getCurrentRepo()) return;  // not configured: keep the setup prompt
+      if (!getCurrentRepo()) return;  // not configured: keep the setup prompt
       $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
       listBody.innerHTML = state.loadError
         ? loadErrorHtml()
@@ -2146,8 +2121,7 @@
   }
 
   function loadErrorHtml() {
-    const hint = state.loadErrorAuth ? " Save a new token in settings (⚙)." : "";
-    return `<div class="error-box">${esc(state.loadError + hint)}</div>`;
+    return `<div class="error-box">${esc(state.loadError)}</div>`;
   }
 
   // `history` also re-searches the merged feeds, which otherwise refresh every
@@ -2212,7 +2186,6 @@
       state.githubRefreshFailed = true;
       console.warn("Shipyard: GitHub refresh failed —", err.message);
       if (err.retryAt) setTimeout(() => load(true), err.retryAt - Date.now() + 1000);
-      renderTokenStatus();
       updateGitHubStatus();
       render();
     } finally {
@@ -2228,14 +2201,6 @@
     sel.innerHTML = repos.length
       ? repos.map((r) => `<option value="${esc(r)}" ${r === current ? "selected" : ""}>${esc(r)}</option>`).join("")
       : '<option value="">— add a view in settings —</option>';
-  }
-
-  function renderTokenStatus() {
-    const el = $("#token-status");
-    el.textContent = !getToken() ? "No token saved"
-      : state.loadErrorAuth ? "Token rejected by GitHub — save a new one"
-      : "Token saved ✓";
-    el.classList.toggle("token-bad", Boolean(getToken()) && state.loadErrorAuth);
   }
 
   const REMOVE_ICON = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M4.22 4.22a.75.75 0 0 1 1.06 0L8 6.94l2.72-2.72a.75.75 0 1 1 1.06 1.06L9.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L8 9.06l-2.72 2.72a.75.75 0 0 1-1.06-1.06L6.94 8 4.22 5.28a.75.75 0 0 1 0-1.06Z"/></svg>';
@@ -2279,12 +2244,6 @@
   $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
   $("#refresh-btn").addEventListener("click", () => { load(true, true); loadWorktrees(); });
   $("#stale-retry-btn").addEventListener("click", () => { load(true, true); loadWorktrees(); });
-  $("#stale-token-btn").addEventListener("click", () => {
-    renderViewsList();
-    renderTokenStatus();
-    $("#settings-dialog").showModal();
-    $("#token-input").focus();
-  });
 
   // ---------- new task ----------
   // The repo picker offers local clones under the current view only, so it matches the
@@ -2388,24 +2347,6 @@
     }
   });
 
-  $("#save-token-btn").addEventListener("click", () => {
-    const v = $("#token-input").value.trim();
-    if (!v) return;
-    clearDashboardCaches();
-    resetData();
-    localStorage.setItem(LS.TOKEN, v);
-    $("#token-input").value = "";
-    renderTokenStatus();
-    load(true);
-  });
-  $("#clear-token-btn").addEventListener("click", () => {
-    localStorage.removeItem(LS.TOKEN);
-    clearDashboardCaches();
-    resetData();
-    renderTokenStatus();
-    render();
-  });
-
   $("#add-repo-btn").addEventListener("click", () => {
     const targets = viewTargets($("#add-repo-input").value)
       .map((t) => t.replace(/^https:\/\/github\.com\//, "").replace(/\/$/, ""));
@@ -2426,7 +2367,6 @@
     load(restored);
   });
   $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
-  $("#token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#save-token-btn").click(); });
 
   $("#repo-select").addEventListener("change", (e) => {
     localStorage.setItem(LS.REPO, e.target.value);
@@ -2738,7 +2678,7 @@
   // The timeline is read on demand, once per PR update.
   async function loadDetail(key) {
     const pr = findPr(key);
-    if (!pr || !getToken()) return;
+    if (!pr) return;
     const cached = detailCache.get(key);
     if (cached && (cached.loading || cached.updatedAt === pr.updatedAt)) return;
     detailCache.set(key, { updatedAt: pr.updatedAt, loading: true, data: cached?.data || null });
@@ -3155,7 +3095,7 @@
     if (btn) { btn.disabled = true; btn.textContent = "…"; }
     try {
       await fn();
-      setTimeout(() => { if (getToken() && getCurrentRepo()) load(true); }, 2500);
+      setTimeout(() => { if (getCurrentRepo()) load(true); }, 2500);
     } catch (err) {
       showError(err.message, title);
     } finally {
@@ -3319,7 +3259,7 @@
   const COMPANION_SAFETY_MS = 15 * 60 * 1000;
   const SELF_POLL_MS = 50 * 1000;
   function refreshIfDue() {
-    if (!getToken() || !getCurrentRepo()) return;
+    if (!getCurrentRepo()) return;
     const age = Date.now() - (state.githubUpdatedAt || 0);
     if (companionLive() ? age >= COMPANION_SAFETY_MS : !document.hidden && age >= SELF_POLL_MS) load(true);
   }
@@ -3327,8 +3267,8 @@
   // ---------- init ----------
   renderRepoSelect();
   renderViewsList();
-  renderTokenStatus();
-  if (getToken() && getCurrentRepo()) {
+  localStorage.removeItem("ghpr.token");
+  if (getCurrentRepo()) {
     const restored = restoreDashboardCache();
     if (restored) render();
     load(restored);
