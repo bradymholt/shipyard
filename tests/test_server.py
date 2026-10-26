@@ -20,6 +20,8 @@ class FakeCompanion:
         self.changed = threading.Event()
         self.prs = {"o/r#1": {"chip": None}}
         self.status = {"lastPoll": "t1"}
+        self.recent_merged = {"mine": [{"number": 9}], "review": []}
+        self.merged_version = 1
 
     def page_state(self):
         return {"version": self.version, "status": dict(self.status), "prs": self.prs}
@@ -144,6 +146,8 @@ class Endpoints(ServerCase):
                     continue
                 lines.append(line.strip())
 
+        merged = read_event()
+        self.assertEqual((merged[0], json.loads(merged[1][len("data: "):])["mine"]), ("event: merged", [{"number": 9}]))
         first = read_event()
         self.assertEqual(first[0], "event: state")
         self.assertEqual(json.loads(first[1][len("data: "):])["version"], 1)
@@ -161,6 +165,7 @@ class Endpoints(ServerCase):
         second = bump(prs={"o/r#1": {"chip": {"kind": "nudge"}}})
         self.assertEqual(second[0], "event: state")
         self.assertEqual(json.loads(second[1][len("data: "):])["version"], 4)
+        self.assertEqual(bump(merged_version=2)[0], "event: merged")
         conn.close()
 
     def test_rescans_worktrees_on_request_and_has_no_worktrees_json(self):

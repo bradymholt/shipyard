@@ -2,13 +2,11 @@
 import { $, state } from "./base.js";
 import { githubAge } from "./html.js";
 import { companionCall, companionGet, getCurrentRepo } from "./server.js";
-import { render } from "./board.js";
 
 export function resetData() {
   state.mergedHistory = { mine: [], review: [] };
-  state.mergedCursor = null;
-  state.reviewedMergedCursor = null;
-  state.historyFetchedAt = null;
+  state.mergedCursor = undefined;
+  state.reviewedMergedCursor = undefined;
   state.mergedExtra = 0;
   applyServerPrs();
 }
@@ -30,10 +28,10 @@ export function updateGitHubStatus() {
   const problem = githubProblem();
   const stale = !problem && !!updatedAt && Date.now() - updatedAt > STALE_AFTER;
   const status = $("#github-status");
-  status.classList.toggle("hidden", state.loadingHistory || (!updatedAt && !problem));
+  status.classList.toggle("hidden", state.refreshing || (!updatedAt && !problem));
   status.classList.toggle("failed", !!problem);
   status.classList.toggle("stale", stale);
-  $("#load-bar").classList.toggle("hidden", !state.loadingHistory);
+  $("#load-bar").classList.toggle("hidden", !state.refreshing);
   el.textContent = problem
     ? updatedAt ? `Refresh failed · ${githubAge(updatedAt)}` : "Refresh failed"
     : updatedAt ? `Updated ${githubAge(updatedAt)}` : "";
@@ -67,7 +65,6 @@ export const MERGED_STEP = 10;
 // A page can be spent entirely on merges that get filtered out, so walk a few.
 export const MERGED_MAX_PAGES_PER_CLICK = 4;
 
-const HISTORY_EVERY_MS = 15 * 60 * 1000;
 
 const byMergedAt = (prs) => prs.filter((pr) => pr.mergedAt)
   .sort((a, b) => new Date(b.mergedAt) - new Date(a.mergedAt));
@@ -99,10 +96,9 @@ export const MERGED_SEARCHES = {
   review: { cursorKey: "reviewedMergedCursor" },
 };
 
-export async function fetchMergedPage(kind, after, fresh = false) {
+export async function fetchMergedPage(kind, after) {
   const params = new URLSearchParams({ view: requireTarget(), kind });
   if (after) params.set("after", after);
-  if (fresh) params.set("fresh", "1");
   const data = await companionGet(`companion/merged?${params}`);
   Object.assign(state.ownerTypes, data.owners);
   return data;
@@ -132,8 +128,9 @@ export function applyServerPrs() {
   const byUpdated = (a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "");
   state.prs = prs.sort(byUpdated);
   state.reviewedPrs = reviewed.sort(byUpdated);
-  state.merged = mergeMergedLists(merged, state.mergedHistory.mine);
-  state.reviewedMerged = mergeMergedLists(reviewedMerged, state.mergedHistory.review);
+  const inView = (prs) => prs.filter((pr) => inScope(prKey(pr)));
+  state.merged = mergeMergedLists(merged, inView(state.recentMerged.mine), state.mergedHistory.mine);
+  state.reviewedMerged = mergeMergedLists(reviewedMerged, inView(state.recentMerged.review), state.mergedHistory.review);
 }
 
 export const prKey = (pr) => `${pr.repository?.nameWithOwner || ""}#${pr.number}`;
@@ -144,34 +141,13 @@ function inScope(key) {
     t.includes("/") ? t.toLowerCase() === repo : repo.split("/")[0] === t.toLowerCase());
 }
 
-// The server polls GitHub for the open lists. The page fetches the view's merged
-// history from it every HISTORY_EVERY_MS, and `force` also asks the server to poll now
-// and to search again rather than answer from its short-lived cache.
-export async function load(force = false) {
+// The server polls GitHub and searches merged history on its own; this asks it to do both now.
+export function refreshNow() {
   if (!getCurrentRepo()) return;
-  if (force) companionCall("companion/check-now").catch(() => {});
-  const due = force || !state.historyFetchedAt || Date.now() - state.historyFetchedAt >= HISTORY_EVERY_MS;
-  if (!due || state.loadingHistory) return;
-  const view = getCurrentRepo();
-  state.loadingHistory = true;
+  state.refreshing = true;
   updateGitHubStatus();
-  try {
-    const [mine, review] = await Promise.all([fetchMergedPage("mine", null, force), fetchMergedPage("review", null, force)]);
-    if (view !== getCurrentRepo()) return;
-    state.mergedHistory = {
-      mine: mergeMergedLists(mine.prs, state.mergedHistory.mine),
-      review: mergeMergedLists(review.prs, state.mergedHistory.review),
-    };
-    if (!state.mergedCursor) state.mergedCursor = mine.after;
-    if (!state.reviewedMergedCursor) state.reviewedMergedCursor = review.after;
-    state.historyFetchedAt = Date.now();
-  } catch (err) {
-    console.warn("Shipyard: loading merged history failed —", err.message);
-  } finally {
-    state.loadingHistory = false;
-    applyServerPrs();
+  companionCall("companion/check-now", { merged: true }).catch(() => {
+    state.refreshing = false;
     updateGitHubStatus();
-    render();
-    if (view !== getCurrentRepo()) load();
-  }
+  });
 }

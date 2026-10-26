@@ -114,8 +114,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._companion_call(lambda c: c.timeline((q.get("id") or [""])[0]))
         if path == "/companion/merged":
             q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
-            return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after"),
-                                                                   q.get("fresh") == "1"))
+            return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
         if path == "/companion/sessions":
             q = parse_qs(parsed.query)
             return self._companion_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))
@@ -146,11 +145,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Connection", "keep-alive")
         self.end_headers()
-        seen = sent = sent_poll = None
+        seen = sent = sent_poll = sent_merged = None
         try:
             while True:
                 if seen != self.companion.version:
                     seen = self.companion.version
+                    # Merged history is large and rarely changes, so it goes out on its own.
+                    if sent_merged != self.companion.merged_version:
+                        sent_merged = self.companion.merged_version
+                        self.wfile.write(f"event: merged\ndata: {json.dumps(self.companion.recent_merged)}\n\n".encode())
                     state = self.companion.page_state()
                     status = state.get("status") or {}
                     # Every poll bumps the version and lastPoll; only the rest is worth a re-render.
@@ -232,7 +235,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "card-action": lambda c: c.card_action(card_id(), int(arg("index") or 0), body.get("payload")),
             "dismiss": lambda c: c.dismiss(card_id()),
             "undo": lambda c: c.undo(card_id()),
-            "check-now": lambda c: c.check_now(),
+            "check-now": lambda c: c.check_now(bool(body.get("merged"))),
             "rescan-worktrees": lambda c: c.rescan_worktrees(),
             "views": lambda c: c.set_views(body.get("views"), body.get("current")),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),

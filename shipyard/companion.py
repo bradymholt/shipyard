@@ -16,7 +16,7 @@ from .agents import AgentError, adapter_for, process_cwds, read_text
 from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config
 from .events import derive
 from .github import GitHub, GitHubError
-from .poll import Poller, view_targets
+from .poll import MERGED_SEARCHES, Poller, view_targets
 from .state import State, now_iso
 
 POLL_SECONDS = 60
@@ -40,6 +40,7 @@ AUTO_WORDS = {
 SOURCE_NAMES = {"re_review": "re-review", "ci_failed": "CI assessment", "feedback": "feedback pass"}
 LIVE_CACHE_SECONDS = 15
 MERGED_CACHE_SECONDS = 300
+MERGED_EVERY_SECONDS = 15 * 60
 
 PASS_ACTIVITY = {
     "feedback": "asked for a plan",
@@ -100,6 +101,10 @@ class Companion:
         self.info_cache = {}
         self.merged_cache = {}  # (view, kind, cursor) -> (time, page)
         self.pin_misses = {}  # PR key -> the transcripts a lookup found no session in
+        self.recent_merged = {kind: [] for kind in MERGED_SEARCHES}
+        self.merged_version = 0  # bumped when recent_merged changes, so the page gets it only then
+        self.merged_checked = 0
+        self.merged_wanted = False
         self.version = 0
         self.cond = threading.Condition()
         self.wake = threading.Event()
@@ -155,10 +160,25 @@ class Companion:
         """Poll again soon, e.g. right after an action changed the PR."""
         self.wake.set()
 
-    def check_now(self):
-        """The page saw a PR of yours before the poll did."""
+    def check_now(self, merged=False):
+        """Poll now: the page was refreshed or came back into view. `merged` also searches
+        merged history again, which the poll otherwise does every MERGED_EVERY_SECONDS."""
+        self.merged_wanted = self.merged_wanted or merged
         self.poke()
         return {"ok": True}
+
+    def refresh_merged(self):
+        if not self.merged_wanted and time.time() - self.merged_checked < MERGED_EVERY_SECONDS:
+            return
+        try:
+            recent = {kind: self.poller.recent_merged(kind) for kind in MERGED_SEARCHES}
+        except Exception as e:  # the next poll tries again; open PRs matter more
+            print(f"Warning: merged history search failed: {e}")
+            return
+        self.merged_checked, self.merged_wanted = time.time(), False
+        if recent != self.recent_merged:
+            self.recent_merged = recent
+            self.merged_version += 1
 
     # ---------- publishing
     def publish(self):
@@ -203,6 +223,7 @@ class Companion:
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
+        self.refresh_merged()
         self.retry_waiting_actions()
         self.db.prune()
         self.status = {"github": "ok", "lastPoll": now_iso()}
@@ -744,13 +765,13 @@ class Companion:
         self.publish()
         return {"ok": True, **saved}
 
-    def merged_history(self, view, kind, after=None, fresh=False):
-        """A page of merged history, kept a few minutes so other tabs and switching back to
-        a view reuse it. Merges the poll sees reach the page without it."""
+    def merged_history(self, view, kind, after=None):
+        """A page of a view's older merges, for Show more; kept a few minutes so other tabs
+        reuse it."""
         key = (", ".join(view_targets(view)), kind, after or "")
         now = time.time()
         hit = self.merged_cache.get(key)
-        if hit and not fresh and now - hit[0] < MERGED_CACHE_SECONDS:
+        if hit and now - hit[0] < MERGED_CACHE_SECONDS:
             page = hit[1]
         else:
             page = self.poller.merged(view, kind, after)

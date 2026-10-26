@@ -59,12 +59,14 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }, 
   await context.route("https://avatars.example/**", (route) => route.fulfill({ status: 404, body: "" }));
   await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ body: "" }));
   const page = await context.newPage();
+  const mergedCalls = [];
+  page.on("request", (r) => { if (r.url().includes("/companion/merged")) mergedCalls.push(r.url()); });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto(`http://localhost:${port}/`);
   await page.waitForSelector(".card[data-key]");
-  return { page, errors, context, direct };
+  return { page, errors, context, direct, mergedCalls };
 }
 
 const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row .next-label`).first().textContent().catch(() => null);
@@ -75,7 +77,7 @@ try {
   const browser = await chromium.launch();
 
   console.log("companion mode");
-  const { page, errors, direct } = await openPage(browser, COMPANION_PORT, undefined, true);
+  const { page, errors, direct, mergedCalls } = await openPage(browser, COMPANION_PORT, undefined, true);
   check(await page.evaluate(() => window.__dashboard.state.views.current === "o/r" && localStorage.getItem("ghpr.repos") === null),
     "views kept in the browser move to the server");
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
@@ -196,6 +198,7 @@ try {
   check(!(await sb.isVisible()), "Esc closes the sidebar");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
+  check(mergedCalls.length === 0, "merged history arrives with the server's pushes, without the page asking");
   check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
 
   console.log("narrow window");

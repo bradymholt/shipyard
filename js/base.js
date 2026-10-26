@@ -24,9 +24,10 @@ export const state = {
   merged: [],           // my recently merged PRs, shown as context on the My PRs tab
   reviewedPrs: [],      // open PRs I reviewed
   reviewedMerged: [],   // recently merged PRs I reviewed, shown on the review board
-  mergedHistory: { mine: [], review: [] },  // the view's merged searches, from the server
-  mergedCursor: null,        // how far back each merged feed has been walked
-  reviewedMergedCursor: null,
+  recentMerged: { mine: [], review: [] },   // your latest merges everywhere, pushed by the server
+  mergedHistory: { mine: [], review: [] },  // the view's older merges, fetched by Show more
+  mergedCursor: undefined,   // how far back Show more has walked; null once it reaches the end
+  reviewedMergedCursor: undefined,
   targetedLoaded: false,     // true once the server has polled GitHub
   viewer: null,
   ownerTypes: {},            // login -> "org" | "user", from the server's merged searches
@@ -39,8 +40,7 @@ export const state = {
   agent: BOOT.agent || null,  // coding agent whose latest session a checkout can resume
   rules: BOOT.rules || null,  // the companion's "rules" config (which chips are on)
   companionState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
-  loadingHistory: false,
-  historyFetchedAt: null,  // when the merged feeds were last searched
+  refreshing: false,       // asked the server to poll and waiting for it
   mergedExtra: 0,           // merged cards revealed past the first few
   mergedLoading: false,
 };

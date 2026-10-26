@@ -2,7 +2,7 @@
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtTitle, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { companionCall, companionPost, companionStatusHtml, getCurrentRepo, worktreeFor } from "./server.js";
-import { applyServerPrs, fetchMergedPage, githubProblem, load, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
+import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, buildStacks, ciOk, companionPr, hasNewCommitsSinceReview, laneOf, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { openNewTaskDialog } from "./settings.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -271,7 +271,7 @@ const mergedKind = () => (state.filter === "review" ? "review" : "mine");
 
 const mergedItems = () => (mergedKind() === "review" ? reviewedMergedItems() : state.merged);
 
-const mergedHasMore = () => state[MERGED_SEARCHES[mergedKind()].cursorKey] != null;
+const mergedHasMore = () => state[MERGED_SEARCHES[mergedKind()].cursorKey] !== null;
 
 function mergedSection(items, renderItem) {
   const shown = items.slice(0, MERGED_INITIAL + state.mergedExtra);
@@ -292,12 +292,12 @@ async function revealMoreMerged() {
   const kind = mergedKind();
   const { cursorKey } = MERGED_SEARCHES[kind];
   const want = MERGED_INITIAL + state.mergedExtra;
-  if (mergedItems().length >= want || !state[cursorKey] || state.mergedLoading) { render(); return; }
+  if (mergedItems().length >= want || state[cursorKey] === null || state.mergedLoading) { render(); return; }
   state.mergedLoading = true;
   render();
   try {
     for (let page = 0; page < MERGED_MAX_PAGES_PER_CLICK; page++) {
-      const { prs, after } = await fetchMergedPage(kind, state[cursorKey]);
+      const { prs, after } = await fetchMergedPage(kind, state[cursorKey] || null);
       state.mergedHistory[kind] = mergeMergedLists(state.mergedHistory[kind], prs);
       state[cursorKey] = after;
       applyServerPrs();
@@ -657,7 +657,6 @@ document.querySelectorAll(".tab").forEach((tab) =>
     state.mergedExtra = 0;
     localStorage.setItem(LS.FILTER, state.filter);
     render();
-    load();
   })
 );
 
