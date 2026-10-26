@@ -19,6 +19,7 @@ rule and trust settings that decide what the server does on its own.
         "command": ["open", "claude://resume?session={session}"],
         "prompt_url": "claude://code/new?folder={path}&q={prompt}"
       },                       // a new session with {prompt} typed in; null for none
+                               // (each "sessions" brings its own defaults for the rest)
       "rules": { "address_feedback": { "prompt": "/pr-review-respond {url} (branch {branch})" },
                  "nudge": { "after_hours": 24 }, "passes": { "ci_failed": "ask" } },
       "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } },
@@ -53,6 +54,22 @@ DEFAULT_AGENT = {
     "url": "claude://resume?session={session}",
     "command": ["open", "claude://resume?session={session}"],
     "prompt_url": "claude://code/new?folder={path}&q={prompt}",
+}
+# Codex has no resume URL, so its default opens Terminal in the checkout and runs
+# `codex resume`. The path and session go in as arguments, never into the script text,
+# and `quoted form of` makes them safe for the shell.
+CODEX_RESUME = ["osascript",
+                "-e", "on run argv",
+                "-e", 'tell application "Terminal" to do script "cd " & quoted form of item 1 of argv'
+                      ' & " && codex resume " & quoted form of item 2 of argv',
+                "-e", 'tell application "Terminal" to activate',
+                "-e", "end run",
+                "{path}", "{session}"]
+# Each kind of session brings its own defaults; a setting in the file wins over them.
+AGENT_DEFAULTS = {
+    "claude-code": DEFAULT_AGENT,
+    "codex": {"name": "Codex", "sessions": "codex", "mode": "command", "url": "",
+              "command": CODEX_RESUME, "prompt_url": None},
 }
 
 # What each rule does is code in rules.py; whether and when it fires is config. A rule
@@ -142,12 +159,11 @@ def validate_agent(raw):
     unknown = sorted(set(raw) - set(DEFAULT_AGENT))
     if unknown:
         raise ValueError(f"unknown agent setting(s): {', '.join(unknown)}")
-    agent = {**DEFAULT_AGENT, **raw}
-    if agent["sessions"] not in ADAPTERS:
+    sessions = raw.get("sessions", DEFAULT_AGENT["sessions"])
+    if sessions not in ADAPTERS:
         raise ValueError(f'agent "sessions" must be one of: {", ".join(ADAPTERS)}')
+    agent = {**AGENT_DEFAULTS[sessions], **raw}
     validate_open_settings("agent", agent, "{session}")
-    if "prompt_url" not in raw and agent["sessions"] != DEFAULT_AGENT["sessions"]:
-        agent["prompt_url"] = None
     url = agent["prompt_url"]
     if url is not None and (not isinstance(url, str) or "{prompt}" not in url or
                             urlparse(url).scheme.lower() in ("", "data", "javascript")):

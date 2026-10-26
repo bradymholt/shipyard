@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from shipyard.config import validate_auto, validate_config, validate_rules
+from shipyard import settings
 from shipyard.poll import Poller, signature, snapshot
 
 from fixtures import VIEWER, check_run, pr_node
@@ -49,9 +50,14 @@ class Config(unittest.TestCase):
             validate_config({"agent": {"sessions": "copilot"}})
         self.assertIsNone(validate_config({"agent": None})["agent"])
 
-    def test_prompt_url_defaults_to_claude_code_only(self):
+    def test_each_kind_of_session_brings_its_own_defaults(self):
         self.assertIn("{prompt}", validate_config({})["agent"]["prompt_url"])
-        self.assertIsNone(validate_config({"agent": {"sessions": "codex"}})["agent"]["prompt_url"])
+        codex = validate_config({"agent": {"sessions": "codex"}})["agent"]
+        self.assertEqual((codex["name"], codex["mode"], codex["prompt_url"], codex["command"][-2:]),
+                         ("Codex", "command", None, ["{path}", "{session}"]))
+        self.assertEqual(validate_config({"agent": {"sessions": "codex", "name": "Mine"}})["agent"]["name"], "Mine")
+        fields = {tuple(f["path"]): f for f in settings.fields({"agent": {"sessions": "codex"}})}
+        self.assertEqual((fields[("agent", "name")]["value"], fields[("agent", "name")]["set"]), ("Codex", False))
         with self.assertRaises(ValueError):
             validate_config({"agent": {"prompt_url": "claude://code/new"}})
 
