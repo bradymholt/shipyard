@@ -56,6 +56,8 @@ class ServerCase(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         Path(tmp.name, "index.html").write_text("<!doctype html><head></head>")
+        Path(tmp.name, "js").mkdir()
+        Path(tmp.name, "js", "main.js").write_text("")
         self.companion = FakeCompanion()
         patches = [mock.patch.object(Handler, "companion", self.companion),
                    mock.patch.object(Handler, "session_token", "tok"),
@@ -178,6 +180,17 @@ class Endpoints(ServerCase):
         self.assertEqual(status, 200)
         status, _ = self.request("GET", "/shipyard.db")
         self.assertEqual(status, 404)
+        status, _ = self.request("GET", "/js/../shipyard.db")
+        self.assertEqual(status, 404)
+
+    def test_page_modules_are_revalidated(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("GET", "/js/main.js", headers={"Host": f"localhost:{self.port}"})
+        res = conn.getresponse()
+        res.read()
+        conn.close()
+        self.assertEqual((res.status, res.getheader("Content-Type"), res.getheader("Cache-Control")),
+                         (200, "text/javascript", "no-cache"))
 
 
 if __name__ == "__main__":

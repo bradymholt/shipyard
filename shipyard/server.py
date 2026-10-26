@@ -7,6 +7,7 @@ rebinding), and every mutation must also come from the page's own origin with th
 token written into the page it serves."""
 import http.server
 import json
+import re
 import secrets
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -27,9 +28,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
                     "/icons/apple-touch-icon.png"}
+    # The page's stylesheet and modules. They change with every pull, so the browser revalidates them.
+    PAGE_FILES = re.compile(r"/(app\.css|js/[a-z]+\.js)")
     # Older Pythons don't know this extension; Chrome expects the manifest MIME type.
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
-                      ".webmanifest": "application/manifest+json"}
+                      ".webmanifest": "application/manifest+json",
+                      ".js": "text/javascript", ".css": "text/css"}
     BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main",
                       "/open-default-main", "/open-app", "/open-agent"}
     CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main"}
@@ -65,6 +69,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return False
         supplied = self.headers.get("X-Shipyard-Token", "")
         return bool(supplied and secrets.compare_digest(supplied, self.session_token))
+
+    def _is_static(self, path):
+        return path in self.STATIC_PATHS or bool(self.PAGE_FILES.fullmatch(path))
+
+    def end_headers(self):
+        if self.PAGE_FILES.fullmatch(urlparse(self.path).path):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
 
     def _not_found(self):
         self.send_error(404)
@@ -106,7 +118,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/companion/sessions":
             q = parse_qs(parsed.query)
             return self._companion_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))
-        if path in self.STATIC_PATHS:
+        if self._is_static(path):
             return super().do_GET()
         return self._not_found()
 
@@ -161,7 +173,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
         if not self._host_is_allowed():
             return self.send_error(403, "Invalid Host header")
-        if urlparse(self.path).path in self.STATIC_PATHS:
+        if self._is_static(urlparse(self.path).path):
             return super().do_HEAD()
         return self._not_found()
 
