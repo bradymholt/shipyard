@@ -231,6 +231,15 @@ class Settings(OrchestratorCase):
         self.comp.save_setting(["auto", "rerun_checks", "when"], reset=True)
         self.assertEqual(json.loads(self.config_path.read_text()), {})
 
+    def test_switching_the_app_drops_the_old_apps_pinned_defaults(self):
+        self.config_path.write_text(json.dumps({"launcher": {"name": "VS Code", "mode": "command", "url": "vscode://file/{path}"},
+                                                "agent": {"name": "Claude Code", "url": "my://{session}"}}))
+        self.comp.save_setting(["launcher", "app"], "cursor", expect="vscode")
+        self.comp.save_setting(["agent", "sessions"], "codex", expect="claude-code")
+        self.assertEqual(json.loads(self.config_path.read_text()),
+                         {"launcher": {"mode": "command", "app": "cursor"}, "agent": {"url": "my://{session}", "sessions": "codex"}})
+        self.assertEqual((self.comp.config["launcher"]["url"], self.comp.config["agent"]["name"]), ("cursor://file/{path}", "Codex"))
+
     def test_views_saved_in_the_database_move_to_the_config_file(self):
         self.comp.db.set_current_view("")
         self.comp.db._exec("INSERT INTO meta (key, value) VALUES ('views', ?)",
