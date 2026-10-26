@@ -82,7 +82,6 @@ class Endpoints(ServerCase):
         status, cfg = self.request("GET", "/config.json")
         self.assertEqual(status, 200)
         self.assertEqual(cfg["companionToken"], "tok")
-        self.assertTrue(cfg["orchestrator"])
         self.assertEqual(cfg["rules"]["nudge"], {"after_hours": 24})
 
     def test_state_and_host_check(self):
@@ -148,13 +147,6 @@ class Endpoints(ServerCase):
         self.assertEqual(second[0], "event: state")
         self.assertEqual(json.loads(second[1][len("data: "):])["version"], 4)
         conn.close()
-
-    def test_orchestrator_off(self):
-        with mock.patch.object(Handler, "companion", None):
-            status, _ = self.request("GET", "/companion/state")
-            self.assertEqual(status, 404)
-            status, cfg = self.request("GET", "/config.json")
-            self.assertFalse(cfg["orchestrator"])
 
     def test_github_graphql_is_proxied_with_rate_limit_headers(self):
         sent = []

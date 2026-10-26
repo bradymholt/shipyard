@@ -753,14 +753,11 @@
     viewer: null,
     filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
     sort: localStorage.getItem("ghpr.sort") || "priority",
-    worktrees: {},        // "repo#branch" -> { path, workspace }, from the local companion
-    companion: false,     // true when the local companion answered (enables worktree actions)
-    companionChecked: false,
-    companionToken: "",  // per-process token required for local companion mutations
+    worktrees: {},        // "repo#branch" -> { path, workspace }
+    companionToken: "",  // per-process token required for mutations
     launcher: DEFAULT_LAUNCHER,
     agent: null,          // coding agent whose latest session a checkout can resume
-    rules: null,          // the companion's "rules" config (which chips are on), when it serves the page
-    orchestrator: false,  // true when the companion watches GitHub and runs passes
+    rules: null,          // the companion's "rules" config (which chips are on)
     companionState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
     loading: false,
     targetedFresh: false,
@@ -887,7 +884,7 @@
     banner.classList.toggle("hidden", !show);
     if (!show) return;
     $("#stale-headline").textContent = state.loadErrorAuth
-      ? "Not updating — GitHub rejected the companion's gh token"
+      ? "Not updating — GitHub rejected Shipyard's gh token"
       : "Not updating — the last GitHub refresh failed";
     const age = state.githubUpdatedAt ? `Showing data from ${githubAge(state.githubUpdatedAt)}. ` : "";
     $("#stale-detail").textContent = `${age}${state.loadError || ""}`;
@@ -1127,12 +1124,12 @@
       try {
         res = await companionPost("github/graphql", true, { query, variables });
       } catch {
-        lastErr = new Error("Couldn't reach the Shipyard companion. Is it still running?");
+        lastErr = new Error("Couldn't reach Shipyard. Is it still running?");
         continue;
       }
       if (res.status === 401) {
         const message = (await res.json().catch(() => null))?.message;
-        throw authError(`GitHub rejected the companion's gh token (401)${message ? ` — ${message}` : ""}. Run \`gh auth login\`, then refresh.`);
+        throw authError(`GitHub rejected Shipyard's gh token (401)${message ? ` — ${message}` : ""}. Run \`gh auth login\`, then refresh.`);
       }
       if (RETRYABLE.has(res.status)) {
         lastErr = new Error(`GitHub is temporarily unavailable (${res.status}). Try refreshing in a moment.`);
@@ -1480,7 +1477,6 @@
       state.launcher = c.launcher || DEFAULT_LAUNCHER;
       state.agent = c.agent || null;
       state.rules = c.rules || null;
-      state.orchestrator = c.orchestrator === true;
       state.companionToken = c.companionToken;
       return true;
     } catch {
@@ -1490,7 +1486,7 @@
 
   async function companionPost(url, retry = true, body = undefined) {
     if (!state.companionToken && !(await loadCompanionConfig())) {
-      throw new Error("Companion session unavailable. Refresh the page and try again.");
+      throw new Error("Shipyard session unavailable. Refresh the page and try again.");
     }
     const headers = { "X-Shipyard-Token": state.companionToken };
     if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -1510,7 +1506,7 @@
   async function companionCall(url, body = {}) {
     const res = await companionPost(url, true, body);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) throw new Error(data.error || `Companion request failed (${res.status}).`);
+    if (!res.ok || data.ok === false) throw new Error(data.error || `Shipyard request failed (${res.status}).`);
     return data;
   }
 
@@ -1524,14 +1520,9 @@
         }
         state.worktrees = map;
         lastWtSig = JSON.stringify(map);
-        state.companion = await loadCompanionConfig();
-        if (state.companion) connectCompanionEvents();
       }
-    } catch { /* companion away: leave its links off until it answers */ }
-    finally {
-      state.companionChecked = true;
-      render();
-    }
+    } catch { /* server restarting: pollWorktrees catches up */ }
+    render();
   }
 
   // Poll the companion so "where is this branch, and is the main clone dirty" stays
@@ -1539,7 +1530,7 @@
   // re-renders only when the data actually changed (so it doesn't disturb the DOM).
   let wtPollInFlight = false;
   async function pollWorktrees() {
-    if (!state.companion || document.hidden || wtPollInFlight) return;
+    if (document.hidden || wtPollInFlight) return;
     wtPollInFlight = true;
     try {
       const res = await fetch("worktrees.json", { cache: "no-store" });
@@ -1595,14 +1586,12 @@
     }
   }
 
-  function agentButton(pr, wt) {
+  function agentButton(pr) {
     const agent = state.agent;
-    const checkout = sessionTarget(pr, wt);
+    const checkout = sessionTarget(pr);
     if (!agent || !checkout) return "";
     const icon = AGENT_ICONS[agent.sessions] || DEFAULT_AGENT_ICON;
-    const title = state.orchestrator
-      ? `Open the PR session in ${agent.name} (last active ${timeAgo(checkout.session.updated * 1000)})`
-      : `Resume your latest ${agent.name} session here (last active ${timeAgo(checkout.session.updated * 1000)})`;
+    const title = `Open the PR session in ${agent.name} (last active ${timeAgo(checkout.session.updated * 1000)})`;
     if (agent.mode === "command") {
       return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" data-session="${esc(checkout.session.id)}" title="${esc(title)}">${icon}</button>`;
     }
@@ -1634,7 +1623,7 @@
   // no checking out or moving a branch that's done.
   function mergedWorktreeLinks(pr) {
     const wt = worktreeFor(pr);
-    const local = wt ? `${agentButton(pr, wt)}${openCheckoutButton(wt)}` : "";
+    const local = wt ? `${agentButton(pr)}${openCheckoutButton(wt)}` : "";
     return `<div class="card-icons"><span class="wt-links">${githubLink(pr)}${local}</span></div>`;
   }
 
@@ -1649,13 +1638,13 @@
     // Already checked out somewhere → open that checkout directly. Green marks the
     // one that's the main repo's current branch.
     if (wt) {
-      return `<span class="wt-links">${githubLink(pr)}${agentButton(pr, wt)}${openCheckoutButton(wt)}</span>`;
+      return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton(wt)}</span>`;
     }
 
     // A review worktree is detached, so it has no branch entry in worktrees.json.
     const cp = companionPr(pr);
     if (cp?.path) {
-      return `<span class="wt-links">${githubLink(pr)}${agentButton(pr, null)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
+      return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
     }
 
     // Not checked out anywhere → open by checking the branch out in the main repo
@@ -1665,7 +1654,7 @@
     const mainBtn = mainWt && mainWt.dirty
       ? `<button class="wt-link wt-main blocked" disabled title="${esc(`Can't check out here — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`)}">${LAUNCH_ICON}</button>`
       : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main clone and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
-    return `<span class="wt-links">${githubLink(pr)}${mainBtn}${agentButton(pr, null)}</span>`;
+    return `<span class="wt-links">${githubLink(pr)}${mainBtn}${agentButton(pr)}</span>`;
   }
 
   // Where the owner/repo link goes: on My PRs, your authored PRs; on Reviews, the
@@ -1947,7 +1936,7 @@
       !companionSteps(pr).length && !companionPr(pr)?.running && companionPr(pr)?.chip?.kind !== "nudge";
   }
   function syncWithCompanion() {
-    if (!state.orchestrator || !state.companionState) return;
+    if (!state.companionState) return;
     const now = Date.now();
     const prs = [...state.prs, ...state.reviewedPrs].filter(companionFollows);
     const due = prs.filter((pr) => {
@@ -2081,7 +2070,7 @@
       if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
         laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
       }
-      const laneAction = (!reviewBoard && i === 0 && state.companion)
+      const laneAction = (!reviewBoard && i === 0)
         ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
         : "";
       const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
@@ -2607,7 +2596,7 @@
   // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
   function nextRowHtml(pr) {
     if (checkingPr(pr))
-      return `<button type="button" class="next-row muted" data-open="${esc(prKey(pr))}" title="The companion is checking this PR"><span class="next-prefix">→ Next:</span><span class="next-spinner"></span><span class="next-label">Checking…</span></button>`;
+      return `<button type="button" class="next-row muted" data-open="${esc(prKey(pr))}" title="Shipyard is checking this PR"><span class="next-prefix">→ Next:</span><span class="next-spinner"></span><span class="next-label">Checking…</span></button>`;
     const chip = nextChip(pr);
     const cp = companionPr(pr);
     const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
@@ -2734,12 +2723,10 @@
     return `<a class="${cls}" ${data} href="${esc(url)}" title="Open the PR session in ${esc(agent.name)}">${inner}</a>`;
   }
 
-  // The session every link for a PR opens: the pinned one when the companion pins sessions
-  // (none if nothing is pinned), else the checkout's latest.
-  function sessionTarget(pr, wt = worktreeFor(pr)) {
+  // The session every link for a PR opens: the pinned one, or none if nothing is pinned.
+  function sessionTarget(pr) {
     const cp = companionPr(pr);
-    if (cp || state.orchestrator) return cp?.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
-    return wt?.session ? { path: wt.path, session: wt.session } : null;
+    return cp?.session?.id && cp.path ? { path: cp.path, session: cp.session } : null;
   }
 
   function continueTarget(pr) {
@@ -2772,13 +2759,11 @@
     const size = pr.additions != null
       ? `<span><span class="f-add">+${pr.additions}</span> <span class="f-del">−${pr.deletions}</span> · ${pr.changedFiles} file${pr.changedFiles === 1 ? "" : "s"}</span>` : "";
     let launch = `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}<span>GitHub</span></a>`;
-    if (state.companion) {
-      const target = continueTarget(pr);
-      const icon = AGENT_ICONS[state.agent?.sessions] || DEFAULT_AGENT_ICON;
-      if (target) launch += sessionLink(target.path, target.session, `${icon}<span>${esc(agentName())}</span>`, "wt-link wt-agent", key);
-      const checkout = wt || (cp?.path ? { path: cp.path, workspace: null, main: false } : null);
-      if (checkout) launch += openCheckoutButton(checkout, state.launcher.name || "Open");
-    }
+    const target = continueTarget(pr);
+    const icon = AGENT_ICONS[state.agent?.sessions] || DEFAULT_AGENT_ICON;
+    if (target) launch += sessionLink(target.path, target.session, `${icon}<span>${esc(agentName())}</span>`, "wt-link wt-agent", key);
+    const checkout = wt || (cp?.path ? { path: cp.path, workspace: null, main: false } : null);
+    if (checkout) launch += openCheckoutButton(checkout, state.launcher.name || "Open");
     return `
       <div class="sb-top">
         <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
@@ -2944,7 +2929,6 @@
   }
 
   function nextSection(pr) {
-    if (!state.orchestrator) return "";
     const key = prKey(pr);
     const cp = companionPr(pr);
     const open = !pr.mergedAt;
@@ -2954,9 +2938,9 @@
     if (!html && cp) html = derivedCardHtml(pr, companionSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
     if (!html) {
       html = checkingPr(pr)
-        ? `<div class="sb-empty">The companion is picking this PR up; its next step shows here in a moment.</div>`
+        ? `<div class="sb-empty">Shipyard is picking this PR up; its next step shows here in a moment.</div>`
         : !cp && open
-        ? `<div class="sb-empty">The companion follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
+        ? `<div class="sb-empty">Shipyard follows PRs you opened, were asked to review, or reviewed. This one isn't among them${state.companionState ? "" : " yet"}.</div>`
         : `<div class="sb-empty">Nothing to do right now.</div>`;
     }
     html += (cp?.handled || []).map((c) => {
@@ -2981,7 +2965,7 @@
   function autoApproveSection(pr) {
     const cp = companionPr(pr);
     const setting = cp?.autoApprove;
-    if (!state.orchestrator || !setting || pr.mergedAt || !isReviewPr(pr)) return "";
+    if (!setting || pr.mergedAt || !isReviewPr(pr)) return "";
     const rule = state.companionState?.config?.approveRereview;
     const why = !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
       : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
@@ -3002,7 +2986,7 @@
   }
 
   function sessionSection(pr) {
-    if (!state.orchestrator || !state.agent) return "";
+    if (!state.agent) return "";
     const key = prKey(pr);
     const cp = companionPr(pr);
     const newSession = (cls) => `<button type="button" class="${cls}" data-run-pass="new_session" data-node="${esc(pr.id)}" title="Start a ${esc(agentName())} session about this PR and pin it">New session</button>`;
@@ -3242,8 +3226,9 @@
   let companionEvents = null;
   const companionLive = () => !!state.companionState && companionEvents?.readyState === EventSource.OPEN;
   function connectCompanionEvents() {
-    if (!state.orchestrator || companionEvents || typeof EventSource === "undefined") return;
+    if (companionEvents || typeof EventSource === "undefined") return;
     companionEvents = new EventSource("companion/events");
+    companionEvents.addEventListener("error", () => render());
     companionEvents.addEventListener("state", (e) => {
       try {
         state.companionState = JSON.parse(e.data);
@@ -3263,21 +3248,19 @@
   }
 
   function companionStatusHtml() {
-    if (!state.companionChecked) return "";
-    if (!state.companion) return '<span class="dot off"></span>Companion not running';
-    if (!state.orchestrator) return '<span class="dot ok"></span>Companion connected';
     const status = state.companionState?.status;
-    if (!status) return '<span class="dot ok"></span>Companion connected';
+    if (!status) return "";
+    if (!companionLive()) return '<span class="dot off"></span>Shipyard not running · reconnecting…';
     const agent = status.agent && !status.agent.available ? ` · ${esc(status.agent.name)} CLI not found` : "";
     if (status.github && status.github !== "ok" && status.github !== "starting") {
-      return `<span class="dot off"></span><span class="companion-err" title="${esc(status.github)}">Companion can't reach GitHub: ${esc(clip(status.github, 80))}</span>${agent}`;
+      return `<span class="dot off"></span><span class="companion-err" title="${esc(status.github)}">Can't reach GitHub: ${esc(clip(status.github, 80))}</span>${agent}`;
     }
-    return `<span class="dot ok"></span>Companion connected${agent}`;
+    return `<span class="dot ok"></span>Connected${agent}`;
   }
 
   // While the companion's poll is live it stands in for the page's: the page re-reads
   // what it reports changed (hidden or not) and searches again only as a safety net.
-  // Without it (--no-orchestrator, or while reconnecting), the page polls while visible.
+  // While it reconnects, the page polls while visible.
   const COMPANION_SAFETY_MS = 15 * 60 * 1000;
   const SELF_POLL_MS = 50 * 1000;
   function refreshIfDue() {
@@ -3297,6 +3280,8 @@
   } else {
     $("#settings-dialog").showModal();
   }
+  loadCompanionConfig().then(render);
+  connectCompanionEvents();
   loadWorktrees();
   setInterval(pollWorktrees, 60000);
   setInterval(refreshIfDue, 60 * 1000);

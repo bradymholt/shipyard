@@ -10,7 +10,6 @@ Run it from the dashboard directory and open the printed URL:
 
     python3 shipyard.py                 # scan the folders set in the config file
     python3 shipyard.py ~/dev ~/work    # or override the roots on the command line
-    python3 shipyard.py --no-orchestrator   # page and worktrees only, no GitHub polling
 
 Binds to localhost only. Discovery is read-only; branch actions and card buttons you
 choose can change local Git state or act on GitHub. The code lives in the shipyard/

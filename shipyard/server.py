@@ -95,12 +95,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/worktrees.json":
             return self._json(worktrees.discover(self.roots, self.config["agent"]))
         if path == "/config.json":
-            cfg = self.companion.config if self.companion else self.config
-            return self._json({**page_config(cfg), "companionToken": self.session_token,
-                               "orchestrator": bool(self.companion)})
+            return self._json({**page_config(self.companion.config),
+                               "companionToken": self.session_token})
         if path == "/companion/state":
-            if not self.companion:
-                return self._json({"ok": False, "error": "The companion's orchestrator is off."}, 404)
             return self._json(self.companion.page_state())
         if path == "/companion/events":
             return self._events()
@@ -114,8 +111,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _events(self):
         """Server-Sent Events: the whole page state now, then again on every change, with
         a comment line as keepalive so a dropped connection is noticed."""
-        if not self.companion:
-            return self._json({"ok": False, "error": "The companion's orchestrator is off."}, 404)
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")
@@ -154,8 +149,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self._not_found()
 
     def _companion_call(self, fn):
-        if not self.companion:
-            return self._json({"ok": False, "error": "The companion's orchestrator is off."}, 404)
         try:
             return self._json(fn(self.companion))
         except (LookupError, ValueError) as e:
@@ -168,7 +161,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS | {"/github/graphql"}:
             return self._not_found()
         if not self._mutation_is_authorized():
-            return self._json({"ok": False, "error": "Companion request was not authorized."}, 403)
+            return self._json({"ok": False, "error": "Request was not authorized."}, 403)
         if parsed.path == "/github/graphql":
             return self._github_graphql()
         q = parse_qs(parsed.query)
