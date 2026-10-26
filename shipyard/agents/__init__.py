@@ -54,31 +54,33 @@ def read_text(path, limit=8_000_000):
         return ""
 
 
-def processes_in(name, cwd):
-    """True when a process whose command starts with `name` has `cwd` as its directory."""
-    want = os.path.realpath(cwd)
+def process_cwds(name):
+    """The working directories of running processes whose command starts with `name`."""
     if shutil.which("lsof"):
         try:
             r = subprocess.run(["lsof", "-a", "-d", "cwd", "-c", name, "-Fn"],
                                capture_output=True, text=True, timeout=10)
         except (OSError, subprocess.TimeoutExpired):
-            return False
-        return any(line[1:] and os.path.realpath(line[1:]) == want
-                   for line in r.stdout.splitlines() if line.startswith("n"))
+            return set()
+        return {os.path.realpath(line[1:]) for line in r.stdout.splitlines() if line.startswith("n") and line[1:]}
     proc = Path("/proc")
     if not proc.is_dir():
-        return False
+        return set()
+    cwds = set()
     for pid in proc.iterdir():
         if not pid.name.isdigit():
             continue
         try:
-            if not (pid / "comm").read_text().strip().startswith(name):
-                continue
-            if os.path.realpath(pid / "cwd") == want:
-                return True
+            if (pid / "comm").read_text().strip().startswith(name):
+                cwds.add(os.path.realpath(pid / "cwd"))
         except OSError:
             continue
-    return False
+    return cwds
+
+
+def processes_in(name, cwd):
+    """True when a process whose command starts with `name` has `cwd` as its directory."""
+    return os.path.realpath(cwd) in process_cwds(name)
 
 
 def parse_json_answer(text):
@@ -183,13 +185,16 @@ class Adapter:
         except OSError:
             return False
 
-    def is_live(self, path, session_id):
+    def is_live(self, path, session_id, cwds=None):
+        """`cwds`, when given, returns process_cwds() once for a caller checking many sessions."""
         f = self.session_file(path, session_id)
         try:
             if f and time.time() - os.path.getmtime(f) < LIVE_WINDOW:
                 return True
         except OSError:
             pass
+        if cwds:
+            return os.path.realpath(path) in cwds()
         return processes_in(self.process_name, path)
 
     def run(self, cwd, prompt, schema, mode="fresh", session_id=None, new_session_id=None, untrusted=False,

@@ -174,8 +174,12 @@ def worktrees_for_repo(repo_dir):
 
 
 def with_dirty_state(worktrees):
+    # Only a main clone's state is shown (it blocks switching branches there); actions
+    # on a linked worktree check for themselves, and a `git status` in each was most of
+    # a scan's time.
+    mains = [w for w in worktrees if w["main"]]
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        for w, dirty in zip(worktrees, pool.map(is_dirty, [w["path"] for w in worktrees])):
+        for w, dirty in zip(mains, pool.map(is_dirty, [w["path"] for w in mains])):
             w["dirty"] = dirty
     return worktrees
 

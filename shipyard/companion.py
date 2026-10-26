@@ -3,6 +3,7 @@ produces events, rules turn events into chips, passes, and proposed cards, and t
 page renders what this publishes over Server-Sent Events. Page actions come back as
 POSTs (snooze, pin, card buttons)."""
 import concurrent.futures
+import functools
 import os
 import threading
 import time
@@ -11,7 +12,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from . import actions, passes, rules, worktrees
-from .agents import AgentError, adapter_for, read_text
+from .agents import AgentError, adapter_for, process_cwds, read_text
 from .config import CONFIDENCE, HARD_LOCKED, config_mtime, page_config, read_config
 from .events import derive
 from .github import GitHub, GitHubError
@@ -38,6 +39,7 @@ AUTO_WORDS = {
 }
 SOURCE_NAMES = {"re_review": "re-review", "ci_failed": "CI assessment", "feedback": "feedback pass"}
 LIVE_CACHE_SECONDS = 15
+MERGED_CACHE_SECONDS = 300
 
 PASS_ACTIVITY = {
     "feedback": "asked for a plan",
@@ -83,6 +85,7 @@ class Companion:
         self.worktree_map = {}
         self.live_cache = {}
         self.info_cache = {}
+        self.merged_cache = {}  # (view, kind, cursor) -> (time, page)
         self.version = 0
         self.cond = threading.Condition()
         self.wake = threading.Event()
@@ -720,8 +723,19 @@ class Companion:
         self.publish()
         return {"ok": True, **saved}
 
-    def merged_history(self, view, kind, after=None):
-        return {"ok": True, **self.poller.merged(view, kind, after), "owners": dict(self.poller.owner_types)}
+    def merged_history(self, view, kind, after=None, fresh=False):
+        """A page of merged history, kept a few minutes so other tabs and switching back to
+        a view reuse it. Merges the poll sees reach the page without it."""
+        key = (", ".join(view_targets(view)), kind, after or "")
+        now = time.time()
+        hit = self.merged_cache.get(key)
+        if hit and not fresh and now - hit[0] < MERGED_CACHE_SECONDS:
+            page = hit[1]
+        else:
+            page = self.poller.merged(view, kind, after)
+            self.merged_cache = {k: v for k, v in self.merged_cache.items() if now - v[0] < MERGED_CACHE_SECONDS}
+            self.merged_cache[key] = (now, page)
+        return {"ok": True, **page, "owners": dict(self.poller.owner_types)}
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
@@ -821,8 +835,9 @@ class Companion:
         if not path or not adapter:
             return {"ok": True, "sessions": []}
         out = []
+        cwds = self.shared_process_scan()
         for s in adapter.list_sessions(path)[:15]:
-            info = self.session_info(path, s["id"]) or s
+            info = self.session_info(path, s["id"], cwds) or s
             out.append({"id": s["id"], "title": info.get("title") or s["id"], "updated": s["updated"]})
         return {"ok": True, "sessions": out}
 
@@ -848,16 +863,22 @@ class Companion:
         return {"ok": True}
 
     # ---------- the page's view
-    def is_live(self, path, session_id):
+    def shared_process_scan(self):
+        """The agent's process directories, scanned at most once for every session checked
+        in one build, and only if some session's cached answer has expired."""
+        adapter = self.adapter
+        return functools.cache(lambda: process_cwds(adapter.process_name)) if adapter else None
+
+    def is_live(self, path, session_id, cwds=None):
         now = time.time()
         hit = self.live_cache.get((path, session_id))
         if hit and now - hit[0] < LIVE_CACHE_SECONDS:
             return hit[1]
-        live = self.adapter.is_live(path, session_id) if self.adapter else False
+        live = self.adapter.is_live(path, session_id, cwds) if self.adapter else False
         self.live_cache[(path, session_id)] = (now, live)
         return live
 
-    def session_info(self, path, session_id):
+    def session_info(self, path, session_id, cwds=None):
         adapter = self.adapter
         f = adapter.session_file(path, session_id) if adapter else None
         if not f:
@@ -874,7 +895,7 @@ class Companion:
             cached = (mtime, {"id": session_id, "title": " ".join(title.split())[:120],
                               "turns": len(messages), "updated": int(mtime)})
             self.info_cache[(path, session_id)] = cached
-        return {**cached[1], "live": self.is_live(path, session_id)}
+        return {**cached[1], "live": self.is_live(path, session_id, cwds)}
 
     def card_view(self, card):
         view = {k: card.get(k) for k in ("id", "status", "kind", "pass", "action", "title", "summary",
@@ -886,6 +907,7 @@ class Companion:
 
     def page_state(self):
         now = datetime.now(timezone.utc)
+        cwds = self.shared_process_scan()
         prs = {}
         for snap in self.db.prs():
             key = snap["key"]
@@ -893,7 +915,7 @@ class Companion:
             pin = self.db.pin(key)
             session = None
             if pin and pin.get("session_id") and pin.get("path"):
-                session = self.session_info(pin["path"], pin["session_id"])
+                session = self.session_info(pin["path"], pin["session_id"], cwds)
                 if session:
                     session["shipyardTurns"] = self.db.shipyard_turns(pin["session_id"])
                     session["how"] = pin.get("how")

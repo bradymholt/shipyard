@@ -75,7 +75,7 @@ class FakeAgent:
     def user_messages(self, text):
         return []
 
-    def is_live(self, path, sid):
+    def is_live(self, path, sid, cwds=None):
         return self.live
 
     def discard(self, path, sid):
@@ -145,6 +145,23 @@ class SessionToken(CompanionCase):
         token = self.comp.db.session_token()
         self.comp.db.close()
         self.assertEqual(State(self.db_path).session_token(), token)
+
+
+class SharedCosts(CompanionCase):
+    def test_one_process_scan_per_state_build(self):
+        with mock.patch("shipyard.companion.process_cwds", return_value=set()) as scan:
+            cwds = self.comp.shared_process_scan()
+            cwds(), cwds()
+        self.assertEqual(scan.call_count, 1)
+
+    def test_merged_history_is_reused_until_asked_fresh(self):
+        page = {"prs": [], "after": None}
+        with mock.patch.object(self.comp.poller, "merged", return_value=page) as search:
+            self.comp.merged_history("o/r", "mine")
+            self.comp.merged_history("o/r ", "mine")
+            self.assertEqual(search.call_count, 1)
+            self.comp.merged_history("o/r", "mine", fresh=True)
+            self.assertEqual(search.call_count, 2)
 
 
 class Views(CompanionCase):

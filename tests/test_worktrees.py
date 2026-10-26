@@ -47,6 +47,15 @@ class GitCase(unittest.TestCase):
         self.roots = [str(self.root)]
 
 
+class Discover(GitCase):
+    def test_checks_only_main_clones_for_edits(self):
+        path = worktrees.new_task_worktree(self.repo, "me/task", self.roots)["path"]
+        (self.clone / "app.py").write_text("print(3)\n")
+        found = {w["path"]: w for w in worktrees.discover(self.roots)}
+        self.assertTrue(found[str(self.clone)]["dirty"])
+        self.assertNotIn("dirty", found[path])
+
+
 class ReviewWorktree(GitCase):
     def test_creates_then_moves_to_new_head(self):
         out = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
