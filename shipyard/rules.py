@@ -128,7 +128,7 @@ def next_steps(snap, rules, cards=()):
     approval = _approval_step(snap, rules)
     if approval:
         out.append(approval)
-    if snap.get("ci") in events.FAILING and not snap.get("fix_pushed") and rules.get("fix_ci"):
+    if snap.get("ci") in events.FAILING and rules.get("fix_ci"):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
         out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})

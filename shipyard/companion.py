@@ -523,7 +523,7 @@ class Companion:
             self.db.log(snap["key"], f"tried to {action.replace('_', ' ')} automatically: {e}")
             return False
         self.record_review(snap, action, payload)
-        self.record_fix(snap, action)
+        self.record_pending(snap, action, payload)
         self.db.count_auto_run(snap["key"], action)
         self.db.log(snap["key"], f"{result} automatically: {reason}" if reason else f"{result} automatically")
         self.db.update_card(card_id, status="handled", handled={
@@ -652,7 +652,7 @@ class Companion:
             snap["requested"] = requested + [r for r in payload.get("reviewers") or [] if r not in requested]
             self.db.save_pr(snap)
         self.record_review(snap, action, payload)
-        self.record_fix(snap, action)
+        self.record_pending(snap, action, payload)
         self.db.log(key, result)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
@@ -660,14 +660,29 @@ class Companion:
         self.publish()
         return {"ok": True, "result": result}
 
-    def record_fix(self, snap, action):
-        """Hide "Fix CI" and pick up the worktree the fix may have created, until the poll
-        sees the pushed commit."""
-        if action != "apply_fix":
+    def record_pending(self, snap, action, payload):
+        """What an action just changed on GitHub, for the page's steps until the poll re-reads
+        the PR. It stays out of the fields events diff, so the poll still sees the change."""
+        ci = {"ci": "PENDING", "failing": []}
+        pending = {"apply_fix": ci, "rerun_checks": ci, "enable_auto_merge": {"auto_merge": True},
+                   "undo_enable_auto_merge": {"auto_merge": False}, "merge": {"state": "MERGED"},
+                   "mark_ready": {"draft": False}}.get(action)
+        if action == "post_reply":
+            comment = {"id": None, "author": self.viewer, "created": now_iso()}
+            reply_to = payload.get("comment_id")
+            if reply_to:
+                pending = {"threads": [
+                    {**t, "comments": t["comments"] + [comment]}
+                    if any(str(c.get("id")) == str(reply_to) for c in t.get("comments") or []) else t
+                    for t in snap.get("threads") or []]}
+            else:
+                pending = {"comments": (snap.get("comments") or []) + [comment]}
+        if not pending:
             return
-        snap["fix_pushed"] = True
+        snap["pending"] = {**(snap.get("pending") or {}), **pending}
         self.db.save_pr(snap)
-        self.refresh_worktrees()
+        if action == "apply_fix":
+            self.refresh_worktrees()  # the fix may have created the branch's worktree
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
@@ -710,6 +725,7 @@ class Companion:
             raise LookupError("That can't be undone from here.")
         snap = self.snapshot_or_error(card["key"])
         result = actions.undo(self.github, handled["action"], snap, handled.get("payload"))
+        self.record_pending(snap, f"undo_{handled['action']}", handled.get("payload") or {})
         self.db.log(card["key"], f"undid: {result}")
         self.db.update_card(card_id, status="done", result=f"undone: {result}")
         self.poke()
@@ -833,6 +849,7 @@ class Companion:
         prs = {}
         for snap in self.db.prs():
             key = snap["key"]
+            view = {**snap, **(snap.get("pending") or {})}
             pin = self.db.pin(key)
             session = None
             if pin and pin.get("session_id") and pin.get("path"):
@@ -849,9 +866,9 @@ class Companion:
             path = pin.get("path") if pin else None
             auto = None if snap["mine"] else self.auto_approve_setting(snap)
             prs[key] = {
-                "chip": rules.memory_chip(snap, self.config["rules"], now, self.db.snooze(key),
+                "chip": rules.memory_chip(view, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
-                "steps": rules.next_steps(snap, self.config["rules"], open_cards),
+                "steps": rules.next_steps(view, self.config["rules"], open_cards),
                 # What the companion last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
                 "state": snap.get("state"), "dropped": bool(snap.get("dropped")),
