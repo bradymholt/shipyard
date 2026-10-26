@@ -9,8 +9,8 @@ import copy
 import shlex
 
 from .agents import ADAPTERS
-from .config import (CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, LAUNCHER_DEFAULTS, read_raw, validate_auto, validate_config,
-                     validate_views, write_raw)
+from .config import (AGENT_DEFAULTS, CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, LAUNCHER_DEFAULTS, read_raw, validate_auto,
+                     validate_config, validate_views, write_raw)
 
 SECTIONS = [
     {"id": "launcher", "title": "Opening checkouts",
@@ -225,11 +225,40 @@ def _enabled_by_default(raw, path):
     return BY_PATH[path]["get"](validate_config(probe))
 
 
+# An app or an agent brings its own defaults for the settings under it. Switching drops any
+# of those still equal to the old choice's default: that was a default pinned in the file,
+# not a choice, and the new one should show through. Settings you changed stay.
+PRESETS = {("launcher", "app"): LAUNCHER_DEFAULTS, ("agent", "sessions"): AGENT_DEFAULTS}
+
+
+def _unpin_old_preset(old_raw, raw, path):
+    section = _lookup(raw, path[:-1])
+    if not isinstance(section, dict):
+        return
+    try:
+        old, new = (BY_PATH[path]["get"](validate_config(r)) for r in (old_raw, raw))
+    except ValueError:
+        return  # the save itself reports what's wrong
+    if old == new:
+        return
+    pinned = PRESETS[path][old]
+    for key in [k for k, v in section.items() if k != path[-1] and k in pinned and pinned[k] == v]:
+        del section[key]
+
+
 def apply(raw, path, value=None, reset=False):
     """`raw` with one field set to `value`, or back to its default; the input is left alone."""
     field = BY_PATH.get(tuple(path))
     if not field or field["kind"] == "locked":
         raise ValueError(f"That setting can only be changed in {CONFIG_FILE}.")
+    if field["path"] in PRESETS:
+        new = _apply(raw, field, value, reset)
+        _unpin_old_preset(raw, new, field["path"])
+        return new
+    return _apply(raw, field, value, reset)
+
+
+def _apply(raw, field, value, reset):
     raw = copy.deepcopy(raw)
     path = field["path"]
     if path in SWITCHED:
