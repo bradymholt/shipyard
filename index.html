@@ -914,110 +914,6 @@
     return byMergedAt(out);
   };
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  // A rejected token needs a different remedy than a flaky network, so tag it.
-  function authError(message) {
-    const err = new Error(message);
-    err.auth = true;
-    return err;
-  }
-
-  // Every GitHub call waits out a rate limit instead of adding to it.
-  let rateLimitedUntil = 0;
-  let rateLimitMessage = "";
-  function rateLimitError() {
-    const at = new Date(rateLimitedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    const err = new Error(`${rateLimitMessage} Retrying at ${at}.`);
-    err.retryAt = rateLimitedUntil;
-    return err;
-  }
-
-  // GitHub's secondary limit sends Retry-After or nothing, its hourly one x-ratelimit-reset;
-  // with neither, its docs say to wait at least a minute.
-  function rateLimitWait(res) {
-    const retryAfter = Number(res.headers.get("retry-after"));
-    if (retryAfter > 0) return retryAfter * 1000;
-    const reset = Number(res.headers.get("x-ratelimit-reset"));
-    if (res.headers.get("x-ratelimit-remaining") === "0" && reset) return Math.max(reset * 1000 - Date.now(), 1000);
-    return 60 * 1000;
-  }
-
-  function backOff(res, message) {
-    rateLimitedUntil = Date.now() + rateLimitWait(res);
-    rateLimitMessage = `GitHub rate limit: ${message.split(/(?<=\.)\s/)[0]}`;
-    return rateLimitError();
-  }
-
-  // 502/503/504 and network drops are transient — retry with exponential backoff.
-  async function gql(query, variables) {
-    if (Date.now() < rateLimitedUntil) throw rateLimitError();
-    const RETRYABLE = new Set([502, 503, 504]);
-    let lastErr;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      if (attempt > 0) await sleep(400 * 2 ** (attempt - 1));
-      let res;
-      try {
-        res = await companionPost("github/graphql", true, { query, variables });
-      } catch {
-        lastErr = new Error("Couldn't reach Shipyard. Is it still running?");
-        continue;
-      }
-      if (res.status === 401) {
-        const message = (await res.json().catch(() => null))?.message;
-        throw authError(`GitHub rejected Shipyard's gh token (401)${message ? ` — ${message}` : ""}. Run \`gh auth login\`, then refresh.`);
-      }
-      if (RETRYABLE.has(res.status)) {
-        lastErr = new Error(`GitHub is temporarily unavailable (${res.status}). Try refreshing in a moment.`);
-        continue;
-      }
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        if (body?.ok === false) throw new Error(body.error);
-        const message = body?.message || res.statusText;
-        if (res.status === 429 || (res.status === 403 && (res.headers.get("retry-after") ||
-            res.headers.get("x-ratelimit-remaining") === "0" || /rate limit/i.test(message)))) throw backOff(res, message);
-        throw new Error(`GitHub API error: ${res.status}${message ? ` — ${message}` : ""}`);
-      }
-      const json = await res.json();
-      const allNull = json.data && Object.values(json.data).every((v) => v === null);
-      if (json.errors?.length && (!json.data || allNull)) {
-        const message = json.errors.map((e) => e.message).join("; ");
-        if (json.errors.some((e) => e.type === "RATE_LIMITED")) throw backOff(res, message);
-        throw /bad credentials|requires authentication|resource not accessible/i.test(message)
-          ? authError(message) : new Error(message);
-      }
-      return json.data;
-    }
-    throw lastErr;
-  }
-
-  async function setAutoMerge(prId, enable) {
-    if (!enable) {
-      await gql(`mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }`, { id: prId });
-      return;
-    }
-    let lastErr;
-    for (const method of ["MERGE", "SQUASH", "REBASE"]) {
-      try {
-        await gql(
-          `mutation($id: ID!, $method: PullRequestMergeMethod!) {
-            enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $method }) { clientMutationId }
-          }`,
-          { id: prId, method }
-        );
-        return;
-      } catch (err) {
-        lastErr = err;
-      }
-    }
-    throw lastErr;
-  }
-
-  async function markReadyForReview(prId) {
-    await gql(`mutation($id: ID!) { markPullRequestReadyForReview(input: { pullRequestId: $id }) { pullRequest { id } } }`, { id: prId });
-  }
-
   function requireTarget() {
     const target = getCurrentRepo();
     if (!target) throw new Error("No repo, org, or user selected. Open settings (⚙) and add one.");
@@ -1036,25 +932,9 @@
   async function fetchMergedPage(kind, after) {
     const params = new URLSearchParams({ view: requireTarget(), kind });
     if (after) params.set("after", after);
-    const res = await fetch(`companion/merged?${params}`, { cache: "no-store" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.ok === false) throw new Error(data.error || `Shipyard request failed (${res.status}).`);
+    const data = await companionGet(`companion/merged?${params}`);
     Object.assign(state.ownerTypes, data.owners);
     return data;
-  }
-
-  // A draft or auto-merge change made here shows until the server's poll reads it back.
-  const LOCAL_EDIT_MS = 2 * 60 * 1000;
-  const localEdits = new Map();  // PR id -> { fields, at }
-  function editLocally(pr, fields) {
-    Object.assign(pr, fields);
-    localEdits.set(pr.id, { fields, at: Date.now() });
-    companionCall("companion/check-now").catch(() => {});
-  }
-  function withLocalEdits(pr) {
-    const edit = localEdits.get(pr.id);
-    if (edit && Date.now() - edit.at > LOCAL_EDIT_MS) localEdits.delete(pr.id);
-    return localEdits.has(pr.id) ? { ...pr, ...edit.fields } : { ...pr };
   }
 
   // Sort the server's PRs into the page's lists. The server polls every PR you're
@@ -1068,7 +948,7 @@
     const prs = [], reviewed = [], merged = [], reviewedMerged = [];
     for (const [key, cp] of Object.entries(cs.prs || {})) {
       if (!cp.pr || !inScope(key)) continue;
-      const pr = withLocalEdits(cp.pr);
+      const pr = { ...cp.pr };
       const lists = cp.lists || [];
       if (pr.state === "OPEN") {
         if (lists.includes("mine") || lists.includes("requested")) prs.push(pr);
@@ -1275,7 +1155,20 @@
 
   // POST to the companion and return its JSON, throwing its error message on failure.
   async function companionCall(url, body = {}) {
-    const res = await companionPost(url, true, body);
+    return companionJson(await companionPost(url, true, body));
+  }
+
+  async function companionGet(url) {
+    let res;
+    try {
+      res = await fetch(url, { cache: "no-store" });
+    } catch {
+      throw new Error("Couldn't reach Shipyard. Is it still running?");
+    }
+    return companionJson(res);
+  }
+
+  async function companionJson(res) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) throw new Error(data.error || `Shipyard request failed (${res.status}).`);
     return data;
@@ -2096,12 +1989,11 @@
     if (draftBtn) {
       // Marking ready notifies reviewers, so a stray tap shouldn't do it.
       const draftPr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
-      if (!confirm(`Mark ${draftPr ? `#${draftPr.number} ` : ""}ready for review? Requested reviewers will be notified.`)) return;
+      if (!draftPr || !confirm(`Mark #${draftPr.number} ready for review? Requested reviewers will be notified.`)) return;
       draftBtn.disabled = true;
       draftBtn.textContent = "…";
       try {
-        await markReadyForReview(draftBtn.dataset.pr);
-        if (draftPr) editLocally(draftPr, { isDraft: false });
+        await companionCall(`companion/pr-action?key=${encodeURIComponent(prKey(draftPr))}&action=mark_ready`, { payload: {} });
         render();
       } catch (err) {
         alert(`Mark ready: ${err.message}`);
@@ -2111,20 +2003,14 @@
     }
 
     const btn = e.target.closest("button.am-toggle");
-    if (!btn) return;
+    const amPr = btn && state.prs.find((p) => p.id === btn.dataset.pr);
+    if (!amPr) return;
     btn.disabled = true;
     btn.textContent = "…";
-    const enable = btn.dataset.action === "enable";
+    const action = btn.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
     try {
-      await setAutoMerge(btn.dataset.pr, enable);
-      const pr = state.prs.find((p) => p.id === btn.dataset.pr);
-      if (pr) {
-        editLocally(pr, { autoMergeRequest: enable ? { enabledAt: new Date().toISOString() } : null,
-          viewerCanEnableAutoMerge: !enable, viewerCanDisableAutoMerge: enable });
-        btn.outerHTML = autoMergeChip(pr);
-      } else {
-        render();
-      }
+      await companionCall(`companion/pr-action?key=${encodeURIComponent(prKey(amPr))}&action=${action}`, { payload: {} });
+      render();
     } catch (err) {
       alert(`Auto-merge: ${err.message}`);
       render();
@@ -2299,24 +2185,6 @@
     render();
   }
 
-  const DETAIL_QUERY = `
-    query($id: ID!) { node(id: $id) { ... on PullRequest {
-      timelineItems(last: 30, itemTypes: [PULL_REQUEST_COMMIT, PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT,
-          ISSUE_COMMENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, MERGED_EVENT,
-          HEAD_REF_FORCE_PUSHED_EVENT, REVIEW_DISMISSED_EVENT]) { nodes {
-        __typename
-        ... on PullRequestCommit { commit { messageHeadline committedDate author { user { login } name } } }
-        ... on PullRequestReview { state submittedAt author { login } }
-        ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } ... on Team { name } } }
-        ... on IssueComment { createdAt author { login } }
-        ... on ReadyForReviewEvent { createdAt actor { login } }
-        ... on ConvertToDraftEvent { createdAt actor { login } }
-        ... on MergedEvent { createdAt actor { login } }
-        ... on HeadRefForcePushedEvent { createdAt actor { login } }
-        ... on ReviewDismissedEvent { createdAt actor { login } }
-      } }
-    } } }`;
-
   // The timeline is read on demand, once per PR update.
   async function loadDetail(key) {
     const pr = findPr(key);
@@ -2326,7 +2194,8 @@
     detailCache.set(key, { updatedAt: pr.updatedAt, loading: true, data: cached?.data || null });
     let entry;
     try {
-      entry = { updatedAt: pr.updatedAt, loading: false, data: (await gql(DETAIL_QUERY, { id: pr.id })).node };
+      const { node } = await companionGet(`companion/timeline?id=${encodeURIComponent(pr.id)}`);
+      entry = { updatedAt: pr.updatedAt, loading: false, data: node };
     } catch (err) {
       entry = { updatedAt: pr.updatedAt, loading: false, data: cached?.data || null, error: err.message };
     }

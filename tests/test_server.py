@@ -37,6 +37,9 @@ class FakeCompanion:
         self.calls.append(("card", card, index, payload))
         return {"ok": True}
 
+    def timeline(self, node_id):
+        return {"ok": True, "node": {"id": node_id}}
+
     def do_action(self, key, action, payload, card_id=None):
         raise LookupError("not tracked")
 
@@ -148,27 +151,11 @@ class Endpoints(ServerCase):
         self.assertEqual(json.loads(second[1][len("data: "):])["version"], 4)
         conn.close()
 
-    def test_github_graphql_is_proxied_with_rate_limit_headers(self):
-        sent = []
-
-        class FakeGitHub:
-            def forward_graphql(self, body):
-                sent.append(body)
-                return 403, {"Retry-After": "120"}, b'{"message": "secondary rate limit"}'
-
-        with mock.patch.object(Handler, "github", FakeGitHub()):
-            status, _ = self.request("POST", "/github/graphql", {"query": "{ viewer { login } }"},
-                                     headers={"X-Shipyard-Token": "wrong"})
-            self.assertEqual((status, sent), (403, []))
-            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-            host = f"localhost:{self.port}"
-            conn.request("POST", "/github/graphql", json.dumps({"query": "{ viewer { login } }"}),
-                         {"Host": host, "Origin": f"http://{host}", "X-Shipyard-Token": "tok"})
-            res = conn.getresponse()
-            self.assertEqual((res.status, res.getheader("Retry-After")), (403, "120"))
-            self.assertEqual(json.loads(res.read()), {"message": "secondary rate limit"})
-            conn.close()
-        self.assertEqual(sent, [{"query": "{ viewer { login } }", "variables": {}}])
+    def test_timeline_and_no_graphql_proxy(self):
+        status, out = self.request("GET", "/companion/timeline?id=PR_1")
+        self.assertEqual((status, out["node"]), (200, {"id": "PR_1"}))
+        status, _ = self.request("POST", "/github/graphql", {"query": "{ viewer { login } }"})
+        self.assertEqual(status, 404)
 
     def test_static_and_unknown_paths(self):
         status, _ = self.request("GET", "/")

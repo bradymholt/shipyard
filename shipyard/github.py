@@ -1,5 +1,5 @@
-"""A small GitHub client for the companion and the page's GitHub calls, which it
-proxies. The token comes from `gh auth token` and never reaches the browser."""
+"""A small GitHub client for the companion, which makes every GitHub call for the page.
+The token comes from `gh auth token` and never reaches the browser."""
 import json
 import shutil
 import subprocess
@@ -76,24 +76,6 @@ class GitHub:
                 return payload
             return json.loads(payload) if payload else None
         raise last
-
-    def forward_graphql(self, body):
-        """One GraphQL call for the page, answered as GitHub answered it: (status, headers,
-        bytes), with no retry, since the page retries and backs off on its own."""
-        req = urllib.request.Request(f"{API}/graphql", data=json.dumps(body).encode(), method="POST", headers={
-            "Authorization": f"Bearer {self.token()}",
-            "Content-Type": "application/json",
-            "User-Agent": "shipyard-companion",
-        })
-        try:
-            with self._open(req, timeout=30) as res:
-                return res.status, res.headers, res.read()
-        except urllib.error.HTTPError as e:
-            if e.code == 401:
-                self._token = None
-            return e.code, e.headers, e.read()
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            return 502, {}, json.dumps({"message": f"network error reaching GitHub: {e}"}).encode()
 
     def graphql(self, query, variables=None):
         mutation = query.lstrip().startswith("mutation")

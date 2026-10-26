@@ -2,9 +2,7 @@
 smoke test (tests/ui/smoke.mjs) or to look at the sidebar without touching GitHub:
 
     python3 tests/ui/demo_server.py 4399
-
-The page's remaining GitHub calls (the sidebar's timeline) go to /github/graphql, which
-smoke.mjs answers in the browser; here it answers 503."""
+"""
 import copy
 import functools
 import http.server
@@ -29,14 +27,9 @@ from shipyard.config import REPO_DIR, validate_config  # noqa: E402
 from shipyard.server import Handler  # noqa: E402
 
 
-class OfflineGitHub:
-    def forward_graphql(self, body):
-        return 503, {}, b'{"message": "The demo server does not call GitHub."}'
-
-
 class DemoGitHub(FakeGitHub):
     """Applies the merges and review requests the smoke test makes, since the server
-    re-reads a PR right after an action, and answers the merged-history searches."""
+    re-reads a PR right after an action, and answers the merged-history and timeline reads."""
 
     def __init__(self):
         super().__init__()
@@ -47,6 +40,12 @@ class DemoGitHub(FakeGitHub):
         if "is:merged" in q:
             nodes = self.merged["reviewed-by:@me" if "reviewed-by:@me" in q else "author:@me"]
             return {"search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": copy.deepcopy(nodes)}}
+        if "node(id:" in query:
+            return {"node": {"timelineItems": {"nodes": [
+                {"__typename": "PullRequestCommit", "commit": {"messageHeadline": "Retry failed deliveries",
+                                                                "committedDate": ago(hours=5)}},
+                {"__typename": "PullRequestReview", "state": "CHANGES_REQUESTED", "submittedAt": ago(hours=2),
+                 "author": {"login": "rev"}}]}}}
         if "mergePullRequest" in query:
             node = self.nodes[variables["id"]]
             node.update(state="MERGED", mergedAt=ago(minutes=0))
@@ -199,7 +198,6 @@ def main():
     Handler.config = comp.config
     Handler.session_token = "demo-token"
     Handler.companion = comp
-    Handler.github = OfflineGitHub()
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))
     httpd.daemon_threads = True

@@ -225,7 +225,8 @@ def draft_review(gh, snap, payload, ctx):
 
 RUN = {
     "rerun_checks": rerun_checks, "rerequest_review": rerequest_review,
-    "enable_auto_merge": enable_auto_merge, "merge": merge, "mark_ready": mark_ready,
+    "enable_auto_merge": enable_auto_merge, "disable_auto_merge": undo_enable_auto_merge,
+    "merge": merge, "mark_ready": mark_ready,
     "post_reply": post_reply, "nudge": nudge, "approve": approve,
     "comment_unresolved": comment_unresolved, "submit_review": submit_review, "apply_fix": apply_fix,
     "draft_review": draft_review,

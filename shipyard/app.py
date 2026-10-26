@@ -47,8 +47,7 @@ def main(argv=None):
     Handler.roots = roots
     Handler.config = config
     Handler.session_token = secrets.token_urlsafe(32)
-    Handler.github = GitHub()
-    Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=Handler.github)
+    Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=GitHub())
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))

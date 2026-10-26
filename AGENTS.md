@@ -38,11 +38,11 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
   so it is loaded but never rewritten. Nothing else depends on this file; the app never
   calls it. Keep platform-specific service code here rather than in `shipyard.py`.
 
-Every GitHub call goes through the companion with the `gh auth token` token, and the page
-never holds a token. The companion is the only thing that searches GitHub: the page builds
-its lists from the PRs it pushes, filtered to the current view, and gets merged history from
-`/companion/merged`. Its few remaining calls (the sidebar's timeline, marking ready, auto-merge)
-go through `/github/graphql`. Views and display preferences live in the browser's local storage.
+The companion makes every GitHub call, with the `gh auth token` token; the page never
+talks to GitHub or holds a token. The page builds its lists from the PRs the companion
+pushes, filtered to the current view, reads merged history and a PR's timeline from
+`/companion/merged` and `/companion/timeline`, and acts through `/companion/pr-action`.
+Views and display preferences live in the browser's local storage.
 
 ## Running it
 

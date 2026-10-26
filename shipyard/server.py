@@ -1,6 +1,6 @@
 """The companion's HTTP side: serves the page, /worktrees.json, the companion's state
-(once as JSON and as a Server-Sent Events stream), the page's GitHub GraphQL calls, and
-the POSTs behind every button.
+(once as JSON and as a Server-Sent Events stream), the GitHub reads the page asks for
+(merged history, a PR's timeline), and the POSTs behind every button.
 
 Binds to localhost. Every request must carry a localhost Host header (against DNS
 rebinding), and every mutation must also come from the page's own origin with the
@@ -12,7 +12,6 @@ from urllib.parse import parse_qs, urlparse
 
 from . import worktrees
 from .config import DEFAULT_CONFIG, page_config
-from .github import GitHubError
 
 MAX_BODY = 1_000_000
 SSE_KEEPALIVE = 15
@@ -23,8 +22,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     config = DEFAULT_CONFIG
     session_token = ""
     companion = None
-    github = None
-    RATE_LIMIT_HEADERS = ("Retry-After", "X-RateLimit-Remaining", "X-RateLimit-Reset")
     STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png",
                     "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
@@ -101,6 +98,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(self.companion.page_state())
         if path == "/companion/events":
             return self._events()
+        if path == "/companion/timeline":
+            q = parse_qs(parsed.query)
+            return self._companion_call(lambda c: c.timeline((q.get("id") or [""])[0]))
         if path == "/companion/merged":
             q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
@@ -161,12 +161,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS | {"/github/graphql"}:
+        if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS:
             return self._not_found()
         if not self._mutation_is_authorized():
             return self._json({"ok": False, "error": "Request was not authorized."}, 403)
-        if parsed.path == "/github/graphql":
-            return self._github_graphql()
         q = parse_qs(parsed.query)
         arg = lambda name: (q.get(name) or [""])[0]  # noqa: E731
         if parsed.path in self.COMPANION_ACTIONS:
@@ -188,27 +186,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             result = worktrees.launch_agent(arg("path"), self.roots, self.config, arg("session") or None)
         return self._json(result, 200 if result.get("ok") else 500)
-
-    def _github_graphql(self):
-        try:
-            body = self._body()
-            if not isinstance(body.get("query"), str):
-                raise ValueError("Missing GraphQL query.")
-            status, headers, payload = self.github.forward_graphql(
-                {"query": body["query"], "variables": body.get("variables") or {}})
-        except ValueError as e:
-            return self._json({"ok": False, "error": str(e)}, 400)
-        except GitHubError as e:  # no gh token
-            status, headers, payload = 401, {}, json.dumps({"message": str(e)}).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
-        for name in self.RATE_LIMIT_HEADERS:
-            if headers.get(name):
-                self.send_header(name, headers.get(name))
-        self.end_headers()
-        self.wfile.write(payload)
 
     def _companion(self, name, arg, body):
         def card_id():

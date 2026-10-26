@@ -109,6 +109,25 @@ query($q: String!, $after: String) {
   }
 }""" % MERGED_PAGE_SIZE
 
+# What the page's sidebar lists under Activity, read when it opens.
+TIMELINE_QUERY = """
+query($id: ID!) { node(id: $id) { ... on PullRequest {
+  timelineItems(last: 30, itemTypes: [PULL_REQUEST_COMMIT, PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT,
+      ISSUE_COMMENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, MERGED_EVENT,
+      HEAD_REF_FORCE_PUSHED_EVENT, REVIEW_DISMISSED_EVENT]) { nodes {
+    __typename
+    ... on PullRequestCommit { commit { messageHeadline committedDate author { user { login } name } } }
+    ... on PullRequestReview { state submittedAt author { login } }
+    ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } ... on Team { name } } }
+    ... on IssueComment { createdAt author { login } }
+    ... on ReadyForReviewEvent { createdAt actor { login } }
+    ... on ConvertToDraftEvent { createdAt actor { login } }
+    ... on MergedEvent { createdAt actor { login } }
+    ... on HeadRefForcePushedEvent { createdAt actor { login } }
+    ... on ReviewDismissedEvent { createdAt actor { login } }
+  } }
+} } }"""
+
 OWNER_QUERY = "query($login: String!) { repositoryOwner(login: $login) { __typename } }"
 TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
@@ -319,6 +338,14 @@ class Poller:
         page = search["pageInfo"]
         return {"prs": [page_pr(n) for n in search["nodes"] if n and n.get("number")],
                 "after": page["endCursor"] if page["hasNextPage"] else None}
+
+    def timeline(self, node_id):
+        if not node_id:
+            raise ValueError("Which PR?")
+        node = self.github.graphql(TIMELINE_QUERY, {"id": node_id}).get("node")
+        if not node:
+            raise LookupError("GitHub has no such PR, or the token can't see it.")
+        return node
 
     def details(self, ids, viewer):
         out = []

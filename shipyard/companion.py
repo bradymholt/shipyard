@@ -666,7 +666,8 @@ class Companion:
         the PR. It stays out of the fields events diff, so the poll still sees the change."""
         ci = {"ci": "PENDING", "failing": []}
         pending = {"apply_fix": ci, "rerun_checks": ci, "enable_auto_merge": {"auto_merge": True},
-                   "undo_enable_auto_merge": {"auto_merge": False}, "merge": {"state": "MERGED"},
+                   "undo_enable_auto_merge": {"auto_merge": False}, "disable_auto_merge": {"auto_merge": False},
+                   "merge": {"state": "MERGED"},
                    "mark_ready": {"draft": False}}.get(action)
         if action == "post_reply":
             comment = {"id": None, "author": self.viewer, "created": now_iso()}
@@ -696,6 +697,9 @@ class Companion:
         if fresh:
             snap["page"] = fresh[0]["page"]
             self.db.save_pr(snap)
+
+    def timeline(self, node_id):
+        return {"ok": True, "node": self.poller.timeline(node_id)}
 
     def merged_history(self, view, kind, after=None):
         return {"ok": True, **self.poller.merged(view, kind, after), "owners": dict(self.poller.owner_types)}
