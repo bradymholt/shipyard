@@ -56,6 +56,11 @@ class Config(unittest.TestCase):
         self.assertEqual((codex["name"], codex["mode"], codex["prompt_url"], codex["command"][-2:]),
                          ("Codex", "command", None, ["{path}", "{session}"]))
         self.assertEqual(validate_config({"agent": {"sessions": "codex", "name": "Mine"}})["agent"]["name"], "Mine")
+        cursor = validate_config({"launcher": {"app": "cursor"}})["launcher"]
+        self.assertEqual((cursor["name"], cursor["url"], cursor["command"]), ("Cursor", "cursor://file/{path}", ["cursor", "{path}"]))
+        self.assertEqual(validate_config({"launcher": {"mode": "command"}})["launcher"]["app"], "vscode")
+        with self.assertRaises(ValueError):
+            validate_config({"launcher": {"app": "notepad"}})
         fields = {tuple(f["path"]): f for f in settings.fields({"agent": {"sessions": "codex"}})}
         self.assertEqual((fields[("agent", "name")]["value"], fields[("agent", "name")]["set"]), ("Codex", False))
         with self.assertRaises(ValueError):

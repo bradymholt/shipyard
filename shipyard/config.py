@@ -40,13 +40,19 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = "shipyard.config.json"
 CONFIG_PATH = REPO_DIR / CONFIG_FILE
 
-DEFAULT_LAUNCHER = {
-    "name": "VS Code",
-    "mode": "url",
-    "target": "workspace",
-    "url": "vscode://file/{path}",
-    "command": ["code", "{path}"],
+# Each app brings its own defaults; a setting in the file wins over them. The command
+# needs that app's command-line tool on the PATH.
+LAUNCHER_DEFAULTS = {
+    "vscode": {"name": "VS Code", "mode": "url", "target": "workspace",
+               "url": "vscode://file/{path}", "command": ["code", "{path}"]},
+    "cursor": {"name": "Cursor", "mode": "url", "target": "workspace",
+               "url": "cursor://file/{path}", "command": ["cursor", "{path}"]},
+    "windsurf": {"name": "Windsurf", "mode": "url", "target": "workspace",
+                 "url": "windsurf://file/{path}", "command": ["windsurf", "{path}"]},
+    "zed": {"name": "Zed", "mode": "url", "target": "folder",
+            "url": "zed://file/{path}", "command": ["zed", "{path}"]},
 }
+DEFAULT_LAUNCHER = {"app": "vscode", **LAUNCHER_DEFAULTS["vscode"]}
 DEFAULT_AGENT = {
     "name": "Claude Code",
     "sessions": "claude-code",
@@ -287,7 +293,10 @@ def validate_config(raw):
     launcher_unknown = sorted(set(launcher_raw) - set(DEFAULT_LAUNCHER))
     if launcher_unknown:
         raise ValueError(f"unknown launcher setting(s): {', '.join(launcher_unknown)}")
-    launcher = {**DEFAULT_LAUNCHER, **launcher_raw}
+    app = launcher_raw.get("app", DEFAULT_LAUNCHER["app"])
+    if app not in LAUNCHER_DEFAULTS:
+        raise ValueError(f'launcher "app" must be one of: {", ".join(LAUNCHER_DEFAULTS)}')
+    launcher = {"app": app, **LAUNCHER_DEFAULTS[app], **launcher_raw}
     if launcher["target"] not in ("folder", "workspace"):
         raise ValueError('launcher "target" must be either "folder" or "workspace"')
     validate_open_settings("launcher", launcher, "{path}")

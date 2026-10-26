@@ -155,6 +155,21 @@ function settingRow(f, error) {
 
 const changedIn = (section) => settingFields.filter((f) => f.section === section && f.set && !same(f.value, f.default)).length;
 
+// Settings a choice above fills in (an app, an agent) sit under one Advanced heading.
+function sectionRows(id, errors) {
+  let headed = false;
+  return settingFields.filter((f) => f.section === id).map((f) => {
+    let heading = "";
+    if (f.group === "advanced" && !headed) {
+      headed = true;
+      const parent = f.parent && fieldAt(f.parent.join("."));
+      heading = `<div class="set-group${parent ? " set-child" : ""}${parent && !parent.value ? " set-off" : ""}">
+        <span>Advanced</span> Filled in by your choice above; change one only to override it.</div>`;
+    }
+    return heading + settingRow(f, errors[fieldKey(f)]);
+  }).join("");
+}
+
 function renderSettings(errors = {}) {
   const focused = document.activeElement?.id;
   const panes = [VIEWS_PANE, ...settingSections];
@@ -167,7 +182,7 @@ function renderSettings(errors = {}) {
   $("#set-views").classList.toggle("hidden", pane !== "views");
   const section = settingSections.find((s) => s.id === pane);
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
-    ${settingFields.filter((f) => f.section === section.id).map((f) => settingRow(f, errors[fieldKey(f)])).join("")}` : "";
+    ${sectionRows(section.id, errors)}` : "";
   if (focused) document.getElementById(focused)?.focus();
 }
 

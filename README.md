@@ -93,7 +93,7 @@ python3 shipyard.py
 }
 ```
 
-VS Code is the default, but the launcher is app-agnostic. URL mode opens a custom URL scheme in the browser; command mode asks the server to run a command. Use `{path}` where the checkout path belongs. `target` can be `folder`, or `workspace` to prefer a `.code-workspace` file when one exists.
+`app` picks a preset: `vscode` (the default), `cursor`, `windsurf`, or `zed`; it fills in the rest, and anything you set here overrides it. Opening by command needs the app's command-line tool on your PATH. The launcher is app-agnostic beyond the presets. URL mode opens a custom URL scheme in the browser; command mode asks the server to run a command. Use `{path}` where the checkout path belongs. `target` can be `folder`, or `workspace` to prefer a `.code-workspace` file when one exists.
 
 For example, this opens the checkout folder in Xcode on macOS:
 
