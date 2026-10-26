@@ -721,8 +721,6 @@
   "use strict";
 
   const LS = {
-    REPOS: "ghpr.repos",
-    REPO: "ghpr.currentRepo",
     FILTER: "ghpr.filter",
   };
 
@@ -754,6 +752,7 @@
     sort: localStorage.getItem("ghpr.sort") || "priority",
     worktrees: {},        // "repo#branch" -> { path, workspace }
     companionToken: BOOT.token || "",  // required for mutations
+    views: BOOT.views || { views: [], current: "" },  // saved on the server
     launcher: BOOT.launcher || DEFAULT_LAUNCHER,
     agent: BOOT.agent || null,  // coding agent whose latest session a checkout can resume
     rules: BOOT.rules || null,  // the companion's "rules" config (which chips are on)
@@ -771,9 +770,29 @@
     applyServerPrs();
   }
 
-  const getRepos = () => JSON.parse(localStorage.getItem(LS.REPOS) || "[]");
-  const setRepos = (repos) => localStorage.setItem(LS.REPOS, JSON.stringify(repos));
-  const getCurrentRepo = () => localStorage.getItem(LS.REPO) || getRepos()[0] || "";
+  const getRepos = () => state.views.views;
+  const getCurrentRepo = () => state.views.current || getRepos()[0] || "";
+
+  // Show the change now; the server's push then confirms it in every open tab.
+  let savingViews = 0;
+  async function saveViews(views, current) {
+    const before = state.views;
+    state.views = { views, current };
+    savingViews++;
+    try {
+      const saved = await companionCall("companion/views", { views, current });
+      state.views = { views: saved.views, current: saved.current };
+      return true;
+    } catch (err) {
+      state.views = before;
+      renderRepoSelect();
+      renderViewsList();
+      showError(err.message, "Couldn't save your views");
+      return false;
+    } finally {
+      savingViews--;
+    }
+  }
 
   function githubAge(updatedAt) {
     const seconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000));
@@ -1716,12 +1735,8 @@
   function removeView(v) {
     const wasCurrent = getCurrentRepo() === v;
     const remaining = getRepos().filter((r) => r !== v);
-    setRepos(remaining);
-    if (wasCurrent) {
-      if (remaining[0]) localStorage.setItem(LS.REPO, remaining[0]);
-      else localStorage.removeItem(LS.REPO);
-      resetData();
-    }
+    saveViews(remaining, wasCurrent ? remaining[0] || "" : getCurrentRepo());
+    if (wasCurrent) resetData();
     renderRepoSelect();
     renderViewsList();
     if (wasCurrent) {
@@ -1852,8 +1867,7 @@
     }
     const v = targets.join(", ");
     const repos = getRepos();
-    if (!repos.includes(v)) { repos.push(v); setRepos(repos); }
-    localStorage.setItem(LS.REPO, v);
+    saveViews(repos.includes(v) ? repos : [...repos, v], v);
     $("#add-repo-input").value = "";
     renderRepoSelect();
     renderViewsList();
@@ -1864,7 +1878,7 @@
   $("#add-repo-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#add-repo-btn").click(); });
 
   $("#repo-select").addEventListener("change", (e) => {
-    localStorage.setItem(LS.REPO, e.target.value);
+    saveViews(getRepos(), e.target.value);
     resetData();
     render();
     load();
@@ -2694,6 +2708,7 @@
       } catch { return; }
       const config = state.companionState.config;
       if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER });
+      applyViews();
       applyServerPrs();
       applyWorktrees();
       updateGitHubStatus();
@@ -2707,6 +2722,20 @@
       updateGitHubStatus();
       refreshAgoLabels();
     });
+  }
+
+  // Views changed in another tab, or the server's answer to a save from this one.
+  function applyViews() {
+    const views = state.companionState.views;
+    if (!views || savingViews || JSON.stringify(views) === JSON.stringify(state.views)) return;
+    const was = getCurrentRepo();
+    state.views = views;
+    renderRepoSelect();
+    renderViewsList();
+    if (getCurrentRepo() !== was) {
+      resetData();
+      load();
+    }
   }
 
   function companionStatusHtml() {
@@ -2731,18 +2760,31 @@
     load();
   }
 
+  // Views used to live in each browser; hand any this one has to the server, once.
+  async function moveLocalViews() {
+    let local = [];
+    try { local = JSON.parse(localStorage.getItem("ghpr.repos") || "[]"); } catch { /* unreadable: nothing to move */ }
+    const added = local.filter((v) => !getRepos().includes(v));
+    const current = getCurrentRepo() || localStorage.getItem("ghpr.currentRepo") || added[0];
+    if (added.length && !(await saveViews([...getRepos(), ...added], current))) return;
+    localStorage.removeItem("ghpr.repos");
+    localStorage.removeItem("ghpr.currentRepo");
+  }
+
   // ---------- init ----------
-  renderRepoSelect();
-  renderViewsList();
   for (const key of Object.keys(localStorage)) {
     if (key === "ghpr.token" || key === "ghpr.ownerTypes" || key.startsWith("ghpr.cache.")) localStorage.removeItem(key);
   }
-  if (getCurrentRepo()) {
-    render();
-    load();
-  } else {
-    $("#settings-dialog").showModal();
-  }
+  moveLocalViews().finally(() => {
+    renderRepoSelect();
+    renderViewsList();
+    if (getCurrentRepo()) {
+      render();
+      load();
+    } else {
+      $("#settings-dialog").showModal();
+    }
+  });
   connectCompanionEvents();
   setInterval(load, 60 * 1000);
   setInterval(updateGitHubStatus, 10 * 1000);

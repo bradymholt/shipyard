@@ -37,6 +37,9 @@ class FakeCompanion:
         self.calls.append(("card", card, index, payload))
         return {"ok": True}
 
+    def views(self):
+        return {"views": ["o/r"], "current": "o/r"}
+
     def rescan_worktrees(self):
         self.calls.append(("rescan",))
         return {"ok": True}
@@ -90,6 +93,7 @@ class Endpoints(ServerCase):
         boot = html.decode().split('<script id="shipyard-boot" type="application/json">')[1].split("</script>")[0]
         self.assertEqual((status, json.loads(boot)["token"]), (200, "tok"))
         self.assertEqual(json.loads(boot)["rules"]["nudge"], {"after_hours": 24})
+        self.assertEqual(json.loads(boot)["views"]["current"], "o/r")
         status, _ = self.request("GET", "/config.json")
         self.assertEqual(status, 404)
 

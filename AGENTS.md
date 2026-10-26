@@ -43,7 +43,8 @@ The companion makes every GitHub call, with the `gh auth token` token; the page 
 talks to GitHub or holds a token. The page builds its lists from the PRs the companion
 pushes, filtered to the current view, reads merged history and a PR's timeline from
 `/companion/merged` and `/companion/timeline`, and acts through `/companion/pr-action`.
-Views and display preferences live in the browser's local storage.
+Your saved views live in `shipyard.db` with the rest of the companion's state; only display
+preferences (tab, sort, collapsed lanes) stay in the browser's local storage.
 
 ## Running it
 

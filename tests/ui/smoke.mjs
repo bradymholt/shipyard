@@ -43,12 +43,17 @@ function check(cond, message) {
   else { console.log(`  FAIL ${message}`); failures.push(message); }
 }
 
-async function openPage(browser, port, viewport = { width: 1440, height: 900 }) {
+// The first page starts with views in local storage, where they used to live.
+async function openPage(browser, port, viewport = { width: 1440, height: 900 }, localViews = false) {
   const context = await browser.newContext({ viewport });
-  await context.addInitScript(() => {
-    localStorage.setItem("ghpr.repos", JSON.stringify(["o/r"]));
-    localStorage.setItem("ghpr.currentRepo", "o/r");
-  });
+  if (localViews) {
+    await context.addInitScript(() => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("ghpr.repos", JSON.stringify(["o/r"]));
+      localStorage.setItem("ghpr.currentRepo", "o/r");
+    });
+  }
   const direct = [];
   await context.route("https://api.github.com/**", (route) => { direct.push(route.request().url()); return route.abort(); });
   await context.route("https://avatars.example/**", (route) => route.fulfill({ status: 404, body: "" }));
@@ -70,7 +75,9 @@ try {
   const browser = await chromium.launch();
 
   console.log("companion mode");
-  const { page, errors, direct } = await openPage(browser, COMPANION_PORT);
+  const { page, errors, direct } = await openPage(browser, COMPANION_PORT, undefined, true);
+  check(await page.evaluate(() => window.__dashboard.state.views.current === "o/r" && localStorage.getItem("ghpr.repos") === null),
+    "views kept in the browser move to the server");
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
@@ -193,6 +200,7 @@ try {
 
   console.log("narrow window");
   const narrow = await openPage(browser, COMPANION_PORT, { width: 420, height: 900 });
+  check(await narrow.page.locator('.card[data-key="o/r#101"]').count() === 1, "a browser with nothing stored shows the server's saved view");
   await narrow.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await narrow.page.waitForSelector("#sidebar .sb-title");
   const box = await narrow.page.locator("#sidebar").boundingBox();

@@ -289,6 +289,16 @@ def snapshot(node, viewer):
     }
 
 
+def view_targets(view):
+    targets = [t.strip() for t in (view or "").split(",") if t.strip()]
+    if not targets:
+        raise ValueError("No repo, org, or user to search.")
+    for t in targets:
+        if not TARGET.fullmatch(t):
+            raise ValueError(f'"{t}" is not a repo, org, or user.')
+    return targets
+
+
 class Poller:
     def __init__(self, github):
         self.github = github
@@ -319,15 +329,7 @@ class Poller:
 
     def scope(self, view):
         """Search qualifiers for a view: comma-separated repos, orgs, or users, which GitHub ORs."""
-        targets = [t.strip() for t in (view or "").split(",") if t.strip()]
-        if not targets:
-            raise ValueError("No repo, org, or user to search.")
-        parts = []
-        for t in targets:
-            if not TARGET.fullmatch(t):
-                raise ValueError(f'"{t}" is not a repo, org, or user.')
-            parts.append(f"repo:{t}" if "/" in t else f"{self.owner_qualifier(t)}:{t}")
-        return " ".join(parts)
+        return " ".join(f"repo:{t}" if "/" in t else f"{self.owner_qualifier(t)}:{t}" for t in view_targets(view))
 
     def merged(self, view, kind, after=None):
         """One page of a view's merged history, newest first, in the page's shape."""
