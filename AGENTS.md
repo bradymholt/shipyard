@@ -51,7 +51,11 @@ pushes, filtered to the current view, including your latest merges, which the co
 searches every 15 minutes and pushes as their own event. It asks `/companion/merged` only
 for a view's older merges (Show more), reads a PR's timeline from `/companion/timeline`,
 and acts through `/companion/pr-action`.
-Your saved views live in `shipyard.db` with the rest of the companion's state; only display
+Settings the page edits live in `shipyard.config.json` next to the hand-edited ones: the
+page saves them through `/companion/settings`, which only accepts keys in `PAGE_SETTINGS`
+(`config.py`), checks them like any other setting, and refuses when the file changed since
+the page loaded. A new page setting goes in `PAGE_SETTINGS` and `validate_config`. Machine
+state (PRs, cards, pins, the token, which view is showing) lives in `shipyard.db`; display
 preferences (tab, sort, collapsed lanes) stay in the browser's local storage.
 
 ## Running it

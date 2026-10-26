@@ -1,7 +1,7 @@
 """The companion's memory, in one SQLite file next to shipyard.config.json: the last
 snapshot of each PR, events already handled, pins, snoozes, cards, passes, activity,
 how often each action ran automatically on each PR, whether each may be approved
-on a re-review, the page's session token, and your saved views."""
+on a re-review, the page's session token, and which view is showing."""
 import json
 import secrets
 import sqlite3
@@ -96,14 +96,19 @@ class State:
             self.db.commit()
             return token
 
-    def views(self):
-        """Your saved views (comma-separated repos, orgs, or users) and the one showing."""
-        rows = self._rows("SELECT value FROM meta WHERE key = 'views'")
-        return json.loads(rows[0]["value"]) if rows else {"views": [], "current": ""}
+    def current_view(self):
+        rows = self._rows("SELECT value FROM meta WHERE key = 'current_view'")
+        return rows[0]["value"] if rows else ""
 
-    def set_views(self, views):
-        self._exec("INSERT INTO meta (key, value) VALUES ('views', ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(views),))
+    def set_current_view(self, view):
+        self._exec("INSERT INTO meta (key, value) VALUES ('current_view', ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (view,))
+
+    def take_old_views(self):
+        """Views saved here before they moved to the config file, once."""
+        rows = self._rows("SELECT value FROM meta WHERE key = 'views'")
+        self._exec("DELETE FROM meta WHERE key = 'views'")
+        return json.loads(rows[0]["value"]) if rows else None
 
     def _exec(self, sql, args=()):
         with self.lock:

@@ -9,6 +9,12 @@ export const getRepos = () => state.views.views;
 
 export const getCurrentRepo = () => state.views.current || getRepos()[0] || "";
 
+// Settings live in the companion's config file. `expect` is what this page last saw, so a
+// hand edit to the file since then is reported instead of overwritten.
+export function saveSettings(set, expect) {
+  return companionCall("companion/settings", { set, expect });
+}
+
 // Show the change now; the server's push then confirms it in every open tab.
 let savingViews = 0;
 
@@ -17,7 +23,8 @@ export async function saveViews(views, current) {
   state.views = { views, current };
   savingViews++;
   try {
-    const saved = await companionCall("companion/views", { views, current });
+    if (JSON.stringify(views) !== JSON.stringify(before.views)) await saveSettings({ views }, { views: before.views });
+    const saved = await companionCall("companion/current-view", { view: current });
     state.views = { views: saved.views, current: saved.current };
     return true;
   } catch (err) {

@@ -4,8 +4,9 @@ bump a PR's updatedAt, which is why the signature carries them too.
 
 Each PR becomes a plain snapshot dict; events.py diffs two of them."""
 import hashlib
-import re
 from pathlib import Path
+
+from .config import view_targets
 
 # A change to how PRs are read or shaped must re-read them all, so saved memory carries this.
 VERSION = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()[:12]
@@ -135,7 +136,6 @@ query($id: ID!) { node(id: $id) { ... on PullRequest {
 } } }"""
 
 OWNER_QUERY = "query($login: String!) { repositoryOwner(login: $login) { __typename } }"
-TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
 FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
 RUNNING = {"IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "EXPECTED"}
@@ -300,16 +300,6 @@ def snapshot(node, viewer):
         "last_commit_at": commit.get("committedDate"),
         "page": page_pr(node),
     }
-
-
-def view_targets(view):
-    targets = [t.strip() for t in (view or "").split(",") if t.strip()]
-    if not targets:
-        raise ValueError("No repo, org, or user to search.")
-    for t in targets:
-        if not TARGET.fullmatch(t):
-            raise ValueError(f'"{t}" is not a repo, org, or user.')
-    return targets
 
 
 class Poller:

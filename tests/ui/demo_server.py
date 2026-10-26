@@ -186,7 +186,8 @@ def main():
                  "shipyard.companion.worktrees.review_worktree": {"ok": True, "path": str(checkout)}}.get(target, wts)
         mock.patch(target, return_value=value).start()
 
-    comp = Companion(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh)
+    comp = Companion(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
+                     config_path=tmp / "shipyard.config.json")
     comp.poll_once()
     lookups.update(state="MERGED", reviewDecision="APPROVED", updatedAt=ago(minutes=10), mergedAt=ago(minutes=10),
                    latestReviews={"nodes": [{"databaseId": 98, "state": "APPROVED", "submittedAt": ago(minutes=10),

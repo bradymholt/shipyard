@@ -46,6 +46,7 @@ def main(argv=None):
     Handler.roots = roots
     Handler.config = config
     Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=GitHub())
+    Handler.companion.move_old_views()
     Handler.session_token = Handler.companion.db.session_token()
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
