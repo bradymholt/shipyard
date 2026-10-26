@@ -311,6 +311,21 @@ def read_config(path=CONFIG_PATH):
         raise ValueError(f"Invalid {CONFIG_FILE}: {e}") from e
 
 
+def format_json(value, depth=0):
+    """Two-space JSON that keeps a short list of plain values on one line, the way the file
+    is written by hand, so saving a setting doesn't reflow the rest of it."""
+    pad = "  " * depth
+    if isinstance(value, dict) and value:
+        items = [f"{pad}  {json.dumps(k, ensure_ascii=False)}: {format_json(v, depth + 1)}" for k, v in value.items()]
+        return "{\n" + ",\n".join(items) + f"\n{pad}}}"
+    if isinstance(value, list) and value:
+        inline = json.dumps(value, ensure_ascii=False)
+        if not any(isinstance(v, (dict, list)) for v in value) and len(pad) + len(inline) <= 90:
+            return inline
+        return "[\n" + ",\n".join(f"{pad}  {format_json(v, depth + 1)}" for v in value) + f"\n{pad}]"
+    return json.dumps(value, ensure_ascii=False)
+
+
 def save_settings(changes, expect=None, path=CONFIG_PATH):
     """Write settings the page changed into the config file and return the new config.
     Everything else in the file is kept. `expect` holds the values the page last saw, so
@@ -331,7 +346,7 @@ def save_settings(changes, expect=None, path=CONFIG_PATH):
         raise ValueError(f"Invalid setting: {e}") from e
     raw.update({key: cfg[key] for key in changes})
     tmp = Path(f"{path}.tmp")
-    tmp.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
+    tmp.write_text(format_json(raw) + "\n")
     os.replace(tmp, path)
     return cfg
 
