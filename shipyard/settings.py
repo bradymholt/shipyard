@@ -9,8 +9,8 @@ import copy
 import shlex
 
 from .agents import ADAPTERS
-from .config import (CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, read_raw, validate_auto, validate_config, validate_views,
-                     write_raw)
+from .config import (CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, LAUNCHER_DEFAULTS, read_raw, validate_auto, validate_config,
+                     validate_views, write_raw)
 
 SECTIONS = [
     {"id": "launcher", "title": "Opening checkouts",
@@ -54,9 +54,12 @@ def _rule_option(cfg, name, key):
     return (value if isinstance(value, dict) else validate_config({})["rules"][name])[key]
 
 
-def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None):
+def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None,
+           group=None):
+    """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading."""
     return {"section": section, "path": path, "kind": kind, "label": label, "help": help, "choices": choices,
-            "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v)}
+            "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v),
+            "group": group}
 
 
 def _open_fields(section, placeholder):
@@ -66,33 +69,40 @@ def _open_fields(section, placeholder):
     settings = (lambda cfg: _agent(cfg)) if section == "agent" else (lambda cfg: cfg["launcher"])
     return [
         _field(section, root + ("mode",), "choice", "How to open", lambda cfg: settings(cfg)["mode"],
-               choices=OPEN_MODES, parent=parent),
+               choices=OPEN_MODES, parent=parent, group="advanced"),
         _field(section, root + ("url",), "text", "URL", lambda cfg: settings(cfg)["url"], parent=parent,
-               help=f"Used when opening a URL. {placeholder} stands for the "
+               group="advanced", help=f"Used when opening a URL. {placeholder} stands for the "
                     + ("session." if section == "agent" else "checkout path.")),
         _field(section, root + ("command",), "command", "Command", lambda cfg: _command_text(settings(cfg)["command"]),
-               parent=parent, to_raw=shlex.split, help=f"Used when running a command. Must include {placeholder}."),
+               parent=parent, to_raw=shlex.split, group="advanced",
+               help=f"Used when running a command. Must include {placeholder}."),
     ]
 
 
 FIELDS = [
     _field("views", ("views",), "views", "Views", lambda cfg: cfg["views"], to_raw=validate_views),
 
-    _field("launcher", ("launcher", "name"), "text", "App name", lambda cfg: cfg["launcher"]["name"]),
+    _field("launcher", ("launcher", "app"), "choice", "App", lambda cfg: cfg["launcher"]["app"],
+           choices=[[k, v["name"]] for k, v in LAUNCHER_DEFAULTS.items()],
+           help="Fills in everything under Advanced. Opening by command needs the app's command-line tool on your PATH."),
     *_open_fields("launcher", "{path}"),
     _field("launcher", ("launcher", "target"), "choice", "Open", lambda cfg: cfg["launcher"]["target"],
-           choices=[["workspace", "The .code-workspace file when there is one"], ["folder", "The folder"]]),
+           choices=[["workspace", "The .code-workspace file when there is one"], ["folder", "The folder"]],
+           group="advanced"),
+    _field("launcher", ("launcher", "name"), "text", "App name", lambda cfg: cfg["launcher"]["name"],
+           group="advanced", help="What buttons call it."),
 
     _field("agent", ("agent",), "switch", "Use a coding agent", lambda cfg: cfg["agent"] is not None,
            help="Off hides the agent buttons and stops passes."),
-    _field("agent", ("agent", "name"), "text", "Agent name", lambda cfg: _agent(cfg)["name"], parent=("agent",)),
-    _field("agent", ("agent", "sessions"), "choice", "Sessions", lambda cfg: _agent(cfg)["sessions"],
+    _field("agent", ("agent", "sessions"), "choice", "Agent", lambda cfg: _agent(cfg)["sessions"],
            choices=[[k, AGENT_NAMES.get(k, k)] for k in ADAPTERS], parent=("agent",),
-           help="Where Shipyard finds the agent's session transcripts."),
+           help="Where Shipyard finds your sessions, and which CLI runs passes. Fills in everything under Advanced."),
     *_open_fields("agent", "{session}"),
     _field("agent", ("agent", "prompt_url"), "optional", "New session URL",
-           lambda cfg: _agent(cfg)["prompt_url"] or "", parent=("agent",), to_raw=lambda v: v or None,
+           lambda cfg: _agent(cfg)["prompt_url"] or "", parent=("agent",), to_raw=lambda v: v or None, group="advanced",
            help="Opens a new session with {prompt} typed in, for the Address button. Empty for none."),
+    _field("agent", ("agent", "name"), "text", "Agent name", lambda cfg: _agent(cfg)["name"], parent=("agent",),
+           group="advanced", help="What buttons call it."),
 
     *[_field("rules", ("rules", name), "switch", label, lambda cfg, name=name: cfg["rules"][name], help=help)
       for name, label, help in [
@@ -205,7 +215,7 @@ def fields(raw):
             is_set = value != default  # options alone don't change whether it's on
         out.append({"section": f["section"], "path": list(f["path"]), "kind": f["kind"], "label": f["label"],
                     "help": f["help"], "choices": f["choices"], "parent": list(f["parent"]) if f["parent"] else None,
-                    "value": value, "default": default, "set": is_set})
+                    "group": f["group"], "value": value, "default": default, "set": is_set})
     return out
 
 
