@@ -27,17 +27,22 @@ DETAIL_FIELDS = """
   id number title url state isDraft createdAt updatedAt mergedAt closedAt body
   headRefName headRefOid baseRefName additions deletions changedFiles
   repository { nameWithOwner }
-  author { login }
+  author { login avatarUrl }
   reviewDecision mergeable
-  comments(last: 10) { nodes { createdAt author { login } } }
+  labels(first: 10) { nodes { name color } }
+  viewerCanEnableAutoMerge viewerCanDisableAutoMerge
+  comments(last: 10) { totalCount nodes { createdAt author { login } } }
   autoMergeRequest { enabledAt }
-  viewerLatestReview { databaseId state submittedAt commit { oid } }
+  viewerLatestReview { databaseId state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
   reviewRequests(first: 20) { nodes { requestedReviewer {
-    __typename ... on User { login } ... on Team { slug } } } }
-  latestReviews(first: 20) { nodes { databaseId state submittedAt body author { login } commit { oid } } }
+    __typename ... on User { login avatarUrl } ... on Team { slug name } } } }
+  latestReviews(first: 20) { nodes { databaseId state submittedAt body author { login avatarUrl } commit { oid } } }
+  latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
+  pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
   reviewThreads(first: 50) { nodes {
     id isResolved isOutdated path line
     comments(first: 20) { nodes { databaseId body createdAt diffHunk author { login } } }
+    latest: comments(last: 1) { nodes { author { login } } }
   } }
   commits(last: 1) { nodes { commit {
     oid committedDate
@@ -93,6 +98,40 @@ def signature(node):
 def reviewer_name(rr):
     rr = rr or {}
     return rr.get("login") or (f"team:{rr['slug']}" if rr.get("slug") else None)
+
+
+PAGE_FIELDS = ("id", "number", "title", "url", "state", "isDraft", "createdAt", "updatedAt", "mergedAt",
+               "headRefName", "baseRefName", "headRefOid", "additions", "deletions", "changedFiles",
+               "autoMergeRequest", "labels", "viewerCanEnableAutoMerge", "viewerCanDisableAutoMerge",
+               "repository", "author", "reviewDecision", "reviewRequests", "viewerLatestReview",
+               "latestOpinionatedReviews", "pendingReviews")
+PAGE_CONTEXT_FIELDS = ("__typename", "name", "conclusion", "detailsUrl", "context", "state", "targetUrl")
+
+
+def first_author(conn):
+    return [{"author": n.get("author")} for n in ((conn or {}).get("nodes") or [])[:1]]
+
+
+def page_pr(node):
+    """The PR in the shape the page's own GitHub queries return, so the page can draw it as is."""
+    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    rollup = commit.get("statusCheckRollup")
+    comments = node.get("comments") or {}
+    return {
+        **{k: node.get(k) for k in PAGE_FIELDS},
+        "latestReviews": {"nodes": [{"state": r.get("state"), "author": r.get("author"), "commit": r.get("commit")}
+                                    for r in (node.get("latestReviews") or {}).get("nodes") or []]},
+        "comments": {"totalCount": comments.get("totalCount") or 0},
+        "recentComments": {"nodes": comments.get("nodes") or []},
+        "reviewThreads": {"nodes": [{"isResolved": bool(t.get("isResolved")),
+                                     "opener": {"nodes": first_author(t.get("comments"))},
+                                     "comments": {"nodes": first_author(t.get("latest"))}}
+                                    for t in (node.get("reviewThreads") or {}).get("nodes") or []]},
+        "commits": {"nodes": [{"commit": {"oid": commit.get("oid"), "statusCheckRollup": rollup and {
+            "state": rollup.get("state"),
+            "contexts": {"nodes": [{k: c[k] for k in PAGE_CONTEXT_FIELDS if k in c}
+                                   for c in (rollup.get("contexts") or {}).get("nodes") or []]}}}}]},
+    }
 
 
 def snapshot(node, viewer):
@@ -184,6 +223,7 @@ def snapshot(node, viewer):
         "failing": failing,
         "checks_running": checks_running(rollup),
         "last_commit_at": commit.get("committedDate"),
+        "page": page_pr(node),
     }
 
 

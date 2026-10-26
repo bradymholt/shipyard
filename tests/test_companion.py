@@ -143,6 +143,7 @@ class PageState(CompanionCase):
         self.gh.put(pr_node(threads=[{"body": "a"}, {"body": "b", "resolved": True}]), "author:@me")
         pr = self.poll()["o/r#1"]
         self.assertEqual((pr["state"], pr["dropped"], pr["openThreads"]), ("OPEN", False, 1))
+        self.assertEqual((pr["pr"]["number"], pr["pr"]["headRefName"]), (1, "feature"))
 
 
 class ChangesRequested(CompanionCase):

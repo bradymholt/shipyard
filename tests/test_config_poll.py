@@ -81,6 +81,24 @@ class Snapshot(unittest.TestCase):
         node["reviewRequests"]["nodes"] = [{"requestedReviewer": {"__typename": "Team", "slug": "web"}}]
         self.assertEqual(snapshot(node, VIEWER)["requested"], ["team:web"])
 
+    def test_page_shape(self):
+        node = pr_node(contexts=[check_run("lint", "SUCCESS")], comments=[{"author": "rev"}],
+                       reviews=[{"state": "APPROVED", "author": "rev", "body": "lgtm"}],
+                       threads=[{"body": "why?", "author": VIEWER, "replies": ["you", "me2"]}])
+        node["comments"]["totalCount"] = 4
+        node["reviewThreads"]["nodes"][0]["latest"] = {"nodes": [{"author": {"login": "me2"}}]}
+        page = snapshot(node, VIEWER)["page"]
+        self.assertEqual(page["comments"], {"totalCount": 4})
+        self.assertEqual(page["recentComments"]["nodes"][0]["author"], {"login": "rev"})
+        self.assertEqual(page["latestReviews"]["nodes"], [{"state": "APPROVED", "author": {"login": "rev"},
+                                                          "commit": {"oid": "aaa"}}])
+        self.assertEqual(page["reviewThreads"]["nodes"], [{"isResolved": False,
+                                                          "opener": {"nodes": [{"author": {"login": VIEWER}}]},
+                                                          "comments": {"nodes": [{"author": {"login": "me2"}}]}}])
+        ctx = page["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"][0]
+        self.assertEqual(set(ctx), {"__typename", "name", "conclusion", "detailsUrl"})
+        self.assertIsNone(snapshot(pr_node(ci=None), VIEWER)["page"]["commits"]["nodes"][0]["commit"]["statusCheckRollup"])
+
 
 class FakeGitHub:
     def __init__(self, lists, details):
