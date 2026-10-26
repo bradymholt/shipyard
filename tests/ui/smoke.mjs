@@ -3,7 +3,7 @@
 //   node tests/ui/smoke.mjs [screenshot-dir]
 //
 // Starts tests/ui/demo_server.py (the real companion server over fake GitHub and agent
-// data), answers the sidebar's timeline query, and checks what renders. Needs Playwright with Chromium.
+// data) and checks what renders. Needs Playwright with Chromium.
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -25,20 +25,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
 const shots = process.argv[2] || null;
 const COMPANION_PORT = 4399;
-
-const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
-// The page only asks GitHub for a PR's timeline when its sidebar opens.
-function answer(body) {
-  if (!body.query.includes("node(id:")) return null;
-  return { node: {
-    files: { totalCount: 3, nodes: [{ path: "app/webhooks/sender.py", additions: 30, deletions: 8 },
-      { path: "tests/test_sender.py", additions: 10, deletions: 4 }, { path: "README.md", additions: 0, deletions: 0 }] },
-    reviews: { nodes: [{ state: "CHANGES_REQUESTED", submittedAt: ago(2), author: { login: "rev", avatarUrl: null }, comments: { totalCount: 2 } }] },
-    timelineItems: { nodes: [
-      { __typename: "PullRequestCommit", commit: { messageHeadline: "Retry failed deliveries", committedDate: ago(5) } },
-      { __typename: "PullRequestReview", state: "CHANGES_REQUESTED", submittedAt: ago(2), author: { login: "rev" } }] },
-  } };
-}
 
 function start(cmd, args, ready) {
   const child = spawn(cmd, args, { cwd: repo, stdio: ["ignore", "pipe", "pipe"] });
@@ -63,14 +49,8 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }) 
     localStorage.setItem("ghpr.repos", JSON.stringify(["o/r"]));
     localStorage.setItem("ghpr.currentRepo", "o/r");
   });
-  const queries = [];
   const direct = [];
   await context.route("https://api.github.com/**", (route) => { direct.push(route.request().url()); return route.abort(); });
-  await context.route("**/github/graphql", (route) => {
-    const body = JSON.parse(route.request().postData());
-    queries.push(body);
-    return route.fulfill({ json: { data: answer(body) } });
-  });
   await context.route("https://avatars.example/**", (route) => route.fulfill({ status: 404, body: "" }));
   await context.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ body: "" }));
   const page = await context.newPage();
@@ -79,7 +59,7 @@ async function openPage(browser, port, viewport = { width: 1440, height: 900 }) 
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto(`http://localhost:${port}/`);
   await page.waitForSelector(".card[data-key]");
-  return { page, errors, context, queries, direct };
+  return { page, errors, context, direct };
 }
 
 const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row .next-label`).first().textContent().catch(() => null);
@@ -90,14 +70,13 @@ try {
   const browser = await chromium.launch();
 
   console.log("companion mode");
-  const { page, errors, queries, direct } = await openPage(browser, COMPANION_PORT);
+  const { page, errors, direct } = await openPage(browser, COMPANION_PORT);
   await page.waitForSelector('.card[data-key="o/r#105"] .next-row');
   check((await chipText(page, 101))?.includes("Address feedback · 1"), "changes requested → Address feedback · 1");
   check((await chipText(page, 102))?.includes("Fix CI · rspec"), "failing check → Fix CI · rspec");
   check((await chipText(page, 106))?.includes("Re-request review · 1"), "replied last on every thread → Re-request review · 1");
   check((await chipText(page, 107))?.includes("Address feedback · 1"), "a comment review on top of changes requested → Address feedback");
   check(await page.locator('.card[data-key="o/r#108"] .next-row').count() === 0, "re-requested after changes → no chip, waiting on the reviewer");
-  check(queries.every((b) => !b.variables?.q && !b.variables?.ids), "the page leaves searching GitHub to the server");
   check(await page.locator('.card[data-key^="o/r#10"] .review-badge.changes').count() === 0, "no standalone Changes requested badge");
   check((await chipText(page, 103))?.trim() === "Merge", "approved and green → Merge");
   check((await chipText(page, 109))?.includes("Reply to approval · 1"), "approved with comments, auto-merge on → Reply to approval · 1");
@@ -138,6 +117,9 @@ try {
   check((await sb.locator(".sess-meta").textContent()).includes("2 yours · 1 Shipyard's"), "session turn counts split yours vs Shipyard's");
   await page.waitForSelector("#sidebar .sb-activity li");
   check(await sb.locator(".sb-activity .act-shipyard").count() > 0, "Activity includes Shipyard's own actions");
+  const timeline = await page.waitForFunction(() => document.querySelector("#sidebar .sb-activity")?.textContent.includes("Retry failed deliveries"),
+    null, { timeout: 5000 }).then(() => true, () => false);
+  check(timeline, "Activity includes the PR's GitHub timeline, read through the server");
   await page.waitForTimeout(400);  // let the slide-in finish
   if (shots) await page.screenshot({ path: `${shots}/sidebar-feedback.png` });
 

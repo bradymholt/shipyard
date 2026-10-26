@@ -155,6 +155,13 @@ class AfterAction(CompanionCase):
         self.comp.do_action("o/r#1", "merge", {})
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["pr"]["state"], "MERGED")
 
+    def test_turns_auto_merge_off_for_the_page(self):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.comp.do_action("o/r#1", "disable_auto_merge", {})
+        self.assertEqual(self.gh.calls[-1][2], {"id": "PR_o/r_1"})
+        self.assertFalse(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
+
 
 class ChangesRequested(CompanionCase):
     def setUp(self):
