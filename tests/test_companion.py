@@ -381,6 +381,17 @@ class Reviews(CompanionCase):
         self.assertEqual(pr["cards"][0]["proposals"][0]["action"], "approve")
 
 
+    def test_approving_from_a_card_records_the_review_before_the_next_poll(self):
+        self.agent.answers["first-pass code review"] = {"summary": "Fine.", "proposals": [
+            {"action": "submit_review", "confidence": "medium", "reason": "tiny",
+             "payload": {"event": "APPROVE", "body": "LGTM"}}]}
+        self.gh.put(pr_node(number=5, author="alice", requested=[VIEWER]), "review-requested:@me")
+        card = self.poll()["o/r#5"]["cards"][0]
+        self.comp.card_action(card["id"], 0, None)
+        pr = self.comp.page_state()["prs"]["o/r#5"]
+        self.assertNotIn("review", [s["kind"] for s in pr["steps"]])
+        self.assertEqual(self.comp.db.pr("o/r#5")["my_review"]["state"], "APPROVED")
+
     def test_re_review_without_a_review_worktree_makes_one(self):
         from shipyard.companion import worktrees
         review = {"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-19T00:00:00Z",
