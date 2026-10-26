@@ -110,11 +110,11 @@ export function reviewLaneOf(pr) {
   return reviewRequestedForViewer(pr) || viewerReviewDismissed(pr) ? 0 : 1;
 }
 
-// A card gets one chip, only when there is a next step. The companion decides every
+// A card gets one chip, only when there is a next step. The server decides every
 // one, so a page without it shows none.
 const FAILING_CONCLUSIONS = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 
-export const companionPr = (pr) => state.companionState?.prs?.[prKey(pr)] || null;
+export const serverPr = (pr) => state.serverState?.prs?.[prKey(pr)] || null;
 
 export const agentName = () => state.agent?.name || "your agent";
 
@@ -168,16 +168,16 @@ export function markMerged(pr) {
   if (reviewed) state.reviewedMerged = mergeMergedLists([{ ...reviewed, mergedAt }], state.reviewedMerged);
 }
 
-// The companion works out every next step; a merged PR keeps only an unanswered approval.
-export function companionSteps(pr) {
-  const steps = companionPr(pr)?.steps || [];
+// The server works out every next step; a merged PR keeps only an unanswered approval.
+export function serverSteps(pr) {
+  const steps = serverPr(pr)?.steps || [];
   return pr.mergedAt ? steps.filter((s) => s.approval) : steps;
 }
 
 export function nextChip(pr) {
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   if (cp?.chip?.kind === "snoozed") return { ...cp.chip, tone: "muted" };
-  const chip = companionSteps(pr)[0];
+  const chip = serverSteps(pr)[0];
   if (chip) return chip;
   if (cp?.chip?.kind === "nudge") return { ...cp.chip, tone: "gold", optional: true };
   if (cp?.chip) return { ...cp.chip, tone: "muted" };

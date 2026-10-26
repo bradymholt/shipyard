@@ -55,7 +55,7 @@ export function timeAgo(iso) {
   return "just now";
 }
 
-// The companion's quiet polls don't re-render, so these labels age in place.
+// The server's quiet polls don't re-render, so these labels age in place.
 function agoText(at, short) {
   const text = timeAgo(at);
   return short ? text.replace(" ago", "") : text;

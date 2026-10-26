@@ -22,7 +22,7 @@ from .state import State, now_iso
 
 POLL_SECONDS = 60
 PASS_WORKERS = 2
-# Which passes may propose an action the companion presses itself, and on whose PRs.
+# Which passes may propose an action the server presses itself, and on whose PRs.
 # Anything else stays a button, even when its trust flag is on.
 AUTO_POLICY = {
     "rerun_checks": {"sources": {"ci_failed"}, "mine": True},
@@ -83,7 +83,7 @@ def session_used(mode, pinned_after, kept=False):
     return "in a new session, now pinned" if pinned_after else "in a new throwaway session"
 
 
-class Companion:
+class Orchestrator:
     def __init__(self, config, roots, db_path, github=None, poll_seconds=POLL_SECONDS, config_path=CONFIG_PATH):
         self.config = config
         self.config_path = config_path
@@ -397,7 +397,7 @@ class Companion:
         review_path = None
         if not snap["mine"]:
             # Someone else's PR is always read at its current head, in the review
-            # worktree (made here when a re-review predates the companion).
+            # worktree (made here when a re-review predates the server).
             made = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots)
             if not made["ok"]:
                 return self.fail_pass(row, made["error"])
@@ -871,7 +871,7 @@ class Companion:
 
     def run_pass_now(self, key, name, node_id=None):
         if name == "new_session" and node_id and self.viewer and not self.db.pr(key):
-            # Merged before the companion saw it: read it once so there is something to pin to.
+            # Merged before the server saw it: read it once so there is something to pin to.
             for found in self.poller.details([node_id], self.viewer):
                 self.db.save_pr(found)
         snap = self.snapshot_or_error(key)
@@ -988,7 +988,7 @@ class Companion:
                 "chip": rules.memory_chip(view, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
                 "steps": rules.next_steps(view, self.config["rules"], open_cards),
-                # What the companion last saw, so the page can tell which of them is behind.
+                # What the server last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
                 "state": snap.get("state"), "dropped": bool(snap.get("dropped")),
                 "openThreads": sum(1 for t in snap.get("threads") or [] if not t.get("resolved")),

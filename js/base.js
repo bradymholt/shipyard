@@ -34,12 +34,12 @@ export const state = {
   filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
   sort: localStorage.getItem("ghpr.sort") || "priority",
   worktrees: {},        // "repo#branch" -> { path, workspace }
-  companionToken: BOOT.token || "",  // required for mutations
+  sessionToken: BOOT.token || "",  // required for mutations
   views: BOOT.views || { views: [], current: "" },  // saved on the server
   launcher: BOOT.launcher || DEFAULT_LAUNCHER,
   agent: BOOT.agent || null,  // coding agent whose latest session a checkout can resume
-  rules: BOOT.rules || null,  // the companion's "rules" config (which chips are on)
-  companionState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
+  rules: BOOT.rules || null,  // the server's "rules" config (which chips are on)
+  serverState: null, // its per-PR chips, cards, sessions, and activity, pushed over SSE
   refreshing: false,       // asked the server to poll and waiting for it
   mergedExtra: 0,           // merged cards revealed past the first few
   mergedLoading: false,

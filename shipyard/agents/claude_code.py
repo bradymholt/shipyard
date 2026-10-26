@@ -17,7 +17,7 @@ READ_ONLY_TOOLS = [
 # any unambiguous prefix of a long option, so --upl is enough.
 WRITE_TOOLS = ["Edit", "Write", "NotebookEdit", "MultiEdit",
                "Bash(git diff *--output*)", "Bash(git fetch *--upl*)"]
-# Set when the companion itself was started from inside a Claude Code session; passed
+# Set when the server itself was started from inside a Claude Code session; passed
 # through, they make the headless run think it is that session (or a child of it).
 PARENT_SESSION_VARS = {"CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION",
                        "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_PID"}

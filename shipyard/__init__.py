@@ -1,1 +1,1 @@
-"""Shipyard's local companion. shipyard.py at the repo root is the launcher."""
+"""Shipyard's server. shipyard.py at the repo root is the launcher."""

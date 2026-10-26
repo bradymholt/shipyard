@@ -1,9 +1,9 @@
 // The board: lanes, cards, and Recently merged.
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtTitle, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
-import { companionCall, companionPost, companionStatusHtml, getCurrentRepo, worktreeFor } from "./server.js";
+import { apiCall, apiPost, serverStatusHtml, getCurrentRepo, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, buildStacks, ciOk, companionPr, hasNewCommitsSinceReview, laneOf, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, laneOf, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { openNewTaskDialog } from "./settings.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
 
@@ -135,7 +135,7 @@ export async function openInApp(target) {
     return;
   }
   try {
-    const res = await companionPost(`open-app?path=${encodeURIComponent(target)}`);
+    const res = await apiPost(`open-app?path=${encodeURIComponent(target)}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) showError(data.error || `Open in ${state.launcher.name} failed (${res.status}).`);
   } catch (err) {
@@ -145,7 +145,7 @@ export async function openInApp(target) {
 
 async function openAgent(path, session) {
   try {
-    const res = await companionPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`);
+    const res = await apiPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) showError(data.error || `Open in ${state.agent.name} failed (${res.status}).`);
   } catch (err) {
@@ -209,7 +209,7 @@ function worktreeLinks(pr) {
   }
 
   // A review worktree is detached, so it has no branch entry among the pushed worktrees.
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   if (cp?.path) {
     return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
   }
@@ -401,14 +401,14 @@ export function render() {
 }
 
 function renderBoard() {
-  $("#companion-status").innerHTML = companionStatusHtml();
+  $("#server-status").innerHTML = serverStatusHtml();
 
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.filter === state.filter));
   const reviewSet = [...new Map([...state.prs, ...state.reviewedPrs].map((pr) =>
     [prKey(pr), pr]
   )).values()];
   const stepsFor = (prs) => prs.filter(needsYou).length;
-  const mineCount = state.companionState
+  const mineCount = state.serverState
     ? stepsFor(state.prs.filter((pr) => pr.author?.login === state.viewer))
     : state.prs.filter((pr) => {
       if (pr.author?.login !== state.viewer || pr.isDraft) return false;
@@ -421,7 +421,7 @@ function renderBoard() {
   mineCountEl.title = mineCount
     ? `${mineCount} pull request${mineCount === 1 ? "" : "s"} ${mineCount === 1 ? "needs" : "need"} your attention`
     : "";
-  const reviewCount = state.companionState
+  const reviewCount = state.serverState
     ? stepsFor(reviewSet.filter(reviewItem))
     : reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
   const reviewCountEl = $("#count-review");
@@ -491,7 +491,7 @@ function renderBoard() {
       ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
       : "";
     const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
-    const needs = needsLabel(state.companionState ? stepsFor(inLane) : 0);
+    const needs = needsLabel(state.serverState ? stepsFor(inLane) : 0);
     const laneCount = `<span class="lane-count">${needs && `${needs} · `}${inLane.length}</span>`;
     const collapsible = narrowViewport.matches;
     const collapsed = collapsible && collapsedLanes.has(laneKey);
@@ -587,7 +587,7 @@ listBody.addEventListener("click", async (e) => {
     const original = mainBtn.innerHTML;
     mainBtn.textContent = "…";
     try {
-      const res = await companionPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
+      const res = await apiPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         await openInApp(launchTarget(data));
@@ -611,7 +611,7 @@ listBody.addEventListener("click", async (e) => {
     draftBtn.disabled = true;
     draftBtn.textContent = "…";
     try {
-      await companionCall(`companion/pr-action?key=${encodeURIComponent(prKey(draftPr))}&action=mark_ready`, { payload: {} });
+      await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(draftPr))}&action=mark_ready`, { payload: {} });
       render();
     } catch (err) {
       alert(`Mark ready: ${err.message}`);
@@ -627,7 +627,7 @@ listBody.addEventListener("click", async (e) => {
   btn.textContent = "…";
   const action = btn.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
   try {
-    await companionCall(`companion/pr-action?key=${encodeURIComponent(prKey(amPr))}&action=${action}`, { payload: {} });
+    await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(amPr))}&action=${action}`, { payload: {} });
     render();
   } catch (err) {
     alert(`Auto-merge: ${err.message}`);
@@ -663,7 +663,7 @@ document.querySelectorAll(".tab").forEach((tab) =>
 // The card's bottom row: the PR's next step, when it has one. It opens the sidebar.
 function nextRowHtml(pr) {
   const chip = nextChip(pr);
-  const cp = companionPr(pr);
+  const cp = serverPr(pr);
   const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
   const dot = cp?.running
     ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
@@ -675,6 +675,6 @@ function nextRowHtml(pr) {
 }
 
 function cardClasses(pr, extra) {
-  const snoozed = companionPr(pr)?.chip?.kind === "snoozed";
+  const snoozed = serverPr(pr)?.chip?.kind === "snoozed";
   return ["card", extra, snoozed ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : ""].filter(Boolean).join(" ");
 }

@@ -151,7 +151,7 @@ def pass_mode(event_name, rules):
 
 
 def reactions(event, snap, rules):
-    """The list of things an event sets in motion, as small dicts for the companion."""
+    """The list of things an event sets in motion, as small dicts for the server."""
     name = event["name"]
     out = []
     if name == "pr_opened":

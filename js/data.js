@@ -1,7 +1,7 @@
 // The PR lists for the current view, merged history, and how fresh they are.
 import { $, state } from "./base.js";
 import { githubAge } from "./html.js";
-import { companionCall, companionGet, getCurrentRepo } from "./server.js";
+import { apiCall, apiGet, getCurrentRepo } from "./server.js";
 
 export function resetData() {
   state.mergedHistory = { mine: [], review: [] };
@@ -14,11 +14,11 @@ export function resetData() {
 // Past the auto-refresh interval, a refresh was missed and what's on screen is old.
 const STALE_AFTER = 5 * 60 * 1000;
 
-export const lastPollAt = () => Date.parse(state.companionState?.status?.lastPoll || "") || 0;
+export const lastPollAt = () => Date.parse(state.serverState?.status?.lastPoll || "") || 0;
 
 // Why the server's last poll of GitHub failed, if it did; lastPoll stays at the last success.
 export function githubProblem() {
-  const github = state.companionState?.status?.github;
+  const github = state.serverState?.status?.github;
   return github && github !== "ok" && github !== "starting" ? github : null;
 }
 
@@ -99,7 +99,7 @@ export const MERGED_SEARCHES = {
 export async function fetchMergedPage(kind, after) {
   const params = new URLSearchParams({ view: requireTarget(), kind });
   if (after) params.set("after", after);
-  const data = await companionGet(`companion/merged?${params}`);
+  const data = await apiGet(`api/merged?${params}`);
   Object.assign(state.ownerTypes, data.owners);
   return data;
 }
@@ -107,7 +107,7 @@ export async function fetchMergedPage(kind, after) {
 // Sort the server's PRs into the page's lists. The server polls every PR you're
 // involved in, so a view only narrows them.
 export function applyServerPrs() {
-  const cs = state.companionState;
+  const cs = state.serverState;
   state.targetedLoaded = !!cs?.status?.lastPoll;
   if (!state.targetedLoaded) return;
   state.viewer = cs.viewer;
@@ -146,7 +146,7 @@ export function refreshNow() {
   if (!getCurrentRepo()) return;
   state.refreshing = true;
   updateGitHubStatus();
-  companionCall("companion/check-now", { merged: true }).catch(() => {
+  apiCall("api/check-now", { merged: true }).catch(() => {
     state.refreshing = false;
     updateGitHubStatus();
   });
