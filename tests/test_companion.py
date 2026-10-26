@@ -7,6 +7,7 @@ from unittest import mock
 
 from shipyard.companion import Companion
 from shipyard.config import validate_config
+from shipyard.state import State
 
 from fixtures import VIEWER, check_run, pr_node
 
@@ -114,7 +115,8 @@ class CompanionCase(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
         self.raw = {}
-        self.comp = Companion(validate_config({}), [str(base)], base / "shipyard.db", github=self.gh)
+        self.db_path = base / "shipyard.db"
+        self.comp = Companion(validate_config({}), [str(base)], self.db_path, github=self.gh)
         self.addCleanup(self.comp.db.close)
         self.addCleanup(self.comp.stop)
 
@@ -136,6 +138,13 @@ class CompanionCase(unittest.TestCase):
                 return
             time.sleep(0.02)
         self.fail("passes did not finish")
+
+
+class SessionToken(CompanionCase):
+    def test_outlives_a_restart(self):
+        token = self.comp.db.session_token()
+        self.comp.db.close()
+        self.assertEqual(State(self.db_path).session_token(), token)
 
 
 class PageState(CompanionCase):

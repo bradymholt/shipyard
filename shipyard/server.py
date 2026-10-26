@@ -4,10 +4,11 @@ checkouts (once as JSON and as a Server-Sent Events stream), the GitHub reads th
 
 Binds to localhost. Every request must carry a localhost Host header (against DNS
 rebinding), and every mutation must also come from the page's own origin with the
-per-process token it gets from /config.json."""
+token written into the page it serves."""
 import http.server
 import json
 import secrets
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import worktrees
@@ -90,9 +91,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json({"ok": False, "error": "Invalid Host header."}, 403)
         parsed = urlparse(self.path)
         path = parsed.path
-        if path == "/config.json":
-            return self._json({**page_config(self.companion.config),
-                               "companionToken": self.session_token})
+        if path in ("/", "/index.html"):
+            return self._page()
         if path == "/companion/state":
             return self._json(self.companion.page_state())
         if path == "/companion/events":
@@ -109,6 +109,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path in self.STATIC_PATHS:
             return super().do_GET()
         return self._not_found()
+
+    def _page(self):
+        """index.html with the session token and config written in, so the page can POST
+        without first asking for them."""
+        boot = json.dumps({**page_config(self.companion.config), "token": self.session_token}).replace("<", "\\u003c")
+        tag = f'<script id="shipyard-boot" type="application/json">{boot}</script>\n</head>'
+        html = Path(self.directory, "index.html").read_text().replace("</head>", tag, 1)
+        body = html.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _events(self):
         """Server-Sent Events: the whole page state now, then again on every change, with
@@ -163,7 +177,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if parsed.path not in self.BRANCH_ACTIONS | self.COMPANION_ACTIONS:
             return self._not_found()
         if not self._mutation_is_authorized():
-            return self._json({"ok": False, "error": "Request was not authorized."}, 403)
+            return self._json({"ok": False, "error": "Request was not authorized. Reload the page and try again."}, 403)
         q = parse_qs(parsed.query)
         arg = lambda name: (q.get(name) or [""])[0]  # noqa: E731
         if parsed.path in self.COMPANION_ACTIONS:

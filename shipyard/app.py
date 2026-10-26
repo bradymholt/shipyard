@@ -1,7 +1,6 @@
 import argparse
 import functools
 import http.server
-import secrets
 import sys
 
 from .companion import Companion
@@ -46,8 +45,8 @@ def main(argv=None):
     warn_unavailable_roots(roots)
     Handler.roots = roots
     Handler.config = config
-    Handler.session_token = secrets.token_urlsafe(32)
     Handler.companion = Companion(config, roots, REPO_DIR / DB_FILE, github=GitHub())
+    Handler.session_token = Handler.companion.db.session_token()
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
                                             functools.partial(Handler, directory=str(REPO_DIR)))
