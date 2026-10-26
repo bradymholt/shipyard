@@ -8,15 +8,19 @@
 
 <br/>
 
-Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Use it directly from GitHub Pages, or run it locally to connect PRs to local branches and open them in your preferred app or IDE.
+Shipyard is a focused dashboard for staying on top of GitHub pull requests. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place. Shipyard runs on your machine: a small companion process serves the dashboard, matches PRs to your local clones, opens them in your preferred app or IDE, and watches your PRs with your coding agent.
+
+Want a simple hosted dashboard with nothing to run? See [Harbor](https://github.com/bradymholt/harbor).
 
 ## Quick start
 
-**In your browser:** open the [hosted dashboard](https://bradymholt.github.io/shipyard/), add a [GitHub token](#github-token) (saved only in your browser's local storage), then add a repository, organization, or username to your views. Nothing needs to be installed.
+```bash
+git clone https://github.com/bradymholt/shipyard.git
+cd shipyard
+python3 shipyard.py ~/dev
+```
 
-On Android, open the menu in Chrome and choose **Install app** (or **Add to Home screen**) to run Shipyard as a standalone app. Safari on iOS offers the same through **Share → Add to Home Screen**.
-
-**Locally:** run Shipyard on your machine to match PRs to your local clones, open them in your preferred app or IDE, and start branches or worktrees. See [Local mode](#local-mode) for setup.
+Open http://localhost:4321, add a [GitHub token](#github-token), then add a repository, organization, or username to your views. See [Running Shipyard](#running-shipyard) for configuration and running at login.
 
 ## Screenshots
 
@@ -36,7 +40,7 @@ Track the PRs you owe a review, split into what's still waiting on you and what 
 
 A fine-grained personal access token limited to the repositories you use is recommended. Pull requests read access is enough for viewing; write access is needed to toggle auto-merge or mark a draft ready for review. A classic token needs the `repo` scope for private repositories.
 
-Your token and recent dashboard data stay in your browser's local storage. The token is sent only to `api.github.com`. The hosted and local versions use separate browser storage, so each needs to be configured once.
+Your token and recent dashboard data stay in your browser's local storage. The token is sent only to `api.github.com`.
 
 ## Features
 
@@ -45,21 +49,13 @@ Your token and recent dashboard data stay in your browser's local storage. The t
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
-- **Next actions (local):** with the companion running, a **Next** row at the bottom of each card that has a next step (Address feedback, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's timeline.
-- **Shipping orchestrator (local):** the companion watches your PRs, asks your coding agent about the ones that changed, and shows its judgment as a card with the buttons that fit. You decide; it prepares.
-- **Optional local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
+- **Next actions:** a **Next** row at the bottom of each card that has a next step (Address feedback, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's timeline.
+- **Shipping orchestrator:** the companion watches your PRs, asks your coding agent about the ones that changed, and shows its judgment as a card with the buttons that fit. You decide; it prepares.
+- **Local workflow:** open existing checkouts in your preferred app or IDE, or start a branch in the main clone or an isolated worktree.
 
-## Local mode
+## Running Shipyard
 
-Local mode runs `shipyard.py`, an optional companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git and Python 3.
-
-```bash
-git clone https://github.com/bradymholt/shipyard.git
-cd shipyard
-python3 shipyard.py ~/dev
-```
-
-Then open http://localhost:4321. Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
+Shipyard runs `shipyard.py`, the companion process that serves the dashboard, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git and Python 3; start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
 
 On macOS, you can keep it running in the background instead. Copy the example config, set `roots` to your folders, and install it as a login agent:
 
@@ -133,7 +129,7 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
 
 ### Next actions and the sidebar
 
-Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**. Hosted, you get the Header and Activity sections; the companion decides every next step, so cards show no Next row without it. With the companion running you also get:
+Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**. You also get:
 
 - **Memory next steps:** `Nudge · 1d` when a reviewer has sat on it past a threshold, and snoozed cards that dim in place.
 - **Passes:** when something happens to a PR (CI failed, your review requested or re-requested, and changes requested if you turn that pass on), the companion asks your coding agent about it and turns the answer into a Next card: a short judgment and the buttons that fit it. On your PRs it asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. For someone else's PR it runs a pre-review in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`). The pre-review's comments go up as a pending review, which only you can see until you edit and submit it on GitHub; an approval with no comments stays an Approve button instead, with its note editable on the card. It never adds a turn to a session that is open right now; the card gives you the event to paste instead.
@@ -194,7 +190,7 @@ If a plist in `~/Library/LaunchAgents` is a symlink, something else already owns
 
 ## Development
 
-There is no build step or dependency installation. Serve `index.html` with `python3 -m http.server`, or run `python3 shipyard.py ~/dev` to exercise local mode. Issues and pull requests are welcome.
+There is no build step or dependency installation. Run `python3 shipyard.py ~/dev` and reload the page after editing `index.html`. Issues and pull requests are welcome.
 
 ```bash
 python3 -m unittest discover tests     # companion: events, rules, passes, actions, git, server
