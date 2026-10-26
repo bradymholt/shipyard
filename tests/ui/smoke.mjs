@@ -3,8 +3,7 @@
 //   node tests/ui/smoke.mjs [screenshot-dir]
 //
 // Starts tests/ui/demo_server.py (the real companion server over fake GitHub and agent
-// data) and a plain static server (hosted mode), answers the page's own GitHub calls
-// with matching fixtures, and checks what renders. Needs Playwright with Chromium.
+// data), answers the page's own GitHub calls with matching fixtures, and checks what renders. Needs Playwright with Chromium.
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -26,7 +25,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
 const shots = process.argv[2] || null;
 const COMPANION_PORT = 4399;
-const STATIC_PORT = 4398;
 
 const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
 const user = (login) => ({ __typename: "User", login, avatarUrl: `https://avatars.example/${login}?v=4` });
@@ -162,7 +160,6 @@ const chipText = (page, n) => page.locator(`.card[data-key="o/r#${n}"] .next-row
 const children = [];
 try {
   children.push(await start("python3", ["tests/ui/demo_server.py", String(COMPANION_PORT)], /demo companion on/));
-  children.push(await start("python3", ["-u", "-m", "http.server", String(STATIC_PORT), "--bind", "127.0.0.1"], /Serving HTTP/));
   const browser = await chromium.launch();
 
   console.log("companion mode");
@@ -334,25 +331,18 @@ try {
   check(overflow <= 0, "no horizontal scroll on a phone-width window");
   if (shots) await narrow.page.screenshot({ path: `${shots}/narrow.png`, fullPage: true });
 
-  console.log("hosted mode (no companion)");
-  const hosted = await openPage(browser, STATIC_PORT);
-  await hosted.page.waitForSelector('.card[data-key="o/r#101"]');
-  check(await hosted.page.locator(".next-row").count() === 0, "no Next rows hosted");
-  await hosted.page.evaluate(() => { window.open = (url) => { window.__opened = url; }; });
-  await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
-  check((await hosted.page.evaluate(() => window.__opened || "")).endsWith("/pull/101") &&
-    !(await hosted.page.locator("#sidebar").isVisible()), "a card click opens the PR on GitHub hosted, not the sidebar");
+  console.log("rate limit");
   let limited = 0;
-  await hosted.context.route("https://api.github.com/graphql", (route) => ++limited && route.fulfill({ status: 403,
+  await narrow.context.route("https://api.github.com/graphql", (route) => ++limited && route.fulfill({ status: 403,
     headers: { "retry-after": "120" }, json: { message: "You have exceeded a secondary rate limit. Please wait a few minutes." } }));
-  await hosted.page.evaluate(() => window.__dashboard.load(true));
-  await hosted.page.waitForSelector("#stale-banner:not(.hidden)");
-  const limitText = await hosted.page.locator("#stale-detail").textContent();
+  await narrow.page.evaluate(() => window.__dashboard.load(true));
+  await narrow.page.waitForSelector("#stale-banner:not(.hidden)");
+  const limitText = await narrow.page.locator("#stale-detail").textContent();
   const sent = limited;
-  await hosted.page.evaluate(() => window.__dashboard.load(true));
+  await narrow.page.evaluate(() => window.__dashboard.load(true));
   check(limitText.includes("You have exceeded a secondary rate limit.") && limitText.includes("Retrying at") &&
     sent > 0 && limited === sent, "a rate-limited 403 shows GitHub's message and holds off further calls");
-  check(hosted.errors.length === 0, `no page errors hosted${hosted.errors.length ? `: ${hosted.errors.join(" | ")}` : ""}`);
+  check(narrow.errors.length === 0, `no page errors narrow${narrow.errors.length ? `: ${narrow.errors.join(" | ")}` : ""}`);
 
   await browser.close();
 } finally {

@@ -1,8 +1,9 @@
 # Shipyard
 
 A focused dashboard for staying on top of GitHub pull requests — reviewer state, CI
-status, stacked PRs, and the work needing your attention, in one place. Runs hosted on
-GitHub Pages or locally with an optional companion process.
+status, stacked PRs, and the work needing your attention, in one place. Runs locally,
+served by its companion process. The simple hosted dashboard it grew out of lives on
+separately as Harbor (https://github.com/bradymholt/harbor); Shipyard has no hosted mode.
 
 Claude Code, Codex, and other agents all read this file. Never create a separate
 `CLAUDE.md`.
@@ -11,7 +12,7 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
 
 - **`index.html`** — the entire frontend. Vanilla HTML + CSS + JS in one file, no
   framework, no bundler, no build step, no dependencies to install. Edit it directly.
-- **`shipyard.py`** — thin launcher for the optional local companion (Python 3 stdlib
+- **`shipyard.py`** — thin launcher for the local companion (Python 3 stdlib
   only). Keep it as the entry point: the run command, the launchd plist, and these docs
   all point at it.
 - **`shipyard/`** — the companion. It serves the page, `/worktrees.json`, and branch and
@@ -29,7 +30,7 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
   setting is validated in `shipyard/config.py`.
 - **`tests/`** — `python3 -m unittest discover tests` for the companion; `node
   tests/ui/smoke.mjs` drives the page in Chromium against `tests/ui/demo_server.py` (the
-  real server over fake GitHub and agent data) and a static server for hosted mode.
+  real server over fake GitHub and agent data).
 - **`shipyard-launchd.py`** — macOS-only setup helper that runs the companion as a
   `launchd` agent (`install`, `status`, `restart`, `logs`, `uninstall`). Manages two
   labels: `local.shipyard` for the companion and `local.shipyard-restart`, a `WatchPaths`
@@ -43,12 +44,11 @@ sent only to `api.github.com`.
 ## Running it
 
 ```bash
-python3 shipyard.py ~/dev     # local mode: serve + match PRs to clones under ~/dev
+python3 shipyard.py ~/dev     # serve + match PRs to clones under ~/dev
 open http://localhost:4321
 ```
 
-Or serve the static page alone with `python3 -m http.server`. There is nothing to build
-or install.
+There is nothing to build or install.
 
 ## Design system
 

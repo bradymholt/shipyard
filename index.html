@@ -1482,8 +1482,6 @@
     return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
   }
 
-  // Populated only when the local companion (shipyard.py) is serving the page;
-  // on GitHub Pages the fetch fails and worktree links stay off.
   let lastWtSig = "";  // signature of the last worktrees.json, so polling only re-renders on change
   async function loadCompanionConfig() {
     try {
@@ -1541,7 +1539,7 @@
         state.companion = await loadCompanionConfig();
         if (state.companion) connectCompanionEvents();
       }
-    } catch { /* no companion (e.g. hosted on Pages): leave links off */ }
+    } catch { /* companion away: leave its links off until it answers */ }
     finally {
       state.companionChecked = true;
       render();
@@ -1647,16 +1645,14 @@
   // returning to for follow-up ideas left in review. Offer only what already exists:
   // no checking out or moving a branch that's done.
   function mergedWorktreeLinks(pr) {
-    const wt = state.companion ? worktreeFor(pr) : null;
+    const wt = worktreeFor(pr);
     const local = wt ? `${agentButton(pr, wt)}${openCheckoutButton(wt)}` : "";
     return `<div class="card-icons"><span class="wt-links">${githubLink(pr)}${local}</span></div>`;
   }
 
   function worktreeLinks(pr) {
     // A single "Open" control; where it opens (and how it
-    // looks) depends on where the branch is checked out. It runs through the
-    // companion, so nothing shows without it.
-    if (!state.companion) return `<span class="wt-links">${githubLink(pr)}</span>`;
+    // looks) depends on where the branch is checked out.
     const repoName = pr.repository?.nameWithOwner || "";
     const repo = esc(repoName);
     const branch = esc(pr.headRefName);
@@ -2453,11 +2449,9 @@
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
     const chip = e.target.closest("button.next-row");
     if (chip) { openSidebar(chip.dataset.open); return; }
-    // A click anywhere on a card that isn't a link or control opens its sidebar, or the PR
-    // on GitHub without the companion.
+    // A click anywhere on a card that isn't a link or control opens its sidebar.
     const card = e.target.closest(".card[data-key]");
     if (card && !e.target.closest("a, button, input, select, textarea")) {
-      if (!state.companion) { const pr = findPr(card.dataset.key); if (pr) window.open(pr.url, "_blank", "noopener"); return; }
       if (sidebarKey === card.dataset.key) closeSidebar(); else openSidebar(card.dataset.key);
       return;
     }
@@ -3319,15 +3313,15 @@
     return `<span class="dot ok"></span>Companion connected${agent}`;
   }
 
-  // With the companion connected, its poll stands in for the page's: the page re-reads
+  // While the companion's poll is live it stands in for the page's: the page re-reads
   // what it reports changed (hidden or not) and searches again only as a safety net.
-  // Without it, the page polls while visible and catches up when shown again.
+  // Without it (--no-orchestrator, or while reconnecting), the page polls while visible.
   const COMPANION_SAFETY_MS = 15 * 60 * 1000;
-  const HOSTED_EVERY_MS = 50 * 1000;
+  const SELF_POLL_MS = 50 * 1000;
   function refreshIfDue() {
     if (!getToken() || !getCurrentRepo()) return;
     const age = Date.now() - (state.githubUpdatedAt || 0);
-    if (companionLive() ? age >= COMPANION_SAFETY_MS : !document.hidden && age >= HOSTED_EVERY_MS) load(true);
+    if (companionLive() ? age >= COMPANION_SAFETY_MS : !document.hidden && age >= SELF_POLL_MS) load(true);
   }
 
   // ---------- init ----------
