@@ -43,21 +43,60 @@ $("#views-list").addEventListener("click", (e) => {
   if (btn) removeView(btn.dataset.view);
 });
 
-$("#settings-btn").addEventListener("click", openSettings);
-
-$("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
-
-// ---------- every other setting, built from the server's field list ----------
+// ---------- the settings page, at #settings/<pane> ----------
+// Every pane but Views is built from the server's field list.
 let settingSections = [];
 let settingFields = [];
+let settingsLoaded = false;
+let pane = "views";
+let openedFromBoard = false;
+const VIEWS_PANE = { id: "views", title: "Views" };
 
-export async function openSettings() {
+$("#settings-btn").addEventListener("click", () => {
+  openedFromBoard = true;
+  location.hash = "#settings";
+});
+
+// The browser's back button and Back to board both return to the board, not through panes.
+$("#settings-back").addEventListener("click", () => {
+  if (openedFromBoard) return history.back();
+  history.replaceState(null, "", location.pathname + location.search);
+  route();
+});
+
+$("#set-nav").addEventListener("click", (e) => {
+  const item = e.target.closest("[data-pane]");
+  if (!item) return;
+  e.preventDefault();
+  history.replaceState(null, "", `#settings/${item.dataset.pane}`);
+  route();
+});
+
+addEventListener("hashchange", route);
+
+export function route() {
+  const match = location.hash.match(/^#settings(?:\/([\w-]+))?$/);
+  document.body.classList.toggle("settings-open", !!match);
+  $("#settings-page").classList.toggle("hidden", !match);
+  if (!match) {
+    settingsLoaded = false;
+    openedFromBoard = false;
+    return;
+  }
+  pane = match[1] || "views";
   renderViewsList();
-  $("#settings-fields").innerHTML = "";
-  $("#settings-dialog").showModal();
+  renderSettings();
+  if (!settingsLoaded) loadSettings();
+  scrollTo(0, 0);
+  $("#set-nav .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+async function loadSettings() {
+  settingsLoaded = true;
   try {
     ({ sections: settingSections, fields: settingFields } = await apiGet("api/settings"));
     renderSettings();
+    $("#set-nav .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   } catch (err) {
     $("#settings-fields").innerHTML = `<p class="set-error">${esc(err.message)}</p>`;
   }
@@ -114,12 +153,21 @@ function settingRow(f, error) {
   </div>`;
 }
 
+const changedIn = (section) => settingFields.filter((f) => f.section === section && f.set && !same(f.value, f.default)).length;
+
 function renderSettings(errors = {}) {
   const focused = document.activeElement?.id;
-  $("#settings-fields").innerHTML = settingSections.map((s) => `<section class="set-section">
-      <h3>${esc(s.title)}</h3><p class="set-intro">${esc(s.help)}</p>
-      ${settingFields.filter((f) => f.section === s.id).map((f) => settingRow(f, errors[fieldKey(f)])).join("")}
-    </section>`).join("");
+  const panes = [VIEWS_PANE, ...settingSections];
+  if (settingsLoaded && settingSections.length && !panes.some((p) => p.id === pane)) pane = "views";
+  $("#set-nav").innerHTML = panes.map((p) => {
+    const count = p.id === "views" ? 0 : changedIn(p.id);
+    return `<a href="#settings/${p.id}" data-pane="${p.id}" class="set-nav-item${p.id === pane ? " active" : ""}"${p.id === pane ? ' aria-current="page"' : ""}>
+      <span>${esc(p.title)}</span>${count ? `<span class="set-nav-count" title="${count} changed from the default">${count}</span>` : ""}</a>`;
+  }).join("");
+  $("#set-views").classList.toggle("hidden", pane !== "views");
+  const section = settingSections.find((s) => s.id === pane);
+  $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
+    ${settingFields.filter((f) => f.section === section.id).map((f) => settingRow(f, errors[fieldKey(f)])).join("")}` : "";
   if (focused) document.getElementById(focused)?.focus();
 }
 

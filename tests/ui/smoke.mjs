@@ -204,7 +204,10 @@ try {
 
   console.log("settings");
   await page.click("#settings-btn");
+  await page.click('#set-nav [data-pane="rules"]');
   await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
+  check(await page.locator(".list").isHidden() && (await page.evaluate(() => location.hash)) === "#settings/rules",
+    "settings open as their own page, one pane at a time");
   const fileSets = () => page.evaluate(async () => (await (await fetch("api/settings")).json()).fields
     .filter((f) => f.set && f.path[0] !== "views").map((f) => f.path.join(".")));
   check((await fileSets()).length === 0, "settings show every field at its default before any change");
@@ -212,12 +215,15 @@ try {
   await hours.fill("48");
   await hours.press("Enter");
   await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag.changed');
+  check(await page.locator('#set-nav [data-pane="rules"] .set-nav-count').textContent() === "1", "the sidebar counts a pane's changed settings");
   check((await page.locator('[data-path="rules.nudge.after_hours"] .set-default').textContent()) === "Default: 24" &&
     JSON.stringify(await fileSets()) === '["rules.nudge.after_hours"]', "changing a setting writes only that key and shows its default");
   await page.locator('[data-path="rules.nudge.after_hours"] [data-reset]').click();
   await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
   check((await fileSets()).length === 0, "Reset takes the setting back out of the file");
-  await page.click("#settings-close");
+  await page.click("#settings-back");
+  await page.waitForSelector(".list", { state: "visible" });
+  check((await page.evaluate(() => location.hash)) === "", "Back to board returns to the board");
 
   console.log("narrow window");
   const narrow = await openPage(browser, DEMO_PORT, { width: 420, height: 900 });
