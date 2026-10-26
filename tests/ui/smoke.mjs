@@ -338,10 +338,10 @@ try {
   const hosted = await openPage(browser, STATIC_PORT);
   await hosted.page.waitForSelector('.card[data-key="o/r#101"]');
   check(await hosted.page.locator(".next-row").count() === 0, "no Next rows hosted");
+  await hosted.page.evaluate(() => { window.open = (url) => { window.__opened = url; }; });
   await hosted.page.locator('.card[data-key="o/r#101"] .card-meta').click();
-  await hosted.page.waitForSelector("#sidebar .sb-activity li");
-  check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Next" }).count() === 0, "hosted sidebar has no Next section");
-  check(await hosted.page.locator("#sidebar .sb-h", { hasText: "Activity" }).count() === 1, "hosted sidebar still has Activity");
+  check((await hosted.page.evaluate(() => window.__opened || "")).endsWith("/pull/101") &&
+    !(await hosted.page.locator("#sidebar").isVisible()), "a card click opens the PR on GitHub hosted, not the sidebar");
   check(hosted.errors.length === 0, `no page errors hosted${hosted.errors.length ? `: ${hosted.errors.join(" | ")}` : ""}`);
 
   await browser.close();
