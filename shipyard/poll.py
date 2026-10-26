@@ -75,7 +75,7 @@ MERGED_SEARCHES = {
     "mine": "is:merged author:@me",
     "review": "is:merged reviewed-by:@me -author:@me",
 }
-MERGED_PAGE_SIZE = 25
+MERGED_PAGE_SIZE = 10  # the page shows 3 at first; Show more reveals 10 at a time
 
 MERGED_QUERY = """
 query($q: String!, $after: String) {

@@ -1,7 +1,7 @@
 // The settings dialog's views and the Start work dialog.
 import { $, state } from "./base.js";
 import { esc, REMOVE_ICON } from "./html.js";
-import { companionPost, getCurrentRepo, getRepos, rescanWorktrees, saveViews } from "./server.js";
+import { companionPost, getCurrentRepo, getRepos, saveViews } from "./server.js";
 import { load, resetData, viewTargets } from "./data.js";
 import { launchTarget, openInApp, render } from "./board.js";
 
@@ -48,9 +48,9 @@ $("#settings-btn").addEventListener("click", () => { renderViewsList(); $("#sett
 
 $("#settings-close").addEventListener("click", () => $("#settings-dialog").close());
 
-$("#refresh-btn").addEventListener("click", () => { load(true); rescanWorktrees(); });
+$("#refresh-btn").addEventListener("click", () => load(true));
 
-$("#stale-retry-btn").addEventListener("click", () => { load(true); rescanWorktrees(); });
+$("#stale-retry-btn").addEventListener("click", () => load(true));
 
 // The repo picker offers local clones under the current view only, so it matches the
 // view selector: a repo view contributes just itself; an org/username view contributes

@@ -99,9 +99,10 @@ export const MERGED_SEARCHES = {
   review: { cursorKey: "reviewedMergedCursor" },
 };
 
-export async function fetchMergedPage(kind, after) {
+export async function fetchMergedPage(kind, after, fresh = false) {
   const params = new URLSearchParams({ view: requireTarget(), kind });
   if (after) params.set("after", after);
+  if (fresh) params.set("fresh", "1");
   const data = await companionGet(`companion/merged?${params}`);
   Object.assign(state.ownerTypes, data.owners);
   return data;
@@ -144,7 +145,8 @@ function inScope(key) {
 }
 
 // The server polls GitHub for the open lists. The page fetches the view's merged
-// history from it every HISTORY_EVERY_MS, and `force` also asks the server to poll now.
+// history from it every HISTORY_EVERY_MS, and `force` also asks the server to poll now
+// and to search again rather than answer from its short-lived cache.
 export async function load(force = false) {
   if (!getCurrentRepo()) return;
   if (force) companionCall("companion/check-now").catch(() => {});
@@ -154,7 +156,7 @@ export async function load(force = false) {
   state.loadingHistory = true;
   updateGitHubStatus();
   try {
-    const [mine, review] = await Promise.all([fetchMergedPage("mine"), fetchMergedPage("review")]);
+    const [mine, review] = await Promise.all([fetchMergedPage("mine", null, force), fetchMergedPage("review", null, force)]);
     if (view !== getCurrentRepo()) return;
     state.mergedHistory = {
       mine: mergeMergedLists(mine.prs, state.mergedHistory.mine),

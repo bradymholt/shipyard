@@ -136,11 +136,13 @@ export function companionStatusHtml() {
 // The server polls about once a minute; coming back to the tab asks it to look now.
 const FOCUS_POLL_MS = 30 * 1000;
 
+// A poll re-scans checkouts too, so ask for one or the other.
 export function refreshOnFocus() {
   if (document.hidden) return;
-  rescanWorktrees();
   if (companionLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
     companionCall("companion/check-now").catch(() => {});
+  } else {
+    rescanWorktrees();
   }
   load();
 }

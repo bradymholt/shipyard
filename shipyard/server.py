@@ -114,7 +114,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._companion_call(lambda c: c.timeline((q.get("id") or [""])[0]))
         if path == "/companion/merged":
             q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
-            return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
+            return self._companion_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after"),
+                                                                   q.get("fresh") == "1"))
         if path == "/companion/sessions":
             q = parse_qs(parsed.query)
             return self._companion_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))

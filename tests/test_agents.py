@@ -112,6 +112,12 @@ class ClaudeSessions(HomeCase):
         with mock.patch("shipyard.agents.processes_in", return_value=False):
             self.assertFalse(claude.is_live(self.checkout, "s"))
 
+    def test_liveness_can_share_one_process_scan(self):
+        claude = ClaudeCode()
+        with mock.patch("shipyard.agents.processes_in", side_effect=AssertionError("scanned again")):
+            self.assertTrue(claude.is_live(self.checkout, "gone", lambda: {os.path.realpath(self.checkout)}))
+            self.assertFalse(claude.is_live(self.checkout, "gone", lambda: set()))
+
     def test_fork_command(self):
         argv = ClaudeCode().command("hi", {"type": "object"}, "fork", "abc", None)
         self.assertEqual(argv[argv.index("--resume") + 1], "abc")
