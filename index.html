@@ -2419,9 +2419,11 @@
     if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
     const chip = e.target.closest("button.next-row");
     if (chip) { openSidebar(chip.dataset.open); return; }
-    // A click anywhere on a card that isn't a link or control opens its sidebar.
+    // A click anywhere on a card that isn't a link or control opens its sidebar, or the PR
+    // on GitHub without the companion.
     const card = e.target.closest(".card[data-key]");
     if (card && !e.target.closest("a, button, input, select, textarea")) {
+      if (!state.companion) { const pr = findPr(card.dataset.key); if (pr) window.open(pr.url, "_blank", "noopener"); return; }
       if (sidebarKey === card.dataset.key) closeSidebar(); else openSidebar(card.dataset.key);
       return;
     }
@@ -2705,7 +2707,7 @@
       } }
     } } }`;
 
-  // Reviewers, files, and the timeline are read on demand (hosted mode too), once per PR update.
+  // The timeline is read on demand, once per PR update.
   async function loadDetail(key) {
     const pr = findPr(key);
     if (!pr || !getToken()) return;
