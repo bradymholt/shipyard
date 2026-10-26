@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import worktrees
 from .config import DEFAULT_CONFIG, page_config
+from .settings import MISSING
 
 MAX_BODY = 1_000_000
 SSE_KEEPALIVE = 15
@@ -110,6 +111,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(self.orchestrator.page_state())
         if path == "/api/events":
             return self._events()
+        if path == "/api/settings":
+            return self._api_call(lambda c: c.settings())
         if path == "/api/timeline":
             q = parse_qs(parsed.query)
             return self._api_call(lambda c: c.timeline((q.get("id") or [""])[0]))
@@ -238,7 +241,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "undo": lambda c: c.undo(card_id()),
             "check-now": lambda c: c.check_now(bool(body.get("merged"))),
             "rescan-worktrees": lambda c: c.rescan_worktrees(),
-            "settings": lambda c: c.save_settings(body.get("set"), body.get("expect")),
+            "settings": lambda c: c.save_setting(body.get("path"), body.get("value"), bool(body.get("reset")),
+                                                 body["expect"] if "expect" in body else MISSING),
             "current-view": lambda c: c.set_current_view(body.get("view")),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},

@@ -9,10 +9,11 @@ export const getRepos = () => state.views.views;
 
 export const getCurrentRepo = () => state.views.current || getRepos()[0] || "";
 
-// Settings live in the server's config file. `expect` is what this page last saw, so a
+// Settings live in the server's config file, one path at a time: `change` is
+// { value } or { reset: true }, plus the `expect`ed value this page last showed, so a
 // hand edit to the file since then is reported instead of overwritten.
-export function saveSettings(set, expect) {
-  return apiCall("api/settings", { set, expect });
+export function saveSetting(path, change) {
+  return apiCall("api/settings", { path, ...change });
 }
 
 // Show the change now; the server's push then confirms it in every open tab.
@@ -23,7 +24,7 @@ export async function saveViews(views, current) {
   state.views = { views, current };
   savingViews++;
   try {
-    if (JSON.stringify(views) !== JSON.stringify(before.views)) await saveSettings({ views }, { views: before.views });
+    if (JSON.stringify(views) !== JSON.stringify(before.views)) await saveSetting(["views"], { value: views, expect: before.views });
     const saved = await apiCall("api/current-view", { view: current });
     state.views = { views: saved.views, current: saved.current };
     return true;

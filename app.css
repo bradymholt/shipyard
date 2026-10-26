@@ -181,6 +181,32 @@ dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop, dialog#settings
 .view-remove svg { fill: currentColor; }
 .view-empty { color: var(--fg-muted); font-size: 0.75rem; padding: 0.25rem 0; }
 .add-view-row { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+dialog#settings-dialog { width: min(38rem, 94vw); max-height: 88vh; overflow: auto; }
+.set-file { margin: 0.75rem 0 0; font-size: 0.6875rem; color: var(--fg-muted); }
+.set-file code { font-family: var(--mono); font-size: 0.6875rem; background: var(--bg-inset); padding: 0 0.3125rem; border-radius: 0.25rem; }
+.set-section { border-top: 1px solid var(--border-soft); margin-top: 1rem; padding-top: 0.875rem; }
+.set-section h3 { margin: 0; font: 600 0.6875rem var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted); }
+.set-intro { margin: 0.25rem 0 0.375rem; font-size: 0.75rem; color: var(--fg-muted); }
+.set-row { padding: 0.4375rem 0; }
+.set-child { margin-left: 0.375rem; padding-left: 0.875rem; border-left: 2px solid var(--border-soft); }
+.set-off { opacity: 0.5; }
+.set-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; font-weight: 600; color: var(--fg); }
+.set-tag { font: 600 0.625rem var(--sans); letter-spacing: 0.04em; text-transform: uppercase; padding: 0.0625rem 0.4375rem; border-radius: 999px; background: var(--bg-inset); color: var(--fg-faint); }
+.set-tag.changed { background: color-mix(in srgb, var(--gold) 16%, var(--surface)); color: var(--gold-text); }
+.set-head .set-switch, .set-head .set-locked { margin-left: auto; }
+.set-switch { width: 1rem; height: 1rem; accent-color: var(--teal); }
+.set-locked { font-size: 0.75rem; font-weight: 500; color: var(--fg-faint); }
+.set-row > input, .set-row > select, .set-row > textarea { display: block; width: 100%; margin-top: 0.3125rem; box-sizing: border-box; }
+.set-row input[type="number"], .set-row textarea {
+  background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: 0.5rem;
+  padding: 0.4375rem 0.75rem; font-size: 0.8125rem; font-family: inherit; outline: none; resize: vertical;
+}
+.set-row input[type="number"] { width: 8rem; }
+.set-row .set-mono { font-family: var(--mono); font-size: 0.75rem; }
+.set-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; margin-top: 0.25rem; font-size: 0.6875rem; color: var(--fg-muted); }
+.set-default { color: var(--gold-text); font-weight: 600; }
+.set-reset { border: none; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.set-error { margin-top: 0.25rem; font-size: 0.75rem; color: var(--red-text); }
 .add-view-row input { flex: 1; }
 .nt-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--fg-muted); }
 .nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
