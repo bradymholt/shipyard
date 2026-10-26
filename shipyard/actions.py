@@ -185,6 +185,10 @@ def apply_fix(gh, snap, payload, ctx):
     if not diff.strip():
         raise ActionError("There is no diff to apply.")
     checkout = ctx.get("worktree")
+    if not checkout and snap.get("mine") and ctx.get("roots"):
+        checkout = worktrees.branch_worktree(snap["repo"], snap["branch"], ctx["roots"])
+        if not checkout["ok"]:
+            raise ActionError(f"Couldn't check out {snap['branch']} to apply the fix: {checkout['error']}")
     if not checkout:
         raise ActionError("The branch isn't checked out locally, so there is nowhere to apply the fix.")
     path = checkout["path"]

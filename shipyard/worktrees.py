@@ -253,6 +253,34 @@ def new_task_worktree(repo, branch, roots):
     return {"ok": True, "path": path, "workspace": workspace_in(path), "created": True, "branch": branch}
 
 
+def branch_worktree(repo, branch, roots):
+    """A checkout of an existing PR branch: the one it's already in, else a new worktree
+    tracking origin/<branch>."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    branch, error = validate_branch(branch or "")
+    if error:
+        return {"ok": False, "error": error}
+    existing = next((w for w in worktrees_for_repo(clone) if w["branch"] == branch), None)
+    if existing:
+        return {"ok": True, "path": existing["path"]}
+    error = mutate_git(clone, "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}", timeout=120)
+    if error:
+        return {"ok": False, "error": f"Couldn't fetch {branch}: {error}"}
+    path = worktree_path(clone, branch)
+    try:
+        local_exists = git_ref_exists(clone, f"refs/heads/{branch}")
+    except GitError as e:
+        return {"ok": False, "error": f"Could not inspect local branches: {e}"}
+    args = ("worktree", "add", path, branch) if local_exists else (
+        "worktree", "add", "--track", "-b", branch, path, f"origin/{branch}")
+    error = mutate_git(clone, *args, timeout=120)
+    if error:
+        return {"ok": False, "error": error}
+    return {"ok": True, "path": path}
+
+
 def checked_path(target, roots):
     """(real path, error) for a path the dashboard asked to open."""
     real = os.path.realpath(target)
