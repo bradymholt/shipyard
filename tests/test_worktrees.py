@@ -2,6 +2,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from shipyard import worktrees
@@ -54,6 +55,15 @@ class Discover(GitCase):
         found = {w["path"]: w for w in worktrees.discover(self.roots)}
         self.assertTrue(found[str(self.clone)]["dirty"])
         self.assertNotIn("dirty", found[path])
+
+
+class FolderCandidates(GitCase):
+    def test_finds_the_folder_holding_your_prs_clones(self):
+        base = self.root.parent
+        with mock.patch("shipyard.worktrees.Path.home", return_value=base):
+            self.assertEqual(worktrees.folder_candidates({self.repo}),
+                             [{"path": "~/dev", "clones": 1, "matching": 1}])
+            self.assertEqual(worktrees.folder_candidates({"someone/else"}), [])
 
 
 class ReviewWorktree(GitCase):

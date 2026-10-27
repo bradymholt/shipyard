@@ -3,6 +3,7 @@ import { $, state } from "./base.js";
 import { esc, REMOVE_ICON } from "./html.js";
 import { apiGet, apiPost, automationHeld, getCurrentRepo, getRepos, saveSetting, saveViews, turnOnAutomation } from "./server.js";
 import { refreshNow, resetData, viewTargets } from "./data.js";
+import { folderCandidates } from "./welcome.js";
 import { launchTarget, openInApp, render } from "./board.js";
 
 export function renderRepoSelect() {
@@ -48,6 +49,7 @@ let settingSections = [];
 let settingFields = [];
 let settingsLoaded = false;
 let commandLineRoots = [];
+let foundFolders = [];
 let pane = "views";
 let openedFromBoard = false;
 const VIEWS_PANE = { id: "views", title: "Views" };
@@ -95,6 +97,7 @@ async function loadSettings() {
   settingsLoaded = true;
   try {
     ({ sections: settingSections, fields: settingFields, commandLineRoots } = await apiGet("api/settings"));
+    foundFolders = await folderCandidates();
     renderSettings();
     $("#set-nav .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   } catch (err) {
@@ -183,11 +186,16 @@ function renderSettings(errors = {}) {
   const section = settingSections.find((s) => s.id === pane);
   const fixed = pane === "roots" && commandLineRoots.length
     ? `<div class="set-held">Folders given on the command line hold for this run: ${esc(commandLineRoots.join(", "))}. The ones here apply when Shipyard starts without any.</div>` : "";
+  const rootsField = fieldAt("roots");
+  const found = pane === "roots" && rootsField && !rootsField.value && foundFolders.length
+    ? foundFolders.map((c) => `<div class="set-found"><span>Found your code in <code>${esc(c.path)}</code>
+        (${c.clones} clone${c.clones === 1 ? "" : "s"}${c.matching ? `, ${c.matching} from your PRs` : ""})</span>
+        <button type="button" class="primary" data-use-folder="${esc(c.path)}">Use</button></div>`).join("") : "";
   const held = automationHeld() && (pane === "passes" || pane === "auto")
     ? `<div class="set-held">Held for now: until you turn it on, passes wait for Ask and nothing is pressed for you.
         <button type="button" class="primary" data-automation="on">Turn it on</button></div>` : "";
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
-    ${fixed}${held}${sectionRows(section.id, errors)}` : "";
+    ${fixed}${found}${held}${sectionRows(section.id, errors)}` : "";
   if (focused) document.getElementById(focused)?.focus();
 }
 
@@ -213,6 +221,8 @@ $("#settings-fields").addEventListener("change", (e) => {
 });
 
 $("#settings-fields").addEventListener("click", async (e) => {
+  const use = e.target.closest("[data-use-folder]");
+  if (use) return saveField(fieldAt("roots"), { value: use.dataset.useFolder });
   if (e.target.closest("[data-automation]")) {
     await turnOnAutomation();
     return renderSettings();

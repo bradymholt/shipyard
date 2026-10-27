@@ -41,7 +41,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                          "/api/card-action", "/api/dismiss", "/api/undo",
                          "/api/pr-action", "/api/auto-approve",
                          "/api/check-now", "/api/rescan-worktrees", "/api/settings",
-                         "/api/current-view", "/api/automation"}
+                         "/api/current-view", "/api/automation",
+                         "/api/welcome"}
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -110,6 +111,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(self.orchestrator.page_state())
         if path == "/api/events":
             return self._events()
+        if path == "/api/folder-candidates":
+            return self._api_call(lambda c: c.folder_candidates())
         if path == "/api/settings":
             return self._api_call(lambda c: c.settings())
         if path == "/api/timeline":
@@ -244,6 +247,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                                  body["expect"] if "expect" in body else MISSING),
             "current-view": lambda c: c.set_current_view(body.get("view")),
             "automation": lambda c: c.turn_on_automation(),
+            "welcome": lambda c: c.dismiss_welcome(),
             "auto-approve": lambda c: c.set_auto_approve(arg("key"), body.get("on")),
             "pr-action": lambda c: c.do_action(arg("key"), arg("action"), body.get("payload") or {},
                                                int(arg("card")) if arg("card") else None),

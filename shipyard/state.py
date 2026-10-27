@@ -97,13 +97,23 @@ class State:
             return token
 
     def automation(self):
-        """"on" once you've let Shipyard act on its own; None until then."""
+        """"on" once you've let Shipyard act on its own, "held" until then, None before the
+        first start decides."""
         rows = self._rows("SELECT value FROM meta WHERE key = 'automation'")
         return rows[0]["value"] if rows else None
 
     def set_automation(self, value):
         self._exec("INSERT INTO meta (key, value) VALUES ('automation', ?) "
                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (value,))
+
+    def welcomed(self):
+        """True once the welcome was dismissed, False while it shows, None before the first start decides."""
+        rows = self._rows("SELECT value FROM meta WHERE key = 'welcomed'")
+        return rows[0]["value"] == "1" if rows else None
+
+    def set_welcomed(self, done=True):
+        self._exec("INSERT INTO meta (key, value) VALUES ('welcomed', ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ("1" if done else "0",))
 
     def has_history(self):
         return bool(self._rows("SELECT 1 FROM prs LIMIT 1") or self._rows("SELECT 1 FROM meta WHERE key = 'poll'"))
