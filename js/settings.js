@@ -184,6 +184,7 @@ function sectionRows(id, errors) {
       heading = `<div class="set-group${depth ? ` set-child set-depth${depth}` : ""}">
         <span>Advanced</span> Filled in by your choice above; change one only to override it.</div>`;
     }
+    if (f.heading) heading = `<h3 class="set-heading">${esc(f.heading)}</h3>` + heading;
     return heading + settingRow(f, depth, errors[fieldKey(f)]) + (isOn(f) ? rows(f, depth + 1) : "");
   }).join("");
   return rows(null, 0);
