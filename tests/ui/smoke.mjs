@@ -250,6 +250,13 @@ try {
   await page.locator('[data-path="rules.nudge.after_hours"] [data-reset]').click();
   await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
   check((await fileSets()).length === 0, "Reset takes the setting back out of the file");
+  await page.click('#set-nav [data-pane="passes"]');
+  await page.waitForSelector('[data-path="auto.rerun_checks"]');
+  const order = await page.locator("#settings-fields .set-row").evaluateAll((rows) => rows.map((r) => r.dataset.path));
+  check(order.indexOf("auto.rerun_checks") === order.indexOf("rules.passes.ci_failed") + 1 &&
+    order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 1 &&
+    await page.locator('#set-nav [data-pane="auto"]').count() === 0, "each automatic action sits under the pass it acts on");
+  if (shots) await page.screenshot({ path: `${shots}/passes.png`, fullPage: true });
   await page.click("#settings-back");
   await page.waitForSelector(".list", { state: "visible" });
   check((await page.evaluate(() => location.hash)) === "", "Back to board returns to the board");
