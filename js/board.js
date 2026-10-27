@@ -606,9 +606,8 @@ listBody.addEventListener("click", async (e) => {
 
   const draftBtn = e.target.closest("button.draft-toggle");
   if (draftBtn) {
-    // Marking ready notifies reviewers, so a stray tap shouldn't do it.
     const draftPr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
-    if (!draftPr || !confirm(`Mark #${draftPr.number} ready for review? Requested reviewers will be notified.`)) return;
+    if (!draftPr) return;
     draftBtn.disabled = true;
     draftBtn.textContent = "…";
     try {
