@@ -27,7 +27,6 @@ PASS_WORKERS = 2
 AUTO_POLICY = {
     "rerun_checks": {"sources": {"ci_failed"}, "mine": True},
     "apply_fix": {"sources": {"ci_failed"}, "mine": True},
-    "enable_auto_merge": {"sources": {"feedback", "ci_failed"}, "mine": True},
     "approve": {"sources": {"re_review"}, "mine": False},
 }
 # How the log names an automatic action it held back, and one it already took.
@@ -36,7 +35,6 @@ AUTO_WORDS = {
     "approve": ("the approval", "approved"),
     "rerun_checks": ("the re-run", "re-ran checks on"),
     "apply_fix": ("the fix", "pushed a fix to"),
-    "enable_auto_merge": ("auto-merge", "enabled auto-merge on"),
 }
 SOURCE_NAMES = {"re_review": "re-review", "ci_failed": "CI assessment", "feedback": "feedback pass"}
 LIVE_CACHE_SECONDS = 15

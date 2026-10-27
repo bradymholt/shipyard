@@ -33,7 +33,7 @@ class Config(unittest.TestCase):
         auto = validate_auto({"rerun_checks": {"when": "confidence >= medium", "max_per_pr": 3},
                               "enable_auto_merge": True})
         self.assertEqual(auto["rerun_checks"], {"min_confidence": "medium", "max_per_pr": 3})
-        self.assertEqual(auto["enable_auto_merge"]["min_confidence"], "high")
+        self.assertNotIn("enable_auto_merge", auto)
         self.assertEqual(validate_auto({"approve_rereview": {"max_lines": 10}})["approve_rereview"]["max_lines"], 10)
         self.assertEqual(validate_auto({"approve_rereview": True})["approve_rereview"]["max_lines"], 30)
         self.assertEqual(validate_auto({"approve_rereview": True})["approve_rereview"]["min_wait_minutes"], 3)

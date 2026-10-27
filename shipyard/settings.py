@@ -28,18 +28,15 @@ OPEN_MODES = [["url", "Open a URL"], ["command", "Run a command"]]
 PASS_MODES = [["auto", "Auto"], ["ask", "Ask"], ["off", "Off"]]
 CONFIDENCE_LEVELS = [["high", "High"], ["medium", "Medium"], ["low", "Low"]]
 AGENT_NAMES = {"claude-code": "Claude Code", "codex": "Codex"}
-AUTO_LABELS = {"rerun_checks": "Automatically re-run flaky checks", "enable_auto_merge": "Automatically turn on auto-merge",
+AUTO_LABELS = {"rerun_checks": "Automatically re-run flaky checks",
                "approve_rereview": "Automatically approve the re-review", "apply_fix": "Automatically push small CI fixes",
                "post_reply": "Post a reply"}
-AUTO_HELP = {"enable_auto_merge": "The Fix CI and Address feedback passes can both propose it.",
-             "post_reply": "A reply puts words in front of a colleague under your name."}
-# Actions more than one pass can propose; the page shows one under the first of them that's on.
-ACTION_SOURCES = {"enable_auto_merge": ("feedback", "ci_failed")}
+AUTO_HELP = {"post_reply": "A reply puts words in front of a colleague under your name."}
 # Each pass, the next step that starts it (EVENT_PASSES in rules.py), and the automatic
 # actions only its proposals can lead to (AUTO_POLICY in orchestrator.py).
 PASS_GROUPS = [
     ("ci_failed", "fix_ci", "", ("rerun_checks", "apply_fix")),
-    ("feedback", "address_feedback", "", ("enable_auto_merge", "post_reply")),
+    ("feedback", "address_feedback", "", ("post_reply",)),
     ("pre_review", "review", "Pre-reviews stay drafts only you can see; submitting is yours.", ()),
     ("re_review", "re_review", "", ("approve_rereview",)),
 ]
@@ -64,15 +61,14 @@ def _rule_option(cfg, name, key):
 
 
 def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None,
-           group=None, under=None, sources=None, heading=None, sentence=None):
+           group=None, under=None, heading=None, sentence=None):
     """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading.
     `heading` starts a titled group of settings on the page. `sentence` replaces the help while
     the setting is on, with each {key} an inline control for the child setting of that name.
-    `under` nests a setting under another on the page without making it part of it in the file;
-    `sources` lists the passes an automatic action can come from."""
+    `under` nests a setting under another on the page without making it part of it in the file."""
     return {"section": section, "path": path, "kind": kind, "label": label, "help": help, "choices": choices,
             "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v),
-            "group": group, "under": under, "sources": sources, "heading": heading,
+            "group": group, "under": under, "heading": heading,
             "sentence": sentence}
 
 
@@ -104,8 +100,7 @@ def _auto_fields(name, under):
     return [
         _field("rules", ("auto", name), "switch", AUTO_LABELS[name], lambda cfg: cfg["auto"][name] is not None,
                under=under, help=AUTO_HELP.get(name, ""),
-               sentence=" ".join(filter(None, (sentence, AUTO_HELP.get(name)))),
-               sources=[["rules", "passes", p] for p in ACTION_SOURCES.get(name, (under[-1],))]),
+               sentence=sentence),
         _field("rules", ("auto", name, "when"), "choice", "Minimum confidence",
                lambda cfg: _auto(cfg, name)["min_confidence"], choices=CONFIDENCE_LEVELS,
                parent=("auto", name), to_raw=lambda v: f"confidence >= {v}"),
@@ -243,7 +238,7 @@ def fields(raw):
             is_set = value != default  # options alone don't change whether it's on
         out.append({"section": f["section"], "path": list(f["path"]), "kind": f["kind"], "label": f["label"],
                     "help": f["help"], "choices": f["choices"], "parent": list(f["parent"]) if f["parent"] else None,
-                    "group": f["group"], "under": list(f["under"]) if f["under"] else None, "sources": f["sources"],
+                    "group": f["group"], "under": list(f["under"]) if f["under"] else None,
                     "heading": f["heading"], "sentence": f["sentence"], "value": value, "default": default, "set": is_set})
     return out
 

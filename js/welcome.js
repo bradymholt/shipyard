@@ -15,7 +15,6 @@ const PASS_STARTS = {
 const AUTO_STARTS = {
   rerun_checks: "re-runs flaky checks",
   approve_rereview: "approves re-reviews once the small things you asked for are done",
-  enable_auto_merge: "turns on auto-merge",
   apply_fix: "pushes small CI fixes",
 };
 const listed = (items) => items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : items[0] || "";
