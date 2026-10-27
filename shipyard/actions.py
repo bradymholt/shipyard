@@ -13,7 +13,6 @@ from .github import GitHubError
 # Trust flag behind each action type; actions without one are always manual.
 TRUST_FLAG = {
     "rerun_checks": "rerun_checks",
-    "enable_auto_merge": "enable_auto_merge",
     "approve": "approve_rereview",
     "post_reply": "post_reply",
     "apply_fix": "apply_fix",

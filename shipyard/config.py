@@ -103,13 +103,14 @@ PASS_MODES = ("auto", "ask", False)
 # agent's proposal needs before the server presses the button itself.
 AUTO_DEFAULTS = {
     "rerun_checks": True,
-    "enable_auto_merge": False,
     "approve_rereview": True,
     "post_reply": False,
     "apply_fix": False,
 }
 # These put words in front of a colleague under your name; they never fire on their own.
 HARD_LOCKED = {"post_reply"}
+# No pass ever proposed it; older files that set it still load.
+RETIRED_AUTO = {"enable_auto_merge"}
 CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
 
 DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT,
@@ -232,7 +233,7 @@ MAX_LINES = {"approve_rereview": REREVIEW_MAX_LINES, "apply_fix": 20}
 def validate_auto(raw):
     if not isinstance(raw, dict):
         raise ValueError('"auto" must be an object')
-    unknown = sorted(set(raw) - set(AUTO_DEFAULTS))
+    unknown = sorted(set(raw) - set(AUTO_DEFAULTS) - RETIRED_AUTO)
     if unknown:
         raise ValueError(f"unknown auto action(s): {', '.join(unknown)}")
     auto = {}

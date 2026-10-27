@@ -186,11 +186,9 @@ const unusedByMode = (f) => {
 const isOn = (f) => f.value !== false && f.value !== "off";
 const shown = (f) => { const home = homeOf(f); return !home || (isOn(home) && shown(home)); };
 
-// A setting sits under its parent or the setting it's `under`, and shows only while that one
-// is on. An action more than one pass can propose sits under the first of them that's on.
+// A setting sits under its parent or the setting it's `under`, and shows only while that one is on.
 function homeOf(f) {
-  const source = f.sources?.map((p) => fieldAt(p.join("."))).find((p) => p && isOn(p) && shown(p));
-  const path = source?.path || f.under || f.parent;
+  const path = f.under || f.parent;
   return path ? fieldAt(path.join(".")) : null;
 }
 
