@@ -54,11 +54,11 @@ DETAIL_FIELDS = """
   commits(last: 1) { nodes { commit {
     oid committedDate
     statusCheckRollup { state contexts(first: 50) {
-      checkRunCountsByState { state count } statusContextCountsByState { state count }
+      totalCount checkRunCountsByState { state count } statusContextCountsByState { state count }
       nodes {
       __typename
       ... on CheckRun { name conclusion status detailsUrl databaseId
-                        checkSuite { workflowRun { databaseId } } }
+                        checkSuite { workflowRun { databaseId workflow { name } } } }
       ... on StatusContext { context state targetUrl }
     } } }
   } } }
@@ -182,6 +182,40 @@ def is_failing(ctx):
     return ctx.get("state") in ("FAILURE", "ERROR")
 
 
+def current_checks(rollup):
+    """The rollup's checks less any run a later run of the same workflow job replaced."""
+    nodes = ((rollup or {}).get("contexts") or {}).get("nodes") or []
+
+    def key(ctx):
+        if ctx.get("__typename") != "CheckRun" or not ctx.get("databaseId"):
+            return None
+        workflow = (((ctx.get("checkSuite") or {}).get("workflowRun") or {}).get("workflow") or {}).get("name")
+        return workflow, ctx.get("name")
+
+    latest = {}
+    for ctx in nodes:
+        k = key(ctx)
+        if k and (k not in latest or ctx["databaseId"] > latest[k]["databaseId"]):
+            latest[k] = ctx
+    return [c for c in nodes if not key(c) or latest[key(c)] is c]
+
+
+def ci_state(rollup):
+    """GitHub's rollup state, except that it keeps failing on a run a later one replaced, as when
+    adding a label reruns a label check."""
+    rollup = rollup or {}
+    state, contexts = rollup.get("state"), rollup.get("contexts") or {}
+    if state not in ("FAILURE", "ERROR") or len(contexts.get("nodes") or []) < (contexts.get("totalCount") or 0):
+        return state
+    current = current_checks(rollup)
+    replaced = [c for c in contexts.get("nodes") or [] if not any(c is k for k in current)]
+    if any(is_failing(c) for c in current) or not any(is_failing(c) for c in replaced):
+        return state
+    running = any((c.get("status") if c.get("__typename") == "CheckRun" else c.get("state")) in RUNNING
+                  for c in current)
+    return "PENDING" if running else "SUCCESS"
+
+
 def first_author(conn):
     return [{"author": n.get("author")} for n in ((conn or {}).get("nodes") or [])[:1]]
 
@@ -202,10 +236,10 @@ def page_pr(node):
                                      "comments": {"nodes": first_author(t.get("latest"))}}
                                     for t in (node.get("reviewThreads") or {}).get("nodes") or []]},
         "commits": {"nodes": [{"commit": {"oid": commit.get("oid"), "statusCheckRollup": rollup and {
-            "state": rollup.get("state"),
+            "state": ci_state(rollup),
             # The page shows the overall state and names only the failing checks.
             "contexts": {"nodes": [{k: c[k] for k in PAGE_CONTEXT_FIELDS if k in c}
-                                   for c in (rollup.get("contexts") or {}).get("nodes") or [] if is_failing(c)]}}}}]},
+                                   for c in current_checks(rollup) if is_failing(c)]}}}}]},
     }
 
 
@@ -215,7 +249,7 @@ def snapshot(node, viewer):
     commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
     rollup = commit.get("statusCheckRollup") or {}
     failing = []
-    for ctx in (rollup.get("contexts") or {}).get("nodes") or []:
+    for ctx in current_checks(rollup):
         if ctx.get("__typename") == "CheckRun" and ctx.get("conclusion") in FAILING:
             failing.append({
                 "name": ctx.get("name"), "url": ctx.get("detailsUrl"), "job_id": ctx.get("databaseId"),
@@ -294,7 +328,7 @@ def snapshot(node, viewer):
         "threads": threads,
         "comments": [{"author": (c.get("author") or {}).get("login"), "created": c.get("createdAt")}
                      for c in (node.get("comments") or {}).get("nodes") or []],
-        "ci": rollup.get("state"),
+        "ci": ci_state(rollup),
         "failing": failing,
         "checks_running": checks_running(rollup),
         "last_commit_at": commit.get("committedDate"),
