@@ -16,6 +16,34 @@ Everything runs on your machine: a small local server serves the dashboard, make
 
 Want a simple hosted dashboard with nothing to run? See [Harbor](https://github.com/bradymholt/harbor).
 
+![Shipyard board: your PRs by stage, each with its next step](docs/board.png)
+
+### Your agent does the legwork
+
+When something happens to a PR, Shipyard asks your coding agent about it and hands you a card with its take and the buttons that fit. You stay in charge: nothing posts under your name until you've seen the text.
+
+<table>
+  <tr>
+    <th width="33%">A reviewer pushes back</th>
+    <th width="33%">CI goes red</th>
+    <th width="33%">Your review is requested</th>
+  </tr>
+  <tr>
+    <td valign="top">The agent reads the thread in the session that wrote the PR, plans the change, and drafts your reply.</td>
+    <td valign="top">It reads the failing job's log, tells flaky from real, and offers a re-run or a fix.</td>
+    <td valign="top">It pre-reviews the PR and drafts a pending review on GitHub for you to finish, then can approve the follow-up once your comments are addressed.</td>
+  </tr>
+  <tr>
+    <td valign="top"><img width="100%" src="docs/feedback.png" alt="Plan for review feedback with a drafted reply"></td>
+    <td valign="top"><img width="100%" src="docs/ci-failure.png" alt="Why CI failed, with Re-run failed jobs"></td>
+    <td valign="top"><img width="100%" src="docs/pre-review.png" alt="Pre-review recommending changes, with auto-approve"></td>
+  </tr>
+</table>
+
+### Reviews you owe, in one place
+
+![Shipyard Reviews board](docs/reviews.png)
+
 ## Quick start
 
 ```bash
@@ -25,20 +53,6 @@ python3 shipyard.py ~/dev
 ```
 
 Open http://localhost:4321: the board shows every PR you're involved in, and views can narrow it to a repository, organization, or username. `~/dev` is the folder that holds your Git clones, for opening checkouts and starting work; you can leave it off and add folders later in Settings. See [Running Shipyard](#running-shipyard) for configuration and running at login.
-
-## Screenshots
-
-### Board view
-
-See drafts, waiting work, approvals, and recent merges by stage.
-
-![Shipyard board view](docs/board-view.png)
-
-### Review board
-
-Track the PRs you owe a review, split into what's still waiting on you and what you've already reviewed, with counts and pending-review indicators.
-
-![Shipyard review board](docs/review-board.png)
 
 ## GitHub access
 
@@ -199,6 +213,7 @@ There is no build step or dependency installation. Run `python3 shipyard.py ~/de
 python3 -m unittest discover tests     # server: events, rules, passes, actions, git, HTTP
 node tests/ui/smoke.mjs                # browser: Next rows and sidebar against fake data (needs Playwright)
 python3 tests/ui/demo_server.py 4399   # the server over fake GitHub and agent data
+node tests/ui/readme_shots.mjs         # regenerate the README screenshots in docs/
 ```
 
 ## License

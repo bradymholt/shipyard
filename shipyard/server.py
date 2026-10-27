@@ -24,7 +24,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     config = DEFAULT_CONFIG
     session_token = ""
     orchestrator = None
-    STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board-view.png",
+    STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board.png",
                     "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
                     "/icons/apple-touch-icon.png"}
