@@ -191,6 +191,31 @@ class Orchestrator:
         self.publish()
         return {"ok": True}
 
+    def setup_checks(self):
+        """Whether GitHub and the coding agent work from here, for the welcome."""
+        checks = []
+        try:
+            login = self.github.rest("GET", "/user").get("login")
+            checks.append({"id": "github", "label": "GitHub", "ok": True,
+                           "detail": f"Signed in as {login} with the GitHub CLI" if login else "Signed in with the GitHub CLI"})
+            if self.status["github"] != "ok":
+                self.wake.set()
+        except GitHubError as e:
+            checks.append({"id": "github", "label": "GitHub", "ok": False, "detail": str(e),
+                           "fix": "Run `gh auth login` in a terminal, then check again."})
+        agent, adapter = self.config["agent"], self.adapter
+        if not adapter:
+            checks.append({"id": "agent", "label": "Coding agent", "ok": True,
+                           "detail": "None set, so passes stay off. Pick one in Settings."})
+        else:
+            try:
+                checks.append({"id": "agent", "label": agent["name"], "ok": True,
+                               "detail": f"`{adapter.process_name}` runs: {adapter.version()}"})
+            except AgentError as e:
+                checks.append({"id": "agent", "label": agent["name"], "ok": False, "detail": str(e),
+                               "fix": f"Install {agent['name']} so `{adapter.process_name}` is on the PATH Shipyard runs with"})
+        return {"ok": True, "checks": checks}
+
     def turn_on_automation(self):
         self.db.set_automation("on")
         self.publish()

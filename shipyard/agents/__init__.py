@@ -208,6 +208,17 @@ class Adapter:
     def available(self):
         return bool(shutil.which(self.process_name))
 
+    def version(self):
+        """The CLI's version line, proving it runs from the server's PATH."""
+        try:
+            r = subprocess.run([self.process_name, "--version"], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise AgentError(f"could not run `{self.process_name} --version`: {e}") from e
+        lines = (r.stdout or r.stderr).strip().splitlines()
+        if r.returncode != 0:
+            raise AgentError(lines[-1] if lines else f"`{self.process_name} --version` exited {r.returncode}")
+        return lines[0] if lines else ""
+
 
 from .claude_code import ClaudeCode  # noqa: E402
 from .codex import Codex  # noqa: E402

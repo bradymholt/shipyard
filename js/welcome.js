@@ -1,7 +1,7 @@
-// The first-run welcome: what Shipyard does, views to narrow the board, and whether it
+// The first-run welcome: what Shipyard does, whether GitHub and your agent work, views to narrow the board, and whether it
 // may act on its own. It shows once per install.
 import { $, state } from "./base.js";
-import { esc, showError } from "./html.js";
+import { esc, fmtTitle, showError } from "./html.js";
 import { apiCall, apiGet, automationHeld, getRepos, saveSetting, saveViews, turnOnAutomation } from "./server.js";
 import { render } from "./board.js";
 import { renderRepoSelect } from "./settings.js";
@@ -43,11 +43,22 @@ function suggestedViews() {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 6);
 }
 
-let steps = ["intro", "views", "agent"];
+let steps = ["intro", "checks", "views", "agent"];
 let step = 0;
 let shown = false;
 const picked = new Set();
 let folders = [];  // where your clones seem to be, offered when no folders are set
+let checks = null;  // null while the server is checking
+
+async function runChecks() {
+  checks = null;
+  try {
+    checks = (await apiGet("api/setup-check")).checks;
+  } catch (err) {
+    checks = [{ label: "Shipyard", ok: false, detail: err.message }];
+  }
+  if (steps[step] === "checks") renderWelcome();
+}
 
 // Folders Shipyard found that hold your clones, when none are set yet.
 export async function folderCandidates() {
@@ -60,14 +71,20 @@ export async function folderCandidates() {
 }
 
 export async function maybeShowWelcome() {
-  // After the first poll, so the views and folders it suggests come from your PRs.
-  if (shown || !state.serverState?.welcome || !state.serverState.status?.lastPoll || location.hash.startsWith("#settings")) return;
+  // After the first poll, so the views and folders it suggests come from your PRs, or
+  // after a failed one, so the checks say what to fix.
+  const status = state.serverState?.status;
+  if (shown || !state.serverState?.welcome || !status || !(status.lastPoll || status.github !== "starting") || location.hash.startsWith("#settings")) return;
   shown = true;
+  runChecks();
   folders = await folderCandidates();
-  steps = ["intro", "views", ...(folders.length ? ["folders"] : []), "agent"];
+  steps = ["intro", "checks", "views", ...(folders.length ? ["folders"] : []), "agent"];
   renderWelcome();
   $("#welcome-dialog").showModal();
 }
+
+const checkRow = (c) => `<div class="wel-check"><span class="wel-mark ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✕"}</span>
+  <div><strong>${esc(c.label)}</strong><span>${fmtTitle(c.detail)}</span>${c.fix ? `<span class="wel-fix">${fmtTitle(c.fix)}</span>` : ""}</div></div>`;
 
 const clonesText = (c) => `${c.clones} clone${c.clones === 1 ? "" : "s"}${c.matching ? `, ${c.matching} from your PRs` : ""}`;
 
@@ -83,6 +100,18 @@ function stepHtml() {
           <li><strong>Your coding agent.</strong> Looks into failing checks and drafts reviews. It prepares; you decide.</li>
         </ul>`,
       actions: `<button type="button" class="primary" data-wel="next">Next</button>`,
+    };
+  }
+  if (name === "checks") {
+    const failed = checks?.some((c) => !c.ok);
+    return {
+      body: `<h2 id="welcome-title">Checking your setup</h2>
+        <p class="wel-lead">Shipyard reads your PRs through the GitHub CLI and hands work to your coding agent.</p>
+        <div class="wel-checks">${checks ? checks.map(checkRow).join("")
+          : `<div class="wel-check"><span class="spinner wel-mark"></span><div><span>Checking…</span></div></div>`}</div>
+        ${failed ? `<p class="wel-note">You can keep going and fix these later.</p>` : ""}`,
+      actions: `${failed ? `<button type="button" data-wel="recheck">Check Again</button>` : ""}
+        <button type="button" class="primary" data-wel="next">Next</button>`,
     };
   }
   if (name === "folders") {
@@ -165,6 +194,10 @@ $("#welcome-dialog").addEventListener("click", async (e) => {
   const action = e.target.closest("[data-wel]")?.dataset.wel;
   if (action === "next" || action === "back") {
     step += action === "next" ? 1 : -1;
+    return renderWelcome();
+  }
+  if (action === "recheck") {
+    runChecks();
     return renderWelcome();
   }
   if (action === "views") {

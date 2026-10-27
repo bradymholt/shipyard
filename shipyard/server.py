@@ -113,6 +113,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._events()
         if path == "/api/folder-candidates":
             return self._api_call(lambda c: c.folder_candidates())
+        if path == "/api/setup-check":
+            return self._api_call(lambda c: c.setup_checks())
         if path == "/api/settings":
             return self._api_call(lambda c: c.settings())
         if path == "/api/timeline":

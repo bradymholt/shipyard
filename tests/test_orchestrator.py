@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from shipyard.agents import AgentError
+from shipyard.github import GitHubError
 from shipyard.orchestrator import Orchestrator
 from shipyard.config import read_config, validate_config
 from shipyard.settings import MISSING
@@ -44,6 +46,8 @@ class FakeGitHub:
         self.calls.append((method, path, body))
         if "/compare/" in path:
             return self.compare
+        if path == "/user":
+            return {"login": VIEWER}
         return self.pr_files if path.split("?")[0].endswith("/files") else {}
 
     def job_log_tail(self, repo, job_id, lines=150):
@@ -65,6 +69,9 @@ class FakeAgent:
 
     def available(self):
         return True
+
+    def version(self):
+        return "1.0.0 (Fake)"
 
     def find_pr_session(self, path, branch, url, latest=True):
         return {"id": "s-open", "how": "pr-url"}
@@ -479,6 +486,13 @@ class CiFailed(OrchestratorCase):
         self.gh.put(self.red(), "author:@me")
         card = self.poll()["o/r#1"]["cards"][0]
         self.assertEqual(card["proposals"][0]["payload"]["message"], "Fixes the typo in app.py")
+
+    def test_setup_checks_say_what_to_fix(self):
+        checks = lambda: [(c["id"], c["ok"], "fix" in c) for c in self.comp.setup_checks()["checks"]]
+        self.assertEqual(checks(), [("github", True, False), ("agent", True, False)])
+        with mock.patch.object(self.gh, "rest", side_effect=GitHubError("no token; run `gh auth login`")), \
+                mock.patch.object(self.agent, "version", side_effect=AgentError("not found")):
+            self.assertEqual(checks(), [("github", False, True), ("agent", False, True)])
 
     def test_a_new_install_offers_passes_and_presses_nothing_until_turned_on(self):
         self.comp.db.close()
