@@ -162,10 +162,16 @@ function settingRow(f, error) {
 
 const changedIn = (section) => settingFields.filter((f) => f.section === section && f.set && !same(f.value, f.default)).length;
 
+const unusedByMode = (f) => {
+  const key = f.path.at(-1);
+  const mode = fieldAt([...f.path.slice(0, -1), "mode"].join("."));
+  return !!mode && (key === "url" || key === "command") && mode.value !== key;
+};
+
 // Settings a choice above fills in (an app, an agent) sit under one Advanced heading.
 function sectionRows(id, errors) {
   let headed = false;
-  return settingFields.filter((f) => f.section === id).map((f) => {
+  return settingFields.filter((f) => f.section === id && !unusedByMode(f)).map((f) => {
     let heading = "";
     if (f.group === "advanced" && !headed) {
       headed = true;

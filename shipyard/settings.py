@@ -84,11 +84,11 @@ def _open_fields(section, placeholder):
         _field(section, root + ("mode",), "choice", "How to open", lambda cfg: settings(cfg)["mode"],
                choices=OPEN_MODES, parent=parent, group="advanced"),
         _field(section, root + ("url",), "text", "URL", lambda cfg: settings(cfg)["url"], parent=parent,
-               group="advanced", help=f"Used when opening a URL. {placeholder} stands for the "
+               group="advanced", help=f"{placeholder} stands for the "
                     + ("session." if section == "agent" else "checkout path.")),
         _field(section, root + ("command",), "command", "Command", lambda cfg: _command_text(settings(cfg)["command"]),
                parent=parent, to_raw=shlex.split, group="advanced",
-               help=f"Used when running a command. Must include {placeholder}."),
+               help=f"Must include {placeholder}."),
     ]
 
 
