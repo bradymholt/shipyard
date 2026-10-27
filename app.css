@@ -197,6 +197,10 @@ dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop { background: rg
 .set-nav-item:hover { background: var(--btn-hover); color: var(--fg); }
 .set-nav-item:hover, .set-nav-item:focus { text-decoration: none; }
 .set-nav-item.active { background: var(--bg-inset); color: var(--fg); font-weight: 600; }
+.set-nav-sub { margin-left: 0.625rem; padding: 0.25rem 0.625rem; border-left: 2px solid var(--border-soft); font-size: 0.8125rem; font-weight: 500; color: var(--fg-faint); text-decoration: none; }
+.set-nav-sub:hover { color: var(--fg); text-decoration: none; }
+.set-nav-sub.current { border-left-color: var(--teal); color: var(--fg); }
+.set-heading { scroll-margin-top: 1rem; }
 .set-nav-count { margin-left: auto; min-width: 1.125rem; padding: 0 0.3125rem; border-radius: 999px; text-align: center; font: 600 0.6875rem/1.125rem var(--sans); background: color-mix(in srgb, var(--gold) 16%, var(--surface)); color: var(--gold-text); }
 .set-pane { max-width: 44rem; background: var(--surface); border: 1px solid var(--border); border-radius: 0.625rem; padding: 1.25rem 1.5rem 1.5rem; }
 .set-pane h2 { margin: 0; font: 700 1.0625rem var(--sans); color: var(--fg); }
@@ -239,6 +243,7 @@ dialog#welcome-dialog::backdrop { background: rgba(18,38,58,.5); }
   .set-layout { display: block; }
   .set-nav { position: static; flex-direction: row; overflow-x: auto; gap: 0.25rem; margin: 0 -1.25rem 1rem; padding: 0 1.25rem 0.25rem; scrollbar-width: none; }
   .set-nav-item { flex: none; white-space: nowrap; }
+  .set-nav-sub { display: none; }
   .set-pane { padding: 1rem; }
 }
 .set-row { padding: 0.4375rem 0; }
