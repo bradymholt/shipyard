@@ -52,6 +52,7 @@ let commandLineRoots = [];
 let foundFolders = [];
 let pane = "views";
 let sub = "";
+const openPrompts = new Set();
 let openedFromBoard = false;
 const VIEWS_PANE = { id: "views", title: "Views" };
 
@@ -128,6 +129,11 @@ function spySub() {
   for (const a of $("#set-nav").querySelectorAll(".set-nav-sub")) a.classList.toggle("current", `set-sub-${a.dataset.sub}` === current.id);
 }
 
+$("#settings-fields").addEventListener("toggle", (e) => {
+  const key = e.target.dataset?.prompt;
+  if (key) e.target.open ? openPrompts.add(key) : openPrompts.delete(key);
+}, true);
+
 addEventListener("scroll", () => { if (!$("#settings-page").classList.contains("hidden")) spySub(); }, { passive: true });
 
 const fieldKey = (f) => f.path.join(".");
@@ -197,7 +203,15 @@ function settingRow(f, depth, errors, kids = []) {
     ${inline ? "" : control}
     ${help || note ? `<div class="set-note">${help ? `<span>${help}</span>` : ""}${note}</div>` : ""}
     ${error ? `<div class="set-error">${esc(error)}</div>` : ""}
+    ${f.template ? promptView(f) : ""}
   </div>`;
+}
+
+function promptView(f) {
+  const [before, after = ""] = f.template.split("{instructions}");
+  return `<details class="set-prompt" data-prompt="${esc(fieldKey(f))}"${openPrompts.has(fieldKey(f)) ? " open" : ""}>
+    <summary>Show Shipyard's prompt</summary>
+    <pre>${esc(before.trimEnd())}<mark>Your instructions go here</mark>${esc(after)}</pre></details>`;
 }
 
 const changedIn = (section) => settingFields.filter((f) => f.section === section && f.set && !same(f.value, f.default)).length;
