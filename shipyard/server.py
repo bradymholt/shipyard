@@ -21,7 +21,6 @@ SSE_KEEPALIVE = 15
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
-    roots = []
     config = DEFAULT_CONFIG
     session_token = ""
     orchestrator = None
@@ -208,17 +207,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json({"ok": False, "error": str(e)}, 400)
             return self._api(parsed.path.rsplit("/", 1)[1], arg, body)
         if parsed.path == "/new-task":
-            result = worktrees.new_task_worktree(arg("repo"), arg("branch"), self.roots)
+            result = worktrees.new_task_worktree(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/new-branch-main":
-            result = worktrees.new_branch_in_main(arg("repo"), arg("branch"), self.roots)
+            result = worktrees.new_branch_in_main(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/open-in-main":
-            result = worktrees.open_in_main(arg("repo"), arg("branch"), self.roots)
+            result = worktrees.open_in_main(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/open-default-main":
-            result = worktrees.open_default_in_main(arg("repo"), self.roots)
+            result = worktrees.open_default_in_main(arg("repo"), self.orchestrator.roots)
         elif parsed.path == "/open-app":
-            result = worktrees.launch_app(arg("path"), self.roots, self.config)
+            result = worktrees.launch_app(arg("path"), self.orchestrator.roots, self.config)
         else:
-            result = worktrees.launch_agent(arg("path"), self.roots, self.config, arg("session") or None)
+            result = worktrees.launch_agent(arg("path"), self.orchestrator.roots, self.config, arg("session") or None)
         if result.get("ok") and parsed.path in self.CHECKOUT_ACTIONS:
             self.orchestrator.rescan_worktrees()
         return self._json(result, 200 if result.get("ok") else 500)

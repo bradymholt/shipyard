@@ -1,4 +1,5 @@
 import copy
+import os
 import json
 import tempfile
 import time
@@ -239,6 +240,15 @@ class Settings(OrchestratorCase):
         self.assertEqual(json.loads(self.config_path.read_text()),
                          {"launcher": {"mode": "command", "app": "cursor"}, "agent": {"url": "my://{session}", "sessions": "codex"}})
         self.assertEqual((self.comp.config["launcher"]["url"], self.comp.config["agent"]["name"]), ("cursor://file/{path}", "Codex"))
+
+    def test_folders_from_settings_apply_without_a_restart(self):
+        self.config_path.write_text("{}")
+        comp = Orchestrator(validate_config({}), [], self.db_path, github=self.gh, config_path=self.config_path)
+        self.assertEqual(comp.page_state()["roots"], [])
+        with mock.patch("shipyard.orchestrator.worktrees.discover", return_value=[]) as scan:
+            comp.save_setting(["roots"], self.checkout)
+        self.assertEqual(comp.roots, [os.path.realpath(self.checkout)])
+        scan.assert_called_once_with(comp.roots, None)
 
     def test_views_saved_in_the_database_move_to_the_config_file(self):
         self.comp.db.set_current_view("")

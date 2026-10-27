@@ -47,6 +47,7 @@ $("#views-list").addEventListener("click", (e) => {
 let settingSections = [];
 let settingFields = [];
 let settingsLoaded = false;
+let commandLineRoots = [];
 let pane = "views";
 let openedFromBoard = false;
 const VIEWS_PANE = { id: "views", title: "Views" };
@@ -93,7 +94,7 @@ export function route() {
 async function loadSettings() {
   settingsLoaded = true;
   try {
-    ({ sections: settingSections, fields: settingFields } = await apiGet("api/settings"));
+    ({ sections: settingSections, fields: settingFields, commandLineRoots } = await apiGet("api/settings"));
     renderSettings();
     $("#set-nav .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   } catch (err) {
@@ -180,11 +181,13 @@ function renderSettings(errors = {}) {
   }).join("");
   $("#set-views").classList.toggle("hidden", pane !== "views");
   const section = settingSections.find((s) => s.id === pane);
+  const fixed = pane === "roots" && commandLineRoots.length
+    ? `<div class="set-held">Folders given on the command line hold for this run: ${esc(commandLineRoots.join(", "))}. The ones here apply when Shipyard starts without any.</div>` : "";
   const held = automationHeld() && (pane === "passes" || pane === "auto")
     ? `<div class="set-held">Held for now: until you turn it on, passes wait for Ask and nothing is pressed for you.
         <button type="button" class="primary" data-automation="on">Turn it on</button></div>` : "";
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
-    ${held}${sectionRows(section.id, errors)}` : "";
+    ${fixed}${held}${sectionRows(section.id, errors)}` : "";
   if (focused) document.getElementById(focused)?.focus();
 }
 
@@ -244,17 +247,23 @@ function ntRepoOptionsHtml() {
 
 export function openNewTaskDialog() {
   const html = ntRepoOptionsHtml();
-  $("#nt-repo").innerHTML = html || '<option value="">— no local clones in this view —</option>';
+  const scanning = (state.serverState?.roots || []).length > 0;
+  $("#nt-repo").innerHTML = html || `<option value="">— ${scanning ? "no local clones in this view" : "not scanning any folders yet"} —</option>`;
   const branch = $("#nt-branch");
   branch.value = "";  // start blank so the default action is "Open default"
   const status = $("#nt-status");
-  status.textContent = "";
+  status.innerHTML = scanning ? ""
+    : 'Shipyard works from your local clones here. <a href="#settings/roots" data-close-nt>Add a folder to scan in Settings</a>.';
   status.classList.remove("error");
   updateNtButtons();
   $("#new-task-dialog").showModal();
   branch.focus();
   branch.setSelectionRange(branch.value.length, branch.value.length);
 }
+
+$("#nt-status").addEventListener("click", (e) => {
+  if (e.target.closest("[data-close-nt]")) $("#new-task-dialog").close();
+});
 
 const ntError = (msg) => { const s = $("#nt-status"); s.textContent = msg; s.classList.add("error"); };
 

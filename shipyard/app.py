@@ -36,16 +36,13 @@ def parse_args(argv):
 def main(argv=None):
     port, cli_roots = parse_args(sys.argv[1:] if argv is None else argv)
     config = load_config()
-    # Roots come from the command line if given, otherwise the "roots" config key.
-    cfg_roots = config.get("roots") or []
-    roots = normalize_roots(cli_roots or cfg_roots)
-    if not roots:
-        sys.exit(f'No folders to scan. Set "roots" in {CONFIG_FILE} (e.g. ["~/dev"]) '
-                 f'or pass them on the command line: python3 shipyard.py ~/dev')
-    warn_unavailable_roots(roots)
-    Handler.roots = roots
+    # Folders on the command line hold for the run; otherwise the "roots" setting applies,
+    # and Shipyard runs without any: the board needs only GitHub.
     Handler.config = config
-    Handler.orchestrator = Orchestrator(config, roots, REPO_DIR / DB_FILE, github=GitHub(), first_run_hold=True)
+    Handler.orchestrator = Orchestrator(config, normalize_roots(cli_roots), REPO_DIR / DB_FILE, github=GitHub(),
+                                        first_run_hold=True)
+    roots = Handler.orchestrator.roots
+    warn_unavailable_roots(roots)
     Handler.orchestrator.move_old_views()
     Handler.session_token = Handler.orchestrator.db.session_token()
     # Threaded: the Server-Sent Events stream holds a connection open per tab.
@@ -53,7 +50,8 @@ def main(argv=None):
                                             functools.partial(Handler, directory=str(REPO_DIR)))
     httpd.daemon_threads = True
     print(f"Shipyard → http://localhost:{port}")
-    print(f"Scanning worktrees under: {', '.join(roots)}")
+    print(f"Scanning worktrees under: {', '.join(roots)}" if roots else
+          "Not scanning any folders yet: add one in Settings (Folders to scan) to open checkouts and start work.")
     launcher = config["launcher"]
     print(f"Opens in: {launcher['name']} via {launcher['mode']}")
     agent = config["agent"]

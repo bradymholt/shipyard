@@ -89,7 +89,8 @@ class Orchestrator:
         self.config = config
         self.config_path = config_path
         self.config_mtime = config_mtime(config_path)
-        self.roots = roots
+        # Folders from the command line hold for the run; otherwise the config's apply live.
+        self.fixed_roots = worktrees.normalize_roots(roots or [])
         self.db = State(db_path)
         # A new install doesn't act on its own until you say so: passes wait for Ask and
         # nothing is pressed for you. An install that has polled before keeps going.
@@ -149,19 +150,32 @@ class Orchestrator:
             self.wake.wait(self.poll_seconds)
             self.wake.clear()
 
+    @property
+    def roots(self):
+        return self.fixed_roots or worktrees.normalize_roots(self.config["roots"])
+
+    def use_config(self, config):
+        """Take a new config; a change of folders to scan takes effect at once."""
+        before = self.roots
+        self.config = config
+        if self.roots != before:
+            worktrees.warn_unavailable_roots(self.roots)
+            self.refresh_worktrees()
+        self.publish()
+
     def reload_config(self):
         """Pick up a hand edit to the config without a restart, which would cut running
-        passes short. Roots are read only at startup."""
+        passes short."""
         mtime = config_mtime(self.config_path)
         if mtime == self.config_mtime:
             return
         self.config_mtime = mtime
         try:
-            self.config = read_config(self.config_path)
+            config = read_config(self.config_path)
         except ValueError as e:
             print(f"Warning: kept the previous config: {e}")
             return
-        self.publish()
+        self.use_config(config)
 
     def poke(self):
         """Poll again soon, e.g. right after an action changed the PR."""
@@ -776,12 +790,13 @@ class Orchestrator:
         return {"views": views, "current": current if current in views else ""}
 
     def settings(self):
-        return {"ok": True, "sections": SECTIONS, "fields": setting_fields(read_raw(self.config_path))}
+        return {"ok": True, "sections": SECTIONS, "fields": setting_fields(read_raw(self.config_path)),
+                "commandLineRoots": self.fixed_roots}
 
     def save_setting(self, path, value=None, reset=False, expect=MISSING):
-        self.config, fields = save_setting_file(path, value, reset, expect, self.config_path)
+        config, fields = save_setting_file(path, value, reset, expect, self.config_path)
         self.config_mtime = config_mtime(self.config_path)
-        self.publish()
+        self.use_config(config)
         return {"ok": True, "fields": fields}
 
     def set_current_view(self, view):
@@ -1036,4 +1051,5 @@ class Orchestrator:
             "worktrees": [w for w in self.worktree_map.values() if w.get("branch")],
             "views": self.views(),
             "automation": "held" if self.held() else "on",
+            "roots": self.roots,
         }

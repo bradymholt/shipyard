@@ -63,7 +63,6 @@ class ServerCase(unittest.TestCase):
         self.orchestrator = FakeOrchestrator()
         patches = [mock.patch.object(Handler, "orchestrator", self.orchestrator),
                    mock.patch.object(Handler, "session_token", "tok"),
-                   mock.patch.object(Handler, "roots", [tmp.name]),
                    mock.patch("shipyard.server.worktrees.discover", return_value=[])]
         for p in patches:
             p.start()
