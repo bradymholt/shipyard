@@ -10,7 +10,7 @@ For each piece of feedback, say in one line what the reviewer is asking for. The
 
 If the feedback is long, read files or the diff with a sub-agent so only its short result lands here.
 
-Answer with one JSON object and nothing else:
+{instructions}Answer with one JSON object and nothing else:
 {{"summary": "2-4 sentences: what they want and the plan",
   "proposals": [
     {{"action": "continue", "confidence": "high", "reason": "the plan needs code changes", "payload": {{}}}},

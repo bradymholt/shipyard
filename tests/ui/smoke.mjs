@@ -263,9 +263,10 @@ try {
   check((await fileSets()).length === 0, "Reset takes the setting back out of the file");
   const order = await page.locator("#settings-fields .set-row").evaluateAll((rows) => rows.map((r) => r.dataset.path));
   check(order.indexOf("rules.passes.ci_failed") === order.indexOf("rules.fix_ci") + 1 &&
-    order.indexOf("auto.rerun_checks") === order.indexOf("rules.passes.ci_failed") + 1 &&
-    order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 1,
-    "each pass sits under its next step, and each automatic action under its pass");
+    order.indexOf("rules.instructions.ci_failed") === order.indexOf("rules.passes.ci_failed") + 1 &&
+    order.indexOf("auto.rerun_checks") === order.indexOf("rules.passes.ci_failed") + 2 &&
+    order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 2,
+    "each pass sits under its next step, with its instructions and automatic actions under it");
   check(JSON.stringify(await page.locator("#settings-fields .set-heading").allTextContents()) === '["My PRs","Reviews"]',
     "workflows group under the board's two tabs");
   await page.click('.set-nav-sub[data-sub="reviews"]');
@@ -282,6 +283,14 @@ try {
   check(JSON.stringify(await fileSets()) === '["rules.passes.ci_failed"]', "the agent pass switches with one click");
   await page.locator('[data-path="rules.passes.ci_failed"] [data-reset]').click();
   await page.waitForSelector('[data-path="rules.passes.ci_failed"] [data-value="auto"][aria-pressed="true"]');
+  const instructions = page.locator('[data-path="rules.instructions.ci_failed"] textarea');
+  await instructions.fill("Flaky specs live in spec/system.");
+  await instructions.blur();
+  await page.waitForSelector('[data-path="rules.instructions.ci_failed"] .set-dot');
+  await instructions.fill("");
+  await instructions.blur();
+  await page.waitForSelector('[data-path="rules.instructions.ci_failed"] .set-dot', { state: "detached" });
+  check((await fileSets()).length === 0, "a pass's instructions save, and clearing them takes them back out of the file");
   if (shots) await page.screenshot({ path: `${shots}/passes.png`, fullPage: true });
   await page.click('#set-nav [data-pane="agent"]');
   await page.waitForSelector('[data-path="agent.url"]');

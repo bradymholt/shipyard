@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from shipyard.config import validate_auto, validate_config, validate_rules
-from shipyard import settings
+from shipyard import passes, settings
 from shipyard.poll import Poller, signature, snapshot
 
 from fixtures import VIEWER, check_run, pr_node
@@ -19,15 +19,23 @@ class Config(unittest.TestCase):
         self.assertIsNone(validate_config({"auto": {"approve_rereview": False}})["auto"]["approve_rereview"])
 
     def test_rules_validation(self):
+        self.assertEqual(validate_rules({"instructions": {"ci_failed": "Flaky specs live in spec/system."}})["instructions"],
+                         {"ci_failed": "Flaky specs live in spec/system."})
         self.assertIs(validate_rules({"nudge": False})["nudge"], False)
         self.assertEqual(validate_rules({"nudge": True})["nudge"], {"after_hours": 24})
         self.assertEqual(validate_rules({"passes": {"pre_review": "ask"}})["passes"]["pre_review"], "ask")
         self.assertEqual(validate_rules({"address_feedback": {"prompt": "/respond {url}"}})["address_feedback"],
                          {"prompt": "/respond {url}"})
         for bad in ({"address_feedback": {"prompt": ""}}, {"nudge": {"after_days": 1}}, {"nudge": {"after_hours": 0}}, {"merge": "yes"},
-                    {"passes": {"pre_review": "sometimes"}}, {"passes": {"lint": "auto"}}, {"unknown": 1}):
+                    {"passes": {"pre_review": "sometimes"}}, {"passes": {"lint": "auto"}}, {"unknown": 1},
+                    {"instructions": {"lint": "x"}}, {"instructions": {"ci_failed": 3}}):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 validate_rules(bad)
+
+    def test_pass_instructions_go_before_the_answer_format(self):
+        prompt = passes.render("ci_failed", {}, "Flaky specs live in spec/system.")
+        self.assertLess(prompt.index("Flaky specs live in spec/system."), prompt.index("Answer with one JSON object"))
+        self.assertNotIn("instructions from the user", passes.render("ci_failed", {}, "  "))
 
     def test_auto_validation(self):
         auto = validate_auto({"rerun_checks": {"when": "confidence >= medium", "max_per_pr": 3},

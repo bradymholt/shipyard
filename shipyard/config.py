@@ -94,6 +94,7 @@ RULE_DEFAULTS = {
         "pre_review": "auto",
         "re_review": "auto",
     },
+    "instructions": {},  # per pass, added to its prompt
 }
 RULE_THRESHOLDS = {"nudge": "after_hours"}
 RULE_PROMPTS = {"address_feedback"}
@@ -198,6 +199,15 @@ def validate_rules(raw):
                 if mode not in PASS_MODES:
                     raise ValueError(f'rules "passes" "{pass_name}" must be "auto", "ask" or false')
             rules[name] = {**default, **value}
+        elif name == "instructions":
+            if not isinstance(value, dict):
+                raise ValueError('rules "instructions" must be an object')
+            bad = sorted(set(value) - set(RULE_DEFAULTS["passes"]))
+            if bad:
+                raise ValueError(f"instructions for unknown pass(es): {', '.join(bad)}")
+            if any(not isinstance(text, str) for text in value.values()):
+                raise ValueError('rules "instructions" must map each pass to a string')
+            rules[name] = dict(value)
         elif name in RULE_PROMPTS:
             if value is True:
                 value = default

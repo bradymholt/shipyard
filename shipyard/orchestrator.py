@@ -495,7 +495,8 @@ class Orchestrator:
         if mode == "fresh" and adapter.key == "claude-code":
             new_session = str(uuid.uuid4())
 
-        prompt = passes.render(name, passes.inputs(name, snap, self.github, question))
+        prompt = passes.render(name, passes.inputs(name, snap, self.github, question),
+                               self.config["rules"]["instructions"].get(name, ""))
         try:
             # The PR's own code may carry agent settings (hooks, permissions); on someone
             # else's PR, only yours apply.

@@ -286,6 +286,7 @@ $("#settings-fields").addEventListener("change", (e) => {
   if (f.kind === "number") {
     return e.target.value === "" ? saveField(f, { reset: true }) : saveField(f, { value: Number(e.target.value) });
   }
+  if (!e.target.value.trim() && f.default === "") return saveField(f, { reset: true });
   saveField(f, { value: e.target.value });
 });
 

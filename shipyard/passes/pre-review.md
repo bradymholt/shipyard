@@ -9,7 +9,7 @@ Read the change with `gh pr diff {number}`, and the files around it with Read. U
 
 If a code-review skill is installed, invoke it before answering, with its no-post or read-only option if it has one. Its guidance decides what to flag and how comments are worded; this prompt decides the answer format, the verdict, and that nothing is posted.
 
-Answer with one JSON object and nothing else:
+{instructions}Answer with one JSON object and nothing else:
 {{"summary": "3-5 sentences: what the PR does, how solid it is, the main concerns",
   "proposals": [
     {{"action": "submit_review", "confidence": "high|medium|low", "reason": "why this verdict",
