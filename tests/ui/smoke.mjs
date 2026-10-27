@@ -234,7 +234,7 @@ try {
   console.log("settings");
   await page.click("#settings-btn");
   await page.click('#set-nav [data-pane="rules"]');
-  await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
+  await page.waitForSelector('[data-path="rules.nudge.after_hours"] input');
   check(await page.locator(".list").isHidden() && (await page.evaluate(() => location.hash)) === "#settings/rules",
     "settings open as their own page, one pane at a time");
   const fileSets = () => page.evaluate(async () => (await (await fetch("api/settings")).json()).fields
@@ -243,12 +243,12 @@ try {
   const hours = page.locator('[data-path="rules.nudge.after_hours"] input');
   await hours.fill("48");
   await hours.press("Enter");
-  await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag.changed');
+  await page.waitForSelector('[data-path="rules.nudge"] .set-dot');
   check(await page.locator('#set-nav [data-pane="rules"] .set-nav-count').textContent() === "1", "the sidebar counts a pane's changed settings");
-  check((await page.locator('[data-path="rules.nudge.after_hours"] .set-default').textContent()) === "Default: 24" &&
+  check((await page.locator('[data-path="rules.nudge"] .set-default').textContent()) === "Default: 24" &&
     JSON.stringify(await fileSets()) === '["rules.nudge.after_hours"]', "changing a setting writes only that key and shows its default");
-  await page.locator('[data-path="rules.nudge.after_hours"] [data-reset]').click();
-  await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
+  await page.locator('[data-path="rules.nudge"] [data-reset]').click();
+  await page.waitForSelector('[data-path="rules.nudge"] .set-dot', { state: "detached" });
   check((await fileSets()).length === 0, "Reset takes the setting back out of the file");
   const order = await page.locator("#settings-fields .set-row").evaluateAll((rows) => rows.map((r) => r.dataset.path));
   check(order.indexOf("rules.passes.ci_failed") === order.indexOf("rules.fix_ci") + 1 &&
@@ -258,11 +258,16 @@ try {
   check(JSON.stringify(await page.locator("#settings-fields .set-heading").allTextContents()) === '["My PRs","Reviews"]',
     "workflows group under the board's two tabs");
   await page.locator('[data-path="rules.fix_ci"] input').uncheck();
-  await page.waitForSelector('[data-path="rules.fix_ci"] .set-tag.changed');
+  await page.waitForSelector('[data-path="rules.fix_ci"] .set-dot');
   check(await page.locator('[data-path="rules.passes.ci_failed"], [data-path="auto.rerun_checks"]').count() === 0,
     "turning a next step off hides its pass and actions");
   await page.locator('[data-path="rules.fix_ci"] [data-reset]').click();
   await page.waitForSelector('[data-path="auto.rerun_checks"]');
+  await page.click('[data-path="rules.passes.ci_failed"] [data-value="ask"]');
+  await page.waitForSelector('[data-path="rules.passes.ci_failed"] [data-value="ask"][aria-pressed="true"]');
+  check(JSON.stringify(await fileSets()) === '["rules.passes.ci_failed"]', "the agent pass switches with one click");
+  await page.locator('[data-path="rules.passes.ci_failed"] [data-reset]').click();
+  await page.waitForSelector('[data-path="rules.passes.ci_failed"] [data-value="auto"][aria-pressed="true"]');
   if (shots) await page.screenshot({ path: `${shots}/passes.png`, fullPage: true });
   await page.click('#set-nav [data-pane="agent"]');
   await page.waitForSelector('[data-path="agent.url"]');

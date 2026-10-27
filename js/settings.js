@@ -111,14 +111,19 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 function shownValue(f, value) {
   if (f.kind === "switch") return value ? "On" : "Off";
-  if (f.kind === "choice") return f.choices.find(([v]) => v === value)?.[1] || String(value);
+  if (f.choices) return f.choices.find(([v]) => v === value)?.[1] || String(value);
   if (value === "" || value == null) return "none";
   return f.kind === "lines" ? value.split("\n").join(", ") : String(value);
 }
 
+const controlId = (f) => `set-${fieldKey(f).replace(/[^\w]/g, "-")}`;
+
 function settingControl(f, id) {
   const mono = /url|command|prompt|roots/.test(fieldKey(f)) ? " set-mono" : "";
   switch (f.kind) {
+    case "segments":
+      return `<span class="set-seg" id="${id}">${f.choices.map(([v, label]) =>
+        `<button type="button" data-value="${esc(v)}" aria-pressed="${v === f.value}">${esc(label)}</button>`).join("")}</span>`;
     case "switch":
       return `<input type="checkbox" id="${id}" class="set-switch"${f.value ? " checked" : ""}>`;
     case "locked":
@@ -135,20 +140,37 @@ function settingControl(f, id) {
   }
 }
 
-function settingRow(f, depth, error) {
+const isChanged = (f) => f.set && !same(f.value, f.default);
+
+// A child named in its setting's sentence, shown as a small control inside that sentence.
+function inlineControl(f) {
+  const title = isChanged(f) ? ` title="Default: ${esc(shownValue(f, f.default))}"` : "";
+  const control = settingControl(f, controlId(f)).replace(/^<(\w+)/, `<$1 class="set-mini"${title}`);
+  return `<span class="set-inline${isChanged(f) ? " changed" : ""}" data-path="${esc(fieldKey(f))}">${control}</span>`;
+}
+
+const inlineKids = (f, fields) => f.sentence && isOn(f)
+  ? fields.filter((c) => c.parent && same(c.parent, f.path) && f.sentence.includes(`{${c.path.at(-1)}}`)) : [];
+
+function settingRow(f, depth, errors, kids = []) {
   const key = fieldKey(f);
-  const id = `set-${key.replace(/[^\w]/g, "-")}`;
-  const inline = f.kind === "switch" || f.kind === "locked";
+  const id = controlId(f);
+  const inline = f.kind === "switch" || f.kind === "locked" || f.kind === "segments";
   const control = settingControl(f, id);
-  const changed = f.set && !same(f.value, f.default);
-  const tag = f.kind === "locked" ? "" : `<span class="set-tag${changed ? " changed" : ""}">${changed ? "Changed" : "Default"}</span>`;
-  const note = !f.set ? "" : (changed ? `<span class="set-default">Default: ${esc(shownValue(f, f.default))}</span>`
-    : `<span class="set-default">Set to the default in the file</span>`)
-    + `<button type="button" class="set-reset" data-reset="${esc(key)}">Reset</button>`;
+  const help = kids.length
+    ? esc(f.sentence).replace(/\{(\w+)\}/g, (m, name) => { const c = kids.find((k) => k.path.at(-1) === name); return c ? inlineControl(c) : m; })
+    : esc(f.help || "");
+  const resettable = [f, ...kids].filter((x) => x.set);
+  const changed = [f, ...kids].filter(isChanged);
+  const note = !resettable.length ? "" : `<span class="set-default">${changed.length
+    ? `Default: ${changed.map((x) => esc(shownValue(x, x.default))).join(", ")}` : "Set to the default in the file"}</span>`
+    + `<button type="button" class="set-reset" data-reset="${esc(resettable.map(fieldKey).join(" "))}">Reset</button>`;
+  const dot = changed.length ? `<span class="set-dot" title="Changed from the default"></span>` : "";
+  const error = [f, ...kids].map((x) => errors[fieldKey(x)]).find(Boolean);
   return `<div class="set-row${depth ? ` set-child set-depth${depth}` : ""}" data-path="${esc(key)}">
-    <div class="set-head"><label for="${id}">${esc(f.label)}</label>${tag}${inline ? control : ""}</div>
+    <div class="set-head"><label for="${id}">${esc(f.label)}</label>${dot}${inline ? control : ""}</div>
     ${inline ? "" : control}
-    ${f.help || note ? `<div class="set-note">${f.help ? `<span>${esc(f.help)}</span>` : ""}${note}</div>` : ""}
+    ${help || note ? `<div class="set-note">${help ? `<span>${help}</span>` : ""}${note}</div>` : ""}
     ${error ? `<div class="set-error">${esc(error)}</div>` : ""}
   </div>`;
 }
@@ -172,12 +194,15 @@ function homeOf(f) {
   return path ? fieldAt(path.join(".")) : null;
 }
 
-// Settings a choice above fills in (an app, an agent) sit under one Advanced heading.
-function sectionRows(id, errors) {
-  const fields = settingFields.filter((f) => f.section === id && !unusedByMode(f));
+// Settings a choice above fills in (an app, an agent) sit under one Advanced heading. A
+// section with `cards` shows each top-level setting as a card holding what's under it.
+function sectionRows(section, errors) {
+  const fields = settingFields.filter((f) => f.section === section.id && !unusedByMode(f));
   const under = (home) => fields.filter((f) => homeOf(f) === home);
   let headed = false;
-  const rows = (home, depth) => under(home).map((f) => {
+  const rows = (home, depth, skip = []) => under(home).filter((f) => !skip.includes(f)).map((f) => {
+    const kids = inlineKids(f, fields);
+    const inner = isOn(f) ? rows(f, depth + 1, kids) : "";
     let heading = "";
     if (f.group === "advanced" && !headed) {
       headed = true;
@@ -185,7 +210,9 @@ function sectionRows(id, errors) {
         <span>Advanced</span> Filled in by your choice above; change one only to override it.</div>`;
     }
     if (f.heading) heading = `<h3 class="set-heading">${esc(f.heading)}</h3>` + heading;
-    return heading + settingRow(f, depth, errors[fieldKey(f)]) + (isOn(f) ? rows(f, depth + 1) : "");
+    const row = settingRow(f, depth, errors, kids);
+    if (section.cards && !depth) return `${heading}<div class="set-card">${row}${inner ? `<div class="set-card-body">${inner}</div>` : ""}</div>`;
+    return heading + row + inner;
   }).join("");
   return rows(null, 0);
 }
@@ -212,7 +239,7 @@ function renderSettings(errors = {}) {
     ? `<div class="set-held">Held for now: until you turn it on, passes wait for Ask and nothing is pressed for you.
         <button type="button" class="primary" data-automation="on">Turn it on</button></div>` : "";
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
-    ${fixed}${found}${held}${sectionRows(section.id, errors)}` : "";
+    ${fixed}${found}${held}${sectionRows(section, errors)}` : "";
   if (focused) document.getElementById(focused)?.focus();
 }
 
@@ -227,8 +254,7 @@ async function saveField(f, change) {
 
 // Text saves when it's committed (Enter or leaving the field), not on every keystroke.
 $("#settings-fields").addEventListener("change", (e) => {
-  const row = e.target.closest(".set-row");
-  const f = row && fieldAt(row.dataset.path);
+  const f = fieldAt(e.target.closest("[data-path]")?.dataset.path);
   if (!f) return;
   if (f.kind === "switch") return saveField(f, { value: e.target.checked });
   if (f.kind === "number") {
@@ -244,8 +270,10 @@ $("#settings-fields").addEventListener("click", async (e) => {
     await turnOnAutomation();
     return renderSettings();
   }
+  const seg = e.target.closest(".set-seg [data-value]");
+  if (seg) return saveField(fieldAt(seg.closest("[data-path]").dataset.path), { value: seg.dataset.value });
   const btn = e.target.closest("[data-reset]");
-  if (btn) saveField(fieldAt(btn.dataset.reset), { reset: true });
+  if (btn) for (const key of btn.dataset.reset.split(" ")) await saveField(fieldAt(key), { reset: true });
 });
 
 $("#refresh-btn").addEventListener("click", refreshNow);
