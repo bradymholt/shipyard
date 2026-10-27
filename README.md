@@ -31,12 +31,12 @@ When something happens to a PR, Shipyard asks your coding agent about it and han
   <tr>
     <td valign="top">The agent reads the thread in the session that wrote the PR, plans the change, and drafts your reply.</td>
     <td valign="top">It reads the failing job's log, tells flaky from real, and offers a re-run or a fix.</td>
-    <td valign="top">It pre-reviews the PR and drafts a pending review on GitHub for you to finish, then can approve the follow-up once your comments are addressed.</td>
+    <td valign="top">It pre-reviews the PR and drafts a pending review on GitHub, visible only to you, for you to edit and submit.</td>
   </tr>
   <tr>
     <td valign="top"><img width="100%" src="docs/feedback.png" alt="Plan for review feedback with a drafted reply"></td>
     <td valign="top"><img width="100%" src="docs/ci-failure.png" alt="Why CI failed, with Re-run failed jobs"></td>
-    <td valign="top"><img width="100%" src="docs/pre-review.png" alt="Pre-review recommending changes, with auto-approve"></td>
+    <td valign="top"><img width="100%" src="docs/pre-review.png" alt="Pre-review recommending changes, drafted as a pending review"></td>
   </tr>
 </table>
 

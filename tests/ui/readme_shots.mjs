@@ -55,7 +55,7 @@ try {
   await page.click(`.tab[data-filter="review"]`);
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(docs, "reviews.png"), fullPage: true });
-  await sidebar(421, "pre-review.png", 2);
+  await sidebar(421, "pre-review.png", 1);
 } finally {
   await browser.close();
   server.kill();
