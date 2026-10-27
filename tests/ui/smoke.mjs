@@ -255,6 +255,8 @@ try {
     order.indexOf("auto.rerun_checks") === order.indexOf("rules.passes.ci_failed") + 1 &&
     order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 1,
     "each pass sits under its next step, and each automatic action under its pass");
+  check(JSON.stringify(await page.locator("#settings-fields .set-heading").allTextContents()) === '["My PRs","Reviews"]',
+    "workflows group under the board's two tabs");
   await page.locator('[data-path="rules.fix_ci"] input').uncheck();
   await page.waitForSelector('[data-path="rules.fix_ci"] .set-tag.changed');
   check(await page.locator('[data-path="rules.passes.ci_failed"], [data-path="auto.rerun_checks"]').count() === 0,

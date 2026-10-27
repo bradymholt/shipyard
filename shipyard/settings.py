@@ -64,13 +64,14 @@ def _rule_option(cfg, name, key):
 
 
 def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None,
-           group=None, under=None, sources=None):
+           group=None, under=None, sources=None, heading=None):
     """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading.
+    `heading` starts a titled group of settings on the page.
     `under` nests a setting under another on the page without making it part of it in the file;
     `sources` lists the passes an automatic action can come from."""
     return {"section": section, "path": path, "kind": kind, "label": label, "help": help, "choices": choices,
             "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v),
-            "group": group, "under": under, "sources": sources}
+            "group": group, "under": under, "sources": sources, "heading": heading}
 
 
 def _open_fields(section, placeholder):
@@ -139,22 +140,26 @@ FIELDS = [
     _field("agent", ("agent", "name"), "text", "Agent name", lambda cfg: _agent(cfg)["name"], parent=("agent",),
            group="advanced", help="What buttons call it."),
 
-    *[_field("rules", ("rules", name), "switch", label, lambda cfg, name=name: cfg["rules"][name], help=help)
-      for name, label, help in [
-          ("fix_ci", "Fix CI", "When a check fails on your PR."),
-          ("merge", "Merge", "When your PR is approved and green."),
-          ("review", "Review", "When your review is requested."),
-          ("re_review", "Re-review", "When a PR you reviewed is ready for another look."),
-          ("rerequest_review", "Re-request review", "When you've pushed or replied after changes were requested.")]],
+    _field("rules", ("rules", "fix_ci"), "switch", "Fix CI", lambda cfg: cfg["rules"]["fix_ci"],
+           help="When a check fails on your PR.", heading="My PRs"),
     _field("rules", ("rules", "address_feedback"), "switch", "Address feedback",
            lambda cfg: cfg["rules"]["address_feedback"] is not False, help="When a reviewer requests changes."),
     _field("rules", ("rules", "address_feedback", "prompt"), "text", "Address prompt",
            lambda cfg: _rule_option(cfg, "address_feedback", "prompt"), parent=("rules", "address_feedback"),
            help="Typed into a new session by the Address button: {url}, {repo}, {number}, {branch}."),
+    _field("rules", ("rules", "rerequest_review"), "switch", "Re-request review",
+           lambda cfg: cfg["rules"]["rerequest_review"],
+           help="When you've pushed or replied after changes were requested."),
     _field("rules", ("rules", "nudge"), "switch", "Nudge", lambda cfg: cfg["rules"]["nudge"] is not False,
            help="When your PR has waited on reviewers for a while."),
     _field("rules", ("rules", "nudge", "after_hours"), "number", "Nudge after (hours)",
            lambda cfg: _rule_option(cfg, "nudge", "after_hours"), parent=("rules", "nudge")),
+    _field("rules", ("rules", "merge"), "switch", "Merge", lambda cfg: cfg["rules"]["merge"],
+           help="When your PR is approved and green."),
+    _field("rules", ("rules", "review"), "switch", "Review", lambda cfg: cfg["rules"]["review"],
+           help="When your review is requested.", heading="Reviews"),
+    _field("rules", ("rules", "re_review"), "switch", "Re-review", lambda cfg: cfg["rules"]["re_review"],
+           help="When a PR you reviewed is ready for another look."),
 
     *[f for name, step, help, actions in PASS_GROUPS for f in [
         _field("rules", ("rules", "passes", name), "choice", "Agent pass",
@@ -233,7 +238,7 @@ def fields(raw):
         out.append({"section": f["section"], "path": list(f["path"]), "kind": f["kind"], "label": f["label"],
                     "help": f["help"], "choices": f["choices"], "parent": list(f["parent"]) if f["parent"] else None,
                     "group": f["group"], "under": list(f["under"]) if f["under"] else None, "sources": f["sources"],
-                    "value": value, "default": default, "set": is_set})
+                    "heading": f["heading"], "value": value, "default": default, "set": is_set})
     return out
 
 
