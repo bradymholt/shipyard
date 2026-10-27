@@ -166,6 +166,9 @@ FIELDS = [
         _field("rules", ("rules", "passes", name), "segments", "Agent pass",
                lambda cfg, name=name: cfg["rules"]["passes"][name] or "off", choices=PASS_MODES,
                to_raw=lambda v: False if v == "off" else v, help=help, under=("rules", step)),
+        _field("rules", ("rules", "instructions", name), "lines", "Instructions",
+               lambda cfg, name=name: cfg["rules"]["instructions"].get(name, ""), to_raw=lambda v: v.strip(),
+               under=("rules", "passes", name), help="Optional. Added to the agent's prompt for this pass."),
         *[f for action in actions for f in _auto_fields(action, ("rules", "passes", name))],
     ]],
 

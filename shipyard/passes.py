@@ -68,9 +68,10 @@ class SafeDict(dict):
         return ""
 
 
-def render(name, values):
+def render(name, values, instructions=""):
     text = (TEMPLATES / TEMPLATE_FILES[name]).read_text()
-    return text.format_map(SafeDict(values))
+    extra = f"Also follow these instructions from the user:\n{instructions.strip()}\n\n" if instructions.strip() else ""
+    return text.format_map(SafeDict(values, instructions=extra))
 
 
 def feedback_text(snap):

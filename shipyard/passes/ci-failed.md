@@ -10,7 +10,7 @@ End of the failing job log(s):
 
 Find the likely cause. Compare against the change in this branch (`gh pr diff {number}`) where that helps. If the log is long, read it with a sub-agent so only its short result lands here. Decide whether the failure looks caused by this PR or flaky/unrelated (a network error, a timeout in code the PR doesn't touch, a known-flaky test).
 
-Answer with one JSON object and nothing else:
+{instructions}Answer with one JSON object and nothing else:
 {{"summary": "2-3 sentences: what failed and why",
   "proposals": [
     {{"action": "rerun_checks", "confidence": "high|medium|low", "reason": "only if it looks flaky; say why", "payload": {{}}}},
