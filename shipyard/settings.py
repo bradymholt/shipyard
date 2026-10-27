@@ -18,11 +18,9 @@ SECTIONS = [
     {"id": "agent", "title": "Coding agent",
      "help": "The agent whose sessions Shipyard resumes, and that runs its passes."},
     {"id": "rules", "title": "Next steps",
-     "help": "Which next steps show on cards. Turning one off also stops its pass."},
-    {"id": "passes", "title": "Agent passes",
-     "help": "When the agent looks at a PR on its own, and which of its proposals Shipyard acts on for you when "
-             "it's confident enough. \"Wait for Ask\" runs a pass only when you ask in the sidebar. Cards say when "
-             "an automatic action holds back, and offer Undo where they can."},
+     "help": "Which next steps show on cards, the agent pass each one starts, and what Shipyard does on its own "
+             "when a pass is confident enough. \"Wait for Ask\" runs a pass only when you ask in the sidebar. "
+             "Cards say when an automatic action holds back, and offer Undo where they can."},
     {"id": "roots", "title": "Folders to scan", "help": "Where Shipyard looks for your Git clones."},
 ]
 
@@ -33,17 +31,17 @@ AGENT_NAMES = {"claude-code": "Claude Code", "codex": "Codex"}
 AUTO_LABELS = {"rerun_checks": "Automatically re-run flaky checks", "enable_auto_merge": "Automatically turn on auto-merge",
                "approve_rereview": "Automatically approve the re-review", "apply_fix": "Automatically push small CI fixes",
                "post_reply": "Post a reply"}
-AUTO_HELP = {"enable_auto_merge": "The CI pass can propose it too.",
+AUTO_HELP = {"enable_auto_merge": "The Fix CI and Address feedback passes can both propose it.",
              "post_reply": "A reply puts words in front of a colleague under your name."}
-# Actions more than one pass can propose; the page dims an action only when all of them are off.
+# Actions more than one pass can propose; the page shows one under the first of them that's on.
 ACTION_SOURCES = {"enable_auto_merge": ("feedback", "ci_failed")}
-# Each pass, with the automatic actions only its proposals can lead to (AUTO_POLICY in
-# orchestrator.py). A setting shows once, so auto-merge sits under the first of its two.
+# Each pass, the next step that starts it (EVENT_PASSES in rules.py), and the automatic
+# actions only its proposals can lead to (AUTO_POLICY in orchestrator.py).
 PASS_GROUPS = [
-    ("feedback", "Changes requested on your PR", "", ("enable_auto_merge", "post_reply")),
-    ("ci_failed", "CI failed on your PR", "", ("rerun_checks", "apply_fix")),
-    ("pre_review", "Your review is requested", "Pre-reviews stay drafts only you can see; submitting is yours.", ()),
-    ("re_review", "A PR you reviewed changed", "", ("approve_rereview",)),
+    ("ci_failed", "fix_ci", "", ("rerun_checks", "apply_fix")),
+    ("feedback", "address_feedback", "", ("enable_auto_merge", "post_reply")),
+    ("pre_review", "review", "Pre-reviews stay drafts only you can see; submitting is yours.", ()),
+    ("re_review", "re_review", "", ("approve_rereview",)),
 ]
 
 
@@ -95,22 +93,22 @@ def _open_fields(section, placeholder):
 def _auto_fields(name, under):
     """An automatic action, shown under the pass whose proposals it can act on."""
     if name in HARD_LOCKED:
-        return [_field("passes", ("auto", name), "locked", AUTO_LABELS[name], lambda cfg: False, under=under,
+        return [_field("rules", ("auto", name), "locked", AUTO_LABELS[name], lambda cfg: False, under=under,
                        help=AUTO_HELP[name])]
     return [
-        _field("passes", ("auto", name), "switch", AUTO_LABELS[name], lambda cfg: cfg["auto"][name] is not None,
+        _field("rules", ("auto", name), "switch", AUTO_LABELS[name], lambda cfg: cfg["auto"][name] is not None,
                under=under, help=AUTO_HELP.get(name, ""),
                sources=[["rules", "passes", p] for p in ACTION_SOURCES.get(name, (under[-1],))]),
-        _field("passes", ("auto", name, "when"), "choice", "Minimum confidence",
+        _field("rules", ("auto", name, "when"), "choice", "Minimum confidence",
                lambda cfg: _auto(cfg, name)["min_confidence"], choices=CONFIDENCE_LEVELS,
                parent=("auto", name), to_raw=lambda v: f"confidence >= {v}"),
-        _field("passes", ("auto", name, "max_per_pr"), "number", "At most, per PR",
+        _field("rules", ("auto", name, "max_per_pr"), "number", "At most, per PR",
                lambda cfg: _auto(cfg, name)["max_per_pr"], parent=("auto", name)),
-        *([_field("passes", ("auto", name, "max_lines"), "number", "Largest change (lines)",
+        *([_field("rules", ("auto", name, "max_lines"), "number", "Largest change (lines)",
                   lambda cfg: _auto(cfg, name)["max_lines"], parent=("auto", name),
                   help="Holds back when the change touches more lines than this.")]
           if name in ("approve_rereview", "apply_fix") else []),
-        *([_field("passes", ("auto", name, "min_wait_minutes"), "number", "Wait after a push (minutes)",
+        *([_field("rules", ("auto", name, "min_wait_minutes"), "number", "Wait after a push (minutes)",
                   lambda cfg: _auto(cfg, name)["min_wait_minutes"], parent=("auto", name))]
           if name == "approve_rereview" else []),
     ]
@@ -158,10 +156,10 @@ FIELDS = [
     _field("rules", ("rules", "nudge", "after_hours"), "number", "Nudge after (hours)",
            lambda cfg: _rule_option(cfg, "nudge", "after_hours"), parent=("rules", "nudge")),
 
-    *[f for name, label, help, actions in PASS_GROUPS for f in [
-        _field("passes", ("rules", "passes", name), "choice", label,
+    *[f for name, step, help, actions in PASS_GROUPS for f in [
+        _field("rules", ("rules", "passes", name), "choice", "Agent pass",
                lambda cfg, name=name: cfg["rules"]["passes"][name] or "off", choices=PASS_MODES,
-               to_raw=lambda v: False if v == "off" else v, help=help),
+               to_raw=lambda v: False if v == "off" else v, help=help, under=("rules", step)),
         *[f for action in actions for f in _auto_fields(action, ("rules", "passes", name))],
     ]],
 
