@@ -68,8 +68,17 @@ class SafeDict(dict):
         return ""
 
 
+def template(name):
+    return (TEMPLATES / TEMPLATE_FILES[name]).read_text()
+
+
+def shown_template(name):
+    """The template as the agent reads it, placeholders and all, for the settings page."""
+    return template(name).replace("{{", "{").replace("}}", "}")
+
+
 def render(name, values, instructions=""):
-    text = (TEMPLATES / TEMPLATE_FILES[name]).read_text()
+    text = template(name)
     extra = f"Also follow these instructions from the user:\n{instructions.strip()}\n\n" if instructions.strip() else ""
     return text.format_map(SafeDict(values, instructions=extra))
 

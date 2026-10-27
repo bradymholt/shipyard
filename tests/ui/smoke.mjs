@@ -291,6 +291,10 @@ try {
   await instructions.blur();
   await page.waitForSelector('[data-path="rules.instructions.ci_failed"] .set-dot', { state: "detached" });
   check((await fileSets()).length === 0, "a pass's instructions save, and clearing them takes them back out of the file");
+  await page.click('[data-prompt="rules.instructions.ci_failed"] summary');
+  check(/failing job log[\s\S]*Your instructions go here[\s\S]*Answer with one JSON object/.test(
+    await page.locator('[data-prompt="rules.instructions.ci_failed"] pre').textContent()),
+    "Shipyard's prompt shows where a pass's instructions go");
   if (shots) await page.screenshot({ path: `${shots}/passes.png`, fullPage: true });
   await page.click('#set-nav [data-pane="agent"]');
   await page.waitForSelector('[data-path="agent.url"]');

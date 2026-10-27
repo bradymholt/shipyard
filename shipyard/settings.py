@@ -8,6 +8,7 @@ different shape). So the file keeps only what was changed, and a default stays a
 import copy
 import shlex
 
+from . import passes
 from .agents import ADAPTERS
 from .config import (AGENT_DEFAULTS, CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, LAUNCHER_DEFAULTS, read_raw, validate_auto,
                      validate_config, validate_views, write_raw)
@@ -61,15 +62,16 @@ def _rule_option(cfg, name, key):
 
 
 def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None,
-           group=None, under=None, heading=None, sentence=None):
+           group=None, under=None, heading=None, sentence=None, template=None):
     """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading.
     `heading` starts a titled group of settings on the page. `sentence` replaces the help while
     the setting is on, with each {key} an inline control for the child setting of that name.
+    `template` is the prompt a setting adds to, shown on request.
     `under` nests a setting under another on the page without making it part of it in the file."""
     return {"section": section, "path": path, "kind": kind, "label": label, "help": help, "choices": choices,
             "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v),
             "group": group, "under": under, "heading": heading,
-            "sentence": sentence}
+            "sentence": sentence, "template": template}
 
 
 def _open_fields(section, placeholder):
@@ -168,7 +170,8 @@ FIELDS = [
                to_raw=lambda v: False if v == "off" else v, help=help, under=("rules", step)),
         _field("rules", ("rules", "instructions", name), "lines", "Instructions",
                lambda cfg, name=name: cfg["rules"]["instructions"].get(name, ""), to_raw=lambda v: v.strip(),
-               under=("rules", "passes", name), help="Optional. Added to the agent's prompt for this pass."),
+               under=("rules", "passes", name), help="Optional. Added to the agent's prompt for this pass.",
+               template=passes.shown_template(name)),
         *[f for action in actions for f in _auto_fields(action, ("rules", "passes", name))],
     ]],
 
@@ -242,7 +245,7 @@ def fields(raw):
         out.append({"section": f["section"], "path": list(f["path"]), "kind": f["kind"], "label": f["label"],
                     "help": f["help"], "choices": f["choices"], "parent": list(f["parent"]) if f["parent"] else None,
                     "group": f["group"], "under": list(f["under"]) if f["under"] else None,
-                    "heading": f["heading"], "sentence": f["sentence"], "value": value, "default": default, "set": is_set})
+                    "heading": f["heading"], "sentence": f["sentence"], "template": f["template"], "value": value, "default": default, "set": is_set})
     return out
 
 
