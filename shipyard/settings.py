@@ -17,7 +17,7 @@ SECTIONS = [
      "help": "The app or IDE a checkout opens in."},
     {"id": "agent", "title": "Coding agent",
      "help": "The agent whose sessions Shipyard resumes, and that runs its passes."},
-    {"id": "rules", "title": "Workflow",
+    {"id": "rules", "title": "Workflows",
      "help": "Which next steps show on cards, the agent pass each one starts, and what Shipyard does on its own "
              "when a pass is confident enough. \"Wait for Ask\" runs a pass only when you ask in the sidebar. "
              "Cards say when an automatic action holds back, and offer Undo where they can."},
