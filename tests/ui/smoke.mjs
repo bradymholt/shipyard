@@ -118,7 +118,8 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
   check(await page.locator('.card[data-key="o/r#101"] .wt-links a[title="Open on GitHub"]').count() === 1, "a card has an Open on GitHub icon");
-  await page.locator('.card[data-key="o/r#101"] .card-title').click();
+  check((await page.locator('.card[data-key="o/r#101"] .card-title a').getAttribute("href"))?.endsWith("/pull/101"), "a card title links to the PR on GitHub");
+  await page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await page.waitForSelector("#sidebar .next-card");
   const sb = page.locator("#sidebar");
   check(await sb.isVisible(), "clicking a card opens the sidebar");
