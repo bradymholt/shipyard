@@ -51,6 +51,7 @@ let settingsLoaded = false;
 let commandLineRoots = [];
 let foundFolders = [];
 let pane = "views";
+let sub = "";
 let openedFromBoard = false;
 const VIEWS_PANE = { id: "views", title: "Views" };
 
@@ -70,14 +71,14 @@ $("#set-nav").addEventListener("click", (e) => {
   const item = e.target.closest("[data-pane]");
   if (!item) return;
   e.preventDefault();
-  history.replaceState(null, "", `#settings/${item.dataset.pane}`);
+  history.replaceState(null, "", `#settings/${item.dataset.pane}${item.dataset.sub ? `/${item.dataset.sub}` : ""}`);
   route();
 });
 
 addEventListener("hashchange", route);
 
 export function route() {
-  const match = location.hash.match(/^#settings(?:\/([\w-]+))?$/);
+  const match = location.hash.match(/^#settings(?:\/([\w-]+))?(?:\/([\w-]+))?$/);
   document.body.classList.toggle("settings-open", !!match);
   $("#settings-page").classList.toggle("hidden", !match);
   if (!match) {
@@ -86,10 +87,11 @@ export function route() {
     return;
   }
   pane = match[1] || "views";
+  sub = match[2] || "";
   renderViewsList();
   renderSettings();
   if (!settingsLoaded) loadSettings();
-  scrollTo(0, 0);
+  scrollToSub();
   $("#set-nav .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
@@ -99,11 +101,34 @@ async function loadSettings() {
     ({ sections: settingSections, fields: settingFields, commandLineRoots } = await apiGet("api/settings"));
     foundFolders = await folderCandidates();
     renderSettings();
+    scrollToSub();
     $("#set-nav .active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   } catch (err) {
     $("#settings-fields").innerHTML = `<p class="set-error">${esc(err.message)}</p>`;
   }
 }
+
+const slug = (text) => text.toLowerCase().replace(/\W+/g, "-");
+const subsOf = (id) => settingFields.filter((f) => f.section === id && f.heading).map((f) => f.heading);
+
+function scrollToSub() {
+  const heading = sub && document.getElementById(`set-sub-${sub}`);
+  if (heading) heading.scrollIntoView();
+  else scrollTo(0, 0);
+  spySub();
+}
+
+// Marks the heading you're reading in the sidebar: the last one scrolled past, or the last
+// one at all once the page can't scroll further.
+function spySub() {
+  const headings = [...$("#settings-fields").querySelectorAll(".set-heading")];
+  if (!headings.length) return;
+  const bottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
+  const current = bottom ? headings.at(-1) : headings.filter((h) => h.getBoundingClientRect().top <= 120).at(-1) || headings[0];
+  for (const a of $("#set-nav").querySelectorAll(".set-nav-sub")) a.classList.toggle("current", `set-sub-${a.dataset.sub}` === current.id);
+}
+
+addEventListener("scroll", () => { if (!$("#settings-page").classList.contains("hidden")) spySub(); }, { passive: true });
 
 const fieldKey = (f) => f.path.join(".");
 const fieldAt = (key) => settingFields.find((f) => fieldKey(f) === key);
@@ -208,7 +233,7 @@ function sectionRows(section, errors) {
       heading = `<div class="set-group${depth ? ` set-child set-depth${depth}` : ""}">
         <span>Advanced</span> Filled in by your choice above; change one only to override it.</div>`;
     }
-    if (f.heading) heading = `<h3 class="set-heading">${esc(f.heading)}</h3>` + heading;
+    if (f.heading) heading = `<h3 class="set-heading" id="set-sub-${slug(f.heading)}">${esc(f.heading)}</h3>` + heading;
     const row = settingRow(f, depth, errors, kids);
     if (section.cards && !depth) return `${heading}<div class="set-card">${row}${inner ? `<div class="set-card-body">${inner}</div>` : ""}</div>`;
     return heading + row + inner;
@@ -223,7 +248,8 @@ function renderSettings(errors = {}) {
   $("#set-nav").innerHTML = panes.map((p) => {
     const count = p.id === "views" ? 0 : changedIn(p.id);
     return `<a href="#settings/${p.id}" data-pane="${p.id}" class="set-nav-item${p.id === pane ? " active" : ""}"${p.id === pane ? ' aria-current="page"' : ""}>
-      <span>${esc(p.title)}</span>${count ? `<span class="set-nav-count" title="${count} changed from the default">${count}</span>` : ""}</a>`;
+      <span>${esc(p.title)}</span>${count ? `<span class="set-nav-count" title="${count} changed from the default">${count}</span>` : ""}</a>`
+      + subsOf(p.id).map((h) => `<a href="#settings/${p.id}/${slug(h)}" data-pane="${p.id}" data-sub="${slug(h)}" class="set-nav-sub">${esc(h)}</a>`).join("");
   }).join("");
   $("#set-views").classList.toggle("hidden", pane !== "views");
   const section = settingSections.find((s) => s.id === pane);
@@ -240,6 +266,7 @@ function renderSettings(errors = {}) {
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
     ${fixed}${found}${held}${sectionRows(section, errors)}` : "";
   if (focused) document.getElementById(focused)?.focus();
+  spySub();
 }
 
 async function saveField(f, change) {
