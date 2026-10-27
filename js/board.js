@@ -251,7 +251,7 @@ function mergedRepoPrefix(pr) {
 function mergedCard(pr) {
   return `
     <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}">
-      <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><span>${fmtTitle(pr.title)}</span></div>
+      <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
       <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
       ${mergedWorktreeLinks(pr)}
       ${nextRowHtml(pr)}
@@ -357,7 +357,7 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
   return `
     <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
-      <div class="card-title">${fmtTitle(pr.title)}${draft}${labels}</div>
+      <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}${labels}</div>
       <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}</div>
       <div class="card-icons">
         ${ciHtml(pr)}
