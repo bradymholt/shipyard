@@ -195,7 +195,6 @@ def main():
                                              "author": {"login": "jm"}, "commit": {"oid": "h98"}}]})
     gh.put(lookups)
     comp.poll_once()
-    Handler.roots = [str(tmp / "dev")]
     Handler.config = comp.config
     Handler.session_token = "demo-token"
     Handler.orchestrator = comp

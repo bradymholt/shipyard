@@ -24,7 +24,7 @@ cd shipyard
 python3 shipyard.py ~/dev
 ```
 
-Open http://localhost:4321 and add a repository, organization, or username to your views. See [Running Shipyard](#running-shipyard) for configuration and running at login.
+Open http://localhost:4321: the board shows every PR you're involved in, and views can narrow it to a repository, organization, or username. `~/dev` is the folder that holds your Git clones, for opening checkouts and starting work; you can leave it off and add folders later in Settings. See [Running Shipyard](#running-shipyard) for configuration and running at login.
 
 ## Screenshots
 
@@ -57,7 +57,7 @@ Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` an
 
 ## Running Shipyard
 
-Shipyard runs `shipyard.py`, the server process that serves the dashboard, watches your PRs with your coding agent, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git, Python 3, and a signed-in [GitHub CLI](#github-access); start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port.
+Shipyard runs `shipyard.py`, the server process that serves the dashboard, watches your PRs with your coding agent, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git, Python 3, and a signed-in [GitHub CLI](#github-access); start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port. Without folders, Shipyard still runs and uses the ones set in Settings (Folders to scan), which apply without a restart.
 
 On macOS, you can keep it running in the background instead. Copy the example config, set `roots` to your folders, and install it as a login agent:
 

@@ -148,7 +148,7 @@ FIELDS = [
 
     _field("roots", ("roots",), "lines", "Folders", lambda cfg: "\n".join(cfg["roots"]),
            to_raw=lambda v: [line.strip() for line in v.splitlines() if line.strip()],
-           help="One per line. Applies after Shipyard restarts. Folders passed to shipyard.py take their place."),
+           help="One per line, each a folder that holds your Git clones. Takes effect right away."),
 ]
 BY_PATH = {f["path"]: f for f in FIELDS}
 SWITCHED = {f["parent"] for f in FIELDS if f["parent"]}  # settings that are false, true, or an object of options
