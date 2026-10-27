@@ -257,6 +257,14 @@ try {
     order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 1 &&
     await page.locator('#set-nav [data-pane="auto"]').count() === 0, "each automatic action sits under the pass it acts on");
   if (shots) await page.screenshot({ path: `${shots}/passes.png`, fullPage: true });
+  await page.click('#set-nav [data-pane="agent"]');
+  await page.waitForSelector('[data-path="agent.url"]');
+  check(await page.locator('[data-path="agent.command"]').count() === 0, "opening by URL hides the command");
+  await page.selectOption('[data-path="agent.mode"] select', "command");
+  await page.waitForSelector('[data-path="agent.command"]');
+  check(await page.locator('[data-path="agent.url"]').count() === 0, "running a command hides the URL");
+  await page.locator('[data-path="agent.mode"] [data-reset]').click();
+  await page.waitForSelector('[data-path="agent.url"]');
   await page.click("#settings-back");
   await page.waitForSelector(".list", { state: "visible" });
   check((await page.evaluate(() => location.hash)) === "", "Back to board returns to the board");
