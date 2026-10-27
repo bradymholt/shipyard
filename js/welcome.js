@@ -177,5 +177,5 @@ $("#welcome-dialog").addEventListener("click", async (e) => {
   }
   if (action === "on") await turnOnAutomation();
   if (action === "on" || action === "done" || action === "settings") finish();
-  if (action === "settings") location.hash = "#settings/passes";
+  if (action === "settings") location.hash = "#settings/rules";
 });

@@ -116,43 +116,36 @@ function shownValue(f, value) {
   return f.kind === "lines" ? value.split("\n").join(", ") : String(value);
 }
 
-function settingControl(f, id, off) {
-  const dis = off ? " disabled" : "";
+function settingControl(f, id) {
   const mono = /url|command|prompt|roots/.test(fieldKey(f)) ? " set-mono" : "";
   switch (f.kind) {
     case "switch":
-      return `<input type="checkbox" id="${id}" class="set-switch"${f.value ? " checked" : ""}${dis}>`;
+      return `<input type="checkbox" id="${id}" class="set-switch"${f.value ? " checked" : ""}>`;
     case "locked":
       return `<span class="set-locked">Always manual</span>`;
     case "choice":
-      return `<select id="${id}"${dis}>${f.choices.map(([v, label]) =>
+      return `<select id="${id}">${f.choices.map(([v, label]) =>
         `<option value="${esc(v)}"${v === f.value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
     case "number":
-      return `<input type="number" id="${id}" min="0" step="any" value="${esc(f.value)}"${dis}>`;
+      return `<input type="number" id="${id}" min="0" step="any" value="${esc(f.value)}">`;
     case "lines":
-      return `<textarea id="${id}" rows="3" class="${mono.trim()}"${dis}>${esc(f.value)}</textarea>`;
+      return `<textarea id="${id}" rows="3" class="${mono.trim()}">${esc(f.value)}</textarea>`;
     default:
-      return `<input type="text" id="${id}" class="${mono.trim()}" value="${esc(f.value)}" spellcheck="false"${dis}>`;
+      return `<input type="text" id="${id}" class="${mono.trim()}" value="${esc(f.value)}" spellcheck="false">`;
   }
 }
 
-function settingRow(f, error) {
+function settingRow(f, depth, error) {
   const key = fieldKey(f);
   const id = `set-${key.replace(/[^\w]/g, "-")}`;
-  const parent = f.parent && fieldAt(f.parent.join("."));
-  // `under` nests a setting under another (an automatic action under its pass) without
-  // being part of it; with that pass Off, the action has nothing to act on.
-  const passOff = (field) => !!field?.sources && field.sources.every((p) => fieldAt(p.join("."))?.value === "off");
-  const off = (!!parent && !parent.value) || passOff(f) || passOff(parent);
-  const depth = f.under ? 1 : parent ? (parent.under ? 2 : 1) : 0;
   const inline = f.kind === "switch" || f.kind === "locked";
-  const control = settingControl(f, id, off);
+  const control = settingControl(f, id);
   const changed = f.set && !same(f.value, f.default);
   const tag = f.kind === "locked" ? "" : `<span class="set-tag${changed ? " changed" : ""}">${changed ? "Changed" : "Default"}</span>`;
   const note = !f.set ? "" : (changed ? `<span class="set-default">Default: ${esc(shownValue(f, f.default))}</span>`
     : `<span class="set-default">Set to the default in the file</span>`)
     + `<button type="button" class="set-reset" data-reset="${esc(key)}">Reset</button>`;
-  return `<div class="set-row${depth ? " set-child" : ""}${depth > 1 ? " set-child2" : ""}${off ? " set-off" : ""}" data-path="${esc(key)}">
+  return `<div class="set-row${depth ? ` set-child set-depth${depth}` : ""}" data-path="${esc(key)}">
     <div class="set-head"><label for="${id}">${esc(f.label)}</label>${tag}${inline ? control : ""}</div>
     ${inline ? "" : control}
     ${f.help || note ? `<div class="set-note">${f.help ? `<span>${esc(f.help)}</span>` : ""}${note}</div>` : ""}
@@ -168,19 +161,32 @@ const unusedByMode = (f) => {
   return !!mode && (key === "url" || key === "command") && mode.value !== key;
 };
 
+const isOn = (f) => f.value !== false && f.value !== "off";
+const shown = (f) => { const home = homeOf(f); return !home || (isOn(home) && shown(home)); };
+
+// A setting sits under its parent or the setting it's `under`, and shows only while that one
+// is on. An action more than one pass can propose sits under the first of them that's on.
+function homeOf(f) {
+  const source = f.sources?.map((p) => fieldAt(p.join("."))).find((p) => p && isOn(p) && shown(p));
+  const path = source?.path || f.under || f.parent;
+  return path ? fieldAt(path.join(".")) : null;
+}
+
 // Settings a choice above fills in (an app, an agent) sit under one Advanced heading.
 function sectionRows(id, errors) {
+  const fields = settingFields.filter((f) => f.section === id && !unusedByMode(f));
+  const under = (home) => fields.filter((f) => homeOf(f) === home);
   let headed = false;
-  return settingFields.filter((f) => f.section === id && !unusedByMode(f)).map((f) => {
+  const rows = (home, depth) => under(home).map((f) => {
     let heading = "";
     if (f.group === "advanced" && !headed) {
       headed = true;
-      const parent = f.parent && fieldAt(f.parent.join("."));
-      heading = `<div class="set-group${parent ? " set-child" : ""}${parent && !parent.value ? " set-off" : ""}">
+      heading = `<div class="set-group${depth ? ` set-child set-depth${depth}` : ""}">
         <span>Advanced</span> Filled in by your choice above; change one only to override it.</div>`;
     }
-    return heading + settingRow(f, errors[fieldKey(f)]);
+    return heading + settingRow(f, depth, errors[fieldKey(f)]) + (isOn(f) ? rows(f, depth + 1) : "");
   }).join("");
+  return rows(null, 0);
 }
 
 function renderSettings(errors = {}) {
@@ -201,7 +207,7 @@ function renderSettings(errors = {}) {
     ? foundFolders.map((c) => `<div class="set-found"><span>Found your code in <code>${esc(c.path)}</code>
         (${c.clones} clone${c.clones === 1 ? "" : "s"}${c.matching ? `, ${c.matching} from your PRs` : ""})</span>
         <button type="button" class="primary" data-use-folder="${esc(c.path)}">Use</button></div>`).join("") : "";
-  const held = automationHeld() && pane === "passes"
+  const held = automationHeld() && pane === "rules"
     ? `<div class="set-held">Held for now: until you turn it on, passes wait for Ask and nothing is pressed for you.
         <button type="button" class="primary" data-automation="on">Turn it on</button></div>` : "";
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>

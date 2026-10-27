@@ -250,12 +250,17 @@ try {
   await page.locator('[data-path="rules.nudge.after_hours"] [data-reset]').click();
   await page.waitForSelector('[data-path="rules.nudge.after_hours"] .set-tag:not(.changed)');
   check((await fileSets()).length === 0, "Reset takes the setting back out of the file");
-  await page.click('#set-nav [data-pane="passes"]');
-  await page.waitForSelector('[data-path="auto.rerun_checks"]');
   const order = await page.locator("#settings-fields .set-row").evaluateAll((rows) => rows.map((r) => r.dataset.path));
-  check(order.indexOf("auto.rerun_checks") === order.indexOf("rules.passes.ci_failed") + 1 &&
-    order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 1 &&
-    await page.locator('#set-nav [data-pane="auto"]').count() === 0, "each automatic action sits under the pass it acts on");
+  check(order.indexOf("rules.passes.ci_failed") === order.indexOf("rules.fix_ci") + 1 &&
+    order.indexOf("auto.rerun_checks") === order.indexOf("rules.passes.ci_failed") + 1 &&
+    order.indexOf("auto.approve_rereview") === order.indexOf("rules.passes.re_review") + 1,
+    "each pass sits under its next step, and each automatic action under its pass");
+  await page.locator('[data-path="rules.fix_ci"] input').uncheck();
+  await page.waitForSelector('[data-path="rules.fix_ci"] .set-tag.changed');
+  check(await page.locator('[data-path="rules.passes.ci_failed"], [data-path="auto.rerun_checks"]').count() === 0,
+    "turning a next step off hides its pass and actions");
+  await page.locator('[data-path="rules.fix_ci"] [data-reset]').click();
+  await page.waitForSelector('[data-path="auto.rerun_checks"]');
   if (shots) await page.screenshot({ path: `${shots}/passes.png`, fullPage: true });
   await page.click('#set-nav [data-pane="agent"]');
   await page.waitForSelector('[data-path="agent.url"]');
