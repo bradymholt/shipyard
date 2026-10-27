@@ -246,10 +246,28 @@ dialog#welcome-dialog::backdrop { background: rgba(18,38,58,.5); }
 .set-depth2 { margin-left: 1.625rem; }
 .set-depth3 { margin-left: 2.875rem; }
 .set-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; font-weight: 600; color: var(--fg); }
-.set-tag { font: 600 0.625rem var(--sans); letter-spacing: 0.04em; text-transform: uppercase; padding: 0.0625rem 0.4375rem; border-radius: 999px; background: var(--bg-inset); color: var(--fg-faint); }
-.set-tag.changed { background: color-mix(in srgb, var(--gold) 16%, var(--surface)); color: var(--gold-text); }
-.set-head .set-switch, .set-head .set-locked { margin-left: auto; }
-.set-switch { width: 1rem; height: 1rem; accent-color: var(--teal); }
+.set-dot { width: 0.4375rem; height: 0.4375rem; border-radius: 50%; background: var(--gold); flex: none; }
+.set-head .set-switch, .set-head .set-locked, .set-head .set-seg { margin-left: auto; }
+.set-switch { appearance: none; position: relative; flex: none; width: 1.875rem; height: 1.0625rem; margin: 0; border-radius: 999px; background: var(--muted-bar); cursor: pointer; transition: background 0.15s; }
+.set-switch::before { content: ""; position: absolute; top: 0.125rem; left: 0.125rem; width: 0.8125rem; height: 0.8125rem; border-radius: 50%; background: var(--surface); transition: transform 0.15s; }
+.set-switch:checked { background: var(--teal); }
+.set-switch:checked::before { transform: translateX(0.8125rem); }
+.set-switch:focus-visible { outline: 2px solid color-mix(in srgb, var(--teal) 40%, transparent); outline-offset: 2px; }
+.set-seg { display: inline-flex; flex: none; border: 1px solid var(--border); border-radius: 0.5rem; overflow: hidden; }
+.set-seg button { border: none; border-radius: 0; padding: 0.25rem 0.75rem; font: 500 0.75rem var(--sans); background: var(--surface); color: var(--fg-muted); }
+.set-seg button + button { border-left: 1px solid var(--border); }
+.set-seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--teal) 12%, var(--surface)); color: var(--teal); font-weight: 600; }
+.set-card { margin: 0.5rem 0; border: 1px solid var(--border); border-radius: 0.5rem; }
+.set-card > .set-row { padding: 0.625rem 0.875rem; }
+.set-card-body { padding: 0.25rem 0.875rem 0.5rem; border-top: 1px solid var(--border-soft); background: var(--bg-subtle); border-radius: 0 0 0.5rem 0.5rem; }
+.set-card-body .set-child { margin-left: 0; padding-left: 0; border-left: none; }
+.set-card-body .set-depth2 { margin-left: 0.25rem; padding-left: 0.75rem; border-left: 2px solid var(--border-soft); }
+.set-card-body .set-depth3 { margin-left: 1rem; padding-left: 0.75rem; border-left: 2px solid var(--border-soft); }
+.set-note .set-inline .set-mini { padding: 0.0625rem 0.375rem; font-size: 0.6875rem; border-radius: 0.3125rem; vertical-align: baseline; }
+.set-row select { appearance: none; -webkit-appearance: none; background-image: var(--caret); background-repeat: no-repeat; background-position: right 0.5rem center; padding-right: 1.75rem; }
+.set-note .set-inline select.set-mini { padding-right: 1.25rem; background-position: right 0.25rem center; background-size: 0.875rem; }
+.set-note .set-inline input.set-mini { width: 3.25rem; padding: 0.0625rem 0.25rem; text-align: center; }
+.set-inline.changed .set-mini { border-color: var(--gold); }
 .set-locked { font-size: 0.75rem; font-weight: 500; color: var(--fg-faint); }
 .set-row > input, .set-row > select, .set-row > textarea { display: block; width: 100%; margin-top: 0.3125rem; box-sizing: border-box; }
 .set-row input[type="number"], .set-row textarea {

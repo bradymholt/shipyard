@@ -17,15 +17,15 @@ SECTIONS = [
      "help": "The app or IDE a checkout opens in."},
     {"id": "agent", "title": "Coding agent",
      "help": "The agent whose sessions Shipyard resumes, and that runs its passes."},
-    {"id": "rules", "title": "Workflows",
+    {"id": "rules", "title": "Workflows", "cards": True,
      "help": "Which next steps show on cards, the agent pass each one starts, and what Shipyard does on its own "
-             "when a pass is confident enough. \"Wait for Ask\" runs a pass only when you ask in the sidebar. "
+             "when a pass is confident enough. Auto runs a pass on its own; Ask waits until you ask in the sidebar. "
              "Cards say when an automatic action holds back, and offer Undo where they can."},
     {"id": "roots", "title": "Folders to scan", "help": "Where Shipyard looks for your Git clones."},
 ]
 
 OPEN_MODES = [["url", "Open a URL"], ["command", "Run a command"]]
-PASS_MODES = [["auto", "Run on its own"], ["ask", "Wait for Ask"], ["off", "Off"]]
+PASS_MODES = [["auto", "Auto"], ["ask", "Ask"], ["off", "Off"]]
 CONFIDENCE_LEVELS = [["high", "High"], ["medium", "Medium"], ["low", "Low"]]
 AGENT_NAMES = {"claude-code": "Claude Code", "codex": "Codex"}
 AUTO_LABELS = {"rerun_checks": "Automatically re-run flaky checks", "enable_auto_merge": "Automatically turn on auto-merge",
@@ -64,14 +64,16 @@ def _rule_option(cfg, name, key):
 
 
 def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None,
-           group=None, under=None, sources=None, heading=None):
+           group=None, under=None, sources=None, heading=None, sentence=None):
     """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading.
-    `heading` starts a titled group of settings on the page.
+    `heading` starts a titled group of settings on the page. `sentence` replaces the help while
+    the setting is on, with each {key} an inline control for the child setting of that name.
     `under` nests a setting under another on the page without making it part of it in the file;
     `sources` lists the passes an automatic action can come from."""
     return {"section": section, "path": path, "kind": kind, "label": label, "help": help, "choices": choices,
             "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v),
-            "group": group, "under": under, "sources": sources, "heading": heading}
+            "group": group, "under": under, "sources": sources, "heading": heading,
+            "sentence": sentence}
 
 
 def _open_fields(section, placeholder):
@@ -96,9 +98,13 @@ def _auto_fields(name, under):
     if name in HARD_LOCKED:
         return [_field("rules", ("auto", name), "locked", AUTO_LABELS[name], lambda cfg: False, under=under,
                        help=AUTO_HELP[name])]
+    sentence = ("At {when} confidence or above, at most {max_per_pr} per PR"
+                + (", up to {max_lines} changed lines" if name in ("approve_rereview", "apply_fix") else "")
+                + (", {min_wait_minutes} minutes after a push" if name == "approve_rereview" else "") + ".")
     return [
         _field("rules", ("auto", name), "switch", AUTO_LABELS[name], lambda cfg: cfg["auto"][name] is not None,
                under=under, help=AUTO_HELP.get(name, ""),
+               sentence=" ".join(filter(None, (sentence, AUTO_HELP.get(name)))),
                sources=[["rules", "passes", p] for p in ACTION_SOURCES.get(name, (under[-1],))]),
         _field("rules", ("auto", name, "when"), "choice", "Minimum confidence",
                lambda cfg: _auto(cfg, name)["min_confidence"], choices=CONFIDENCE_LEVELS,
@@ -106,8 +112,7 @@ def _auto_fields(name, under):
         _field("rules", ("auto", name, "max_per_pr"), "number", "At most, per PR",
                lambda cfg: _auto(cfg, name)["max_per_pr"], parent=("auto", name)),
         *([_field("rules", ("auto", name, "max_lines"), "number", "Largest change (lines)",
-                  lambda cfg: _auto(cfg, name)["max_lines"], parent=("auto", name),
-                  help="Holds back when the change touches more lines than this.")]
+                  lambda cfg: _auto(cfg, name)["max_lines"], parent=("auto", name))]
           if name in ("approve_rereview", "apply_fix") else []),
         *([_field("rules", ("auto", name, "min_wait_minutes"), "number", "Wait after a push (minutes)",
                   lambda cfg: _auto(cfg, name)["min_wait_minutes"], parent=("auto", name))]
@@ -151,7 +156,8 @@ FIELDS = [
            lambda cfg: cfg["rules"]["rerequest_review"],
            help="When you've pushed or replied after changes were requested."),
     _field("rules", ("rules", "nudge"), "switch", "Nudge", lambda cfg: cfg["rules"]["nudge"] is not False,
-           help="When your PR has waited on reviewers for a while."),
+           help="When your PR has waited on reviewers for a while.",
+           sentence="When your PR has waited on reviewers for {after_hours} hours."),
     _field("rules", ("rules", "nudge", "after_hours"), "number", "Nudge after (hours)",
            lambda cfg: _rule_option(cfg, "nudge", "after_hours"), parent=("rules", "nudge")),
     _field("rules", ("rules", "merge"), "switch", "Merge", lambda cfg: cfg["rules"]["merge"],
@@ -162,7 +168,7 @@ FIELDS = [
            help="When a PR you reviewed is ready for another look."),
 
     *[f for name, step, help, actions in PASS_GROUPS for f in [
-        _field("rules", ("rules", "passes", name), "choice", "Agent pass",
+        _field("rules", ("rules", "passes", name), "segments", "Agent pass",
                lambda cfg, name=name: cfg["rules"]["passes"][name] or "off", choices=PASS_MODES,
                to_raw=lambda v: False if v == "off" else v, help=help, under=("rules", step)),
         *[f for action in actions for f in _auto_fields(action, ("rules", "passes", name))],
@@ -238,7 +244,7 @@ def fields(raw):
         out.append({"section": f["section"], "path": list(f["path"]), "kind": f["kind"], "label": f["label"],
                     "help": f["help"], "choices": f["choices"], "parent": list(f["parent"]) if f["parent"] else None,
                     "group": f["group"], "under": list(f["under"]) if f["under"] else None, "sources": f["sources"],
-                    "heading": f["heading"], "value": value, "default": default, "set": is_set})
+                    "heading": f["heading"], "sentence": f["sentence"], "value": value, "default": default, "set": is_set})
     return out
 
 
