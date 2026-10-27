@@ -20,10 +20,9 @@ SECTIONS = [
     {"id": "rules", "title": "Next steps",
      "help": "Which next steps show on cards. Turning one off also stops its pass."},
     {"id": "passes", "title": "Agent passes",
-     "help": "When the agent looks at a PR on its own. \"Wait for Ask\" runs it only when you ask in the sidebar."},
-    {"id": "auto", "title": "Automatic actions",
-     "help": "Shipyard presses these buttons for you when the agent's proposal is at least this confident. "
-             "Cards say when an action holds back, and offer Undo where they can."},
+     "help": "When the agent looks at a PR on its own, and which of its proposals Shipyard acts on for you when "
+             "it's confident enough. \"Wait for Ask\" runs a pass only when you ask in the sidebar. Cards say when "
+             "an automatic action holds back, and offer Undo where they can."},
     {"id": "roots", "title": "Folders to scan", "help": "Where Shipyard looks for your Git clones."},
 ]
 
@@ -31,9 +30,21 @@ OPEN_MODES = [["url", "Open a URL"], ["command", "Run a command"]]
 PASS_MODES = [["auto", "Run on its own"], ["ask", "Wait for Ask"], ["off", "Off"]]
 CONFIDENCE_LEVELS = [["high", "High"], ["medium", "Medium"], ["low", "Low"]]
 AGENT_NAMES = {"claude-code": "Claude Code", "codex": "Codex"}
-AUTO_LABELS = {"rerun_checks": "Re-run flaky checks", "enable_auto_merge": "Turn on auto-merge",
-               "approve_rereview": "Approve a re-review", "apply_fix": "Apply and push a CI fix",
+AUTO_LABELS = {"rerun_checks": "Automatically re-run flaky checks", "enable_auto_merge": "Automatically turn on auto-merge",
+               "approve_rereview": "Automatically approve the re-review", "apply_fix": "Automatically push small CI fixes",
                "post_reply": "Post a reply"}
+AUTO_HELP = {"enable_auto_merge": "The CI pass can propose it too.",
+             "post_reply": "A reply puts words in front of a colleague under your name."}
+# Actions more than one pass can propose; the page dims an action only when all of them are off.
+ACTION_SOURCES = {"enable_auto_merge": ("feedback", "ci_failed")}
+# Each pass, with the automatic actions only its proposals can lead to (AUTO_POLICY in
+# orchestrator.py). A setting shows once, so auto-merge sits under the first of its two.
+PASS_GROUPS = [
+    ("feedback", "Changes requested on your PR", "", ("enable_auto_merge", "post_reply")),
+    ("ci_failed", "CI failed on your PR", "", ("rerun_checks", "apply_fix")),
+    ("pre_review", "Your review is requested", "Pre-reviews stay drafts only you can see; submitting is yours.", ()),
+    ("re_review", "A PR you reviewed changed", "", ("approve_rereview",)),
+]
 
 
 def _command_text(args):
@@ -55,11 +66,13 @@ def _rule_option(cfg, name, key):
 
 
 def _field(section, path, kind, label, get, help="", choices=None, parent=None, raw_key=None, to_raw=None,
-           group=None):
-    """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading."""
+           group=None, under=None, sources=None):
+    """`group` "advanced" marks a setting the choice above it fills in, shown under its own heading.
+    `under` nests a setting under another on the page without making it part of it in the file;
+    `sources` lists the passes an automatic action can come from."""
     return {"section": section, "path": path, "kind": kind, "label": label, "help": help, "choices": choices,
             "parent": parent, "raw_key": raw_key or path[-1], "get": get, "to_raw": to_raw or (lambda v: v),
-            "group": group}
+            "group": group, "under": under, "sources": sources}
 
 
 def _open_fields(section, placeholder):
@@ -76,6 +89,30 @@ def _open_fields(section, placeholder):
         _field(section, root + ("command",), "command", "Command", lambda cfg: _command_text(settings(cfg)["command"]),
                parent=parent, to_raw=shlex.split, group="advanced",
                help=f"Used when running a command. Must include {placeholder}."),
+    ]
+
+
+def _auto_fields(name, under):
+    """An automatic action, shown under the pass whose proposals it can act on."""
+    if name in HARD_LOCKED:
+        return [_field("passes", ("auto", name), "locked", AUTO_LABELS[name], lambda cfg: False, under=under,
+                       help=AUTO_HELP[name])]
+    return [
+        _field("passes", ("auto", name), "switch", AUTO_LABELS[name], lambda cfg: cfg["auto"][name] is not None,
+               under=under, help=AUTO_HELP.get(name, ""),
+               sources=[["rules", "passes", p] for p in ACTION_SOURCES.get(name, (under[-1],))]),
+        _field("passes", ("auto", name, "when"), "choice", "Minimum confidence",
+               lambda cfg: _auto(cfg, name)["min_confidence"], choices=CONFIDENCE_LEVELS,
+               parent=("auto", name), to_raw=lambda v: f"confidence >= {v}"),
+        _field("passes", ("auto", name, "max_per_pr"), "number", "At most, per PR",
+               lambda cfg: _auto(cfg, name)["max_per_pr"], parent=("auto", name)),
+        *([_field("passes", ("auto", name, "max_lines"), "number", "Largest change (lines)",
+                  lambda cfg: _auto(cfg, name)["max_lines"], parent=("auto", name),
+                  help="Holds back when the change touches more lines than this.")]
+          if name in ("approve_rereview", "apply_fix") else []),
+        *([_field("passes", ("auto", name, "min_wait_minutes"), "number", "Wait after a push (minutes)",
+                  lambda cfg: _auto(cfg, name)["min_wait_minutes"], parent=("auto", name))]
+          if name == "approve_rereview" else []),
     ]
 
 
@@ -121,30 +158,12 @@ FIELDS = [
     _field("rules", ("rules", "nudge", "after_hours"), "number", "Nudge after (hours)",
            lambda cfg: _rule_option(cfg, "nudge", "after_hours"), parent=("rules", "nudge")),
 
-    *[_field("passes", ("rules", "passes", name), "choice", label,
-             lambda cfg, name=name: cfg["rules"]["passes"][name] or "off", choices=PASS_MODES,
-             to_raw=lambda v: False if v == "off" else v)
-      for name, label in [("feedback", "Changes requested on your PR"), ("ci_failed", "CI failed on your PR"),
-                          ("pre_review", "Your review is requested"), ("re_review", "A PR you reviewed changed")]],
-
-    *[f for name in ("rerun_checks", "enable_auto_merge", "approve_rereview", "apply_fix") for f in [
-        _field("auto", ("auto", name), "switch", AUTO_LABELS[name], lambda cfg, name=name: cfg["auto"][name] is not None),
-        _field("auto", ("auto", name, "when"), "choice", "Minimum confidence",
-               lambda cfg, name=name: _auto(cfg, name)["min_confidence"], choices=CONFIDENCE_LEVELS,
-               parent=("auto", name), to_raw=lambda v: f"confidence >= {v}"),
-        _field("auto", ("auto", name, "max_per_pr"), "number", "At most, per PR",
-               lambda cfg, name=name: _auto(cfg, name)["max_per_pr"], parent=("auto", name)),
-        *([_field("auto", ("auto", name, "max_lines"), "number", "Largest change (lines)",
-                  lambda cfg, name=name: _auto(cfg, name)["max_lines"], parent=("auto", name),
-                  help="Holds back when the change touches more lines than this.")]
-          if name in ("approve_rereview", "apply_fix") else []),
-        *([_field("auto", ("auto", name, "min_wait_minutes"), "number", "Wait after a push (minutes)",
-                  lambda cfg, name=name: _auto(cfg, name)["min_wait_minutes"], parent=("auto", name))]
-          if name == "approve_rereview" else []),
+    *[f for name, label, help, actions in PASS_GROUPS for f in [
+        _field("passes", ("rules", "passes", name), "choice", label,
+               lambda cfg, name=name: cfg["rules"]["passes"][name] or "off", choices=PASS_MODES,
+               to_raw=lambda v: False if v == "off" else v, help=help),
+        *[f for action in actions for f in _auto_fields(action, ("rules", "passes", name))],
     ]],
-    *[_field("auto", ("auto", name), "locked", AUTO_LABELS[name], lambda cfg: False,
-             help="It puts words in front of a colleague under your name.")
-      for name in sorted(HARD_LOCKED)],
 
     _field("roots", ("roots",), "lines", "Folders", lambda cfg: "\n".join(cfg["roots"]),
            to_raw=lambda v: [line.strip() for line in v.splitlines() if line.strip()],
@@ -215,7 +234,8 @@ def fields(raw):
             is_set = value != default  # options alone don't change whether it's on
         out.append({"section": f["section"], "path": list(f["path"]), "kind": f["kind"], "label": f["label"],
                     "help": f["help"], "choices": f["choices"], "parent": list(f["parent"]) if f["parent"] else None,
-                    "group": f["group"], "value": value, "default": default, "set": is_set})
+                    "group": f["group"], "under": list(f["under"]) if f["under"] else None, "sources": f["sources"],
+                    "value": value, "default": default, "set": is_set})
     return out
 
 

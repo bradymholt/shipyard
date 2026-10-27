@@ -140,7 +140,11 @@ function settingRow(f, error) {
   const key = fieldKey(f);
   const id = `set-${key.replace(/[^\w]/g, "-")}`;
   const parent = f.parent && fieldAt(f.parent.join("."));
-  const off = !!parent && !parent.value;
+  // `under` nests a setting under another (an automatic action under its pass) without
+  // being part of it; with that pass Off, the action has nothing to act on.
+  const passOff = (field) => !!field?.sources && field.sources.every((p) => fieldAt(p.join("."))?.value === "off");
+  const off = (!!parent && !parent.value) || passOff(f) || passOff(parent);
+  const depth = f.under ? 1 : parent ? (parent.under ? 2 : 1) : 0;
   const inline = f.kind === "switch" || f.kind === "locked";
   const control = settingControl(f, id, off);
   const changed = f.set && !same(f.value, f.default);
@@ -148,7 +152,7 @@ function settingRow(f, error) {
   const note = !f.set ? "" : (changed ? `<span class="set-default">Default: ${esc(shownValue(f, f.default))}</span>`
     : `<span class="set-default">Set to the default in the file</span>`)
     + `<button type="button" class="set-reset" data-reset="${esc(key)}">Reset</button>`;
-  return `<div class="set-row${parent ? " set-child" : ""}${off ? " set-off" : ""}" data-path="${esc(key)}">
+  return `<div class="set-row${depth ? " set-child" : ""}${depth > 1 ? " set-child2" : ""}${off ? " set-off" : ""}" data-path="${esc(key)}">
     <div class="set-head"><label for="${id}">${esc(f.label)}</label>${tag}${inline ? control : ""}</div>
     ${inline ? "" : control}
     ${f.help || note ? `<div class="set-note">${f.help ? `<span>${esc(f.help)}</span>` : ""}${note}</div>` : ""}
@@ -191,7 +195,7 @@ function renderSettings(errors = {}) {
     ? foundFolders.map((c) => `<div class="set-found"><span>Found your code in <code>${esc(c.path)}</code>
         (${c.clones} clone${c.clones === 1 ? "" : "s"}${c.matching ? `, ${c.matching} from your PRs` : ""})</span>
         <button type="button" class="primary" data-use-folder="${esc(c.path)}">Use</button></div>`).join("") : "";
-  const held = automationHeld() && (pane === "passes" || pane === "auto")
+  const held = automationHeld() && pane === "passes"
     ? `<div class="set-held">Held for now: until you turn it on, passes wait for Ask and nothing is pressed for you.
         <button type="button" class="primary" data-automation="on">Turn it on</button></div>` : "";
   $("#settings-fields").innerHTML = section ? `<h2>${esc(section.title)}</h2><p class="set-intro">${esc(section.help)}</p>
