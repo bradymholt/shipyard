@@ -196,7 +196,8 @@ function homeOf(f) {
 // section with `cards` shows each top-level setting as a card holding what's under it.
 function sectionRows(section, errors) {
   const fields = settingFields.filter((f) => f.section === section.id && !unusedByMode(f));
-  const under = (home) => fields.filter((f) => homeOf(f) === home);
+  // A step's agent pass comes before the step's own options.
+  const under = (home) => fields.filter((f) => homeOf(f) === home).sort((a, b) => !!b.under - !!a.under);
   let headed = false;
   const rows = (home, depth, skip = []) => under(home).filter((f) => !skip.includes(f)).map((f) => {
     const kids = inlineKids(f, fields);

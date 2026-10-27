@@ -144,7 +144,7 @@ FIELDS = [
            help="When a check fails on your PR.", heading="My PRs"),
     _field("rules", ("rules", "address_feedback"), "switch", "Address feedback",
            lambda cfg: cfg["rules"]["address_feedback"] is not False, help="When a reviewer requests changes."),
-    _field("rules", ("rules", "address_feedback", "prompt"), "text", "Address prompt",
+    _field("rules", ("rules", "address_feedback", "prompt"), "text", "Address button prompt",
            lambda cfg: _rule_option(cfg, "address_feedback", "prompt"), parent=("rules", "address_feedback"),
            help="Typed into a new session by the Address button: {url}, {repo}, {number}, {branch}."),
     _field("rules", ("rules", "rerequest_review"), "switch", "Re-request review",
