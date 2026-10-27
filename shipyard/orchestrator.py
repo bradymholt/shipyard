@@ -94,8 +94,12 @@ class Orchestrator:
         self.db = State(db_path)
         # A new install doesn't act on its own until you say so: passes wait for Ask and
         # nothing is pressed for you. An install that has polled before keeps going.
-        if self.db.automation() is None and (not first_run_hold or self.db.has_history()):
-            self.db.set_automation("on")
+        # Decided once, at the first start: a held install that has since polled stays held.
+        existing = not first_run_hold or self.db.has_history()
+        if self.db.automation() is None:
+            self.db.set_automation("on" if existing else "held")
+        if self.db.welcomed() is None:
+            self.db.set_welcomed(existing)
         self.github = github or GitHub()
         self.poller = Poller(self.github)
         self.poll_seconds = poll_seconds
@@ -183,6 +187,11 @@ class Orchestrator:
 
     def held(self):
         return self.db.automation() != "on"
+
+    def dismiss_welcome(self):
+        self.db.set_welcomed()
+        self.publish()
+        return {"ok": True}
 
     def turn_on_automation(self):
         self.db.set_automation("on")
@@ -789,6 +798,10 @@ class Orchestrator:
         current = self.db.current_view()
         return {"views": views, "current": current if current in views else ""}
 
+    def folder_candidates(self):
+        pr_repos = {snap["repo"] for snap in self.db.prs()}
+        return {"ok": True, "candidates": worktrees.folder_candidates(pr_repos, exclude=self.roots)}
+
     def settings(self):
         return {"ok": True, "sections": SECTIONS, "fields": setting_fields(read_raw(self.config_path)),
                 "commandLineRoots": self.fixed_roots}
@@ -1051,5 +1064,6 @@ class Orchestrator:
             "worktrees": [w for w in self.worktree_map.values() if w.get("branch")],
             "views": self.views(),
             "automation": "held" if self.held() else "on",
+            "welcome": not self.db.welcomed(),
             "roots": self.roots,
         }

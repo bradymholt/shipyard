@@ -490,6 +490,10 @@ class CiFailed(OrchestratorCase):
         state = self.poll()
         self.assertEqual(([c["kind"] for c in state["o/r#1"]["cards"]], self.agent.runs, self.comp.page_state()["automation"]),
                          (["offer"], [], "held"))
+        restarted = Orchestrator(validate_config({}), [self.checkout], self.db_path, github=self.gh,
+                                 config_path=self.config_path, first_run_hold=True)
+        self.addCleanup(restarted.db.close)
+        self.assertEqual((restarted.held(), restarted.page_state()["welcome"]), (True, True))  # polled since, still new
         self.comp.turn_on_automation()
         self.assertEqual(self.comp.page_state()["automation"], "on")
         again = Orchestrator(validate_config({}), [self.checkout], self.db_path, github=self.gh,

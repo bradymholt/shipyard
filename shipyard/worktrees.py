@@ -5,6 +5,7 @@ and refuse to switch or remove a checkout with uncommitted work.
 """
 import concurrent.futures
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -204,6 +205,90 @@ def discover(roots, agent=None):
     for w in out:
         w["session"] = sessions.get(w["path"])
     return out
+
+
+# Where people keep their clones, checked when no folders are set.
+CODE_FOLDERS = ("dev", "code", "src", "projects", "Projects", "Developer", "repos", "workspace", "git", "GitHub", "Code")
+
+
+def _first_cwd(path, lines=40):
+    """The working directory a session transcript records near its start."""
+    try:
+        with open(path, errors="replace") as fh:
+            for _ in range(lines):
+                line = fh.readline()
+                if not line:
+                    break
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                cwd = record.get("cwd") or (record.get("payload") or {}).get("cwd")
+                if isinstance(cwd, str) and cwd:
+                    return cwd
+    except OSError:
+        pass
+    return None
+
+
+def session_cwds():
+    """Working directories of your Claude Code and Codex sessions: where you work."""
+    home = Path.home()
+    files = [max(d.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, default=None)
+             for d in (home / ".claude" / "projects").glob("*") if d.is_dir()]
+    files += sorted((home / ".codex" / "sessions").glob("*/*/*/rollout-*.jsonl"), reverse=True)[:300]
+    return {cwd for cwd in (_first_cwd(f) for f in files if f) if cwd}
+
+
+def _clone_root(path):
+    """The main clone a directory belongs to, worktrees included, or None."""
+    p = Path(path)
+    for candidate in (p, *p.parents):
+        if (candidate / ".git").is_dir():
+            return candidate
+        if candidate == Path.home() or candidate == candidate.parent:
+            return None
+    return None
+
+
+def _ordinary_folder(folder):
+    """Inside your home folder, not hidden, and not itself inside a clone (scratch and
+    temp directories, dotfiles, and nested checkouts don't count)."""
+    home = Path.home()
+    if not folder.is_relative_to(home) or any(part.startswith(".") for part in folder.relative_to(home).parts):
+        return False
+    return _clone_root(folder) is None
+
+
+def folder_candidates(pr_repos, exclude=()):
+    """Folders that hold your clones, for when none are set: common code folders and the
+    ones your agent sessions ran in. Once your PRs are known, a folder must hold a clone
+    of one of their repos. [{"path", "clones", "matching"}], best first."""
+    home = Path.home()
+    folders = {home / name for name in CODE_FOLDERS if (home / name).is_dir()}
+    for cwd in session_cwds():
+        root = _clone_root(cwd)
+        if root and root.parent != home and _ordinary_folder(root.parent):
+            folders.add(root.parent)
+    skip = {os.path.realpath(e) for e in exclude}
+    out = []
+    for folder in sorted(folders):
+        if os.path.realpath(folder) in skip:
+            continue
+        try:
+            clones = [d for d in folder.iterdir() if (d / ".git").is_dir()]
+        except OSError:
+            continue
+        if not clones:
+            continue
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            origins = list(pool.map(lambda d: parse_origin(try_git(str(d), "config", "--get", "remote.origin.url")), clones))
+        matching = sum(1 for o in origins if o and o in pr_repos)
+        if pr_repos and not matching:
+            continue
+        shown = f"~/{folder.relative_to(home)}" if folder.is_relative_to(home) else str(folder)
+        out.append({"path": shown, "clones": len(clones), "matching": matching})
+    return sorted(out, key=lambda c: (-c["matching"], -c["clones"], c["path"]))
 
 
 def find_clone(repo, roots):

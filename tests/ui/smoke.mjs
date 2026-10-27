@@ -118,8 +118,7 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
   check(await page.locator('.card[data-key="o/r#101"] .wt-links a[title="Open on GitHub"]').count() === 1, "a card has an Open on GitHub icon");
-  check((await page.locator('.card[data-key="o/r#101"] .card-title a').getAttribute("href"))?.endsWith("/pull/101"), "a card title links to the PR on GitHub");
-  await page.locator('.card[data-key="o/r#101"] .card-meta').click();
+  await page.locator('.card[data-key="o/r#101"] .card-title').click();
   await page.waitForSelector("#sidebar .next-card");
   const sb = page.locator("#sidebar");
   check(await sb.isVisible(), "clicking a card opens the sidebar");
@@ -209,15 +208,28 @@ try {
   check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
 
   console.log("first run");
-  await page.evaluate(() => { window.__dashboard.state.serverState.automation = "held"; window.__dashboard.render(); });
-  const intro = page.locator(".auto-intro");
-  check((await intro.textContent()).includes("Nothing happens without a click yet") &&
-    (await intro.textContent()).includes("re-reviews PRs you reviewed when they change"),
-    "a new install explains what Shipyard would do on its own, from your settings");
-  if (shots) await page.screenshot({ path: `${shots}/first-run.png` });
-  await intro.locator('[data-automation="on"]').click();
-  await page.waitForSelector(".auto-intro", { state: "detached" });
-  check(true, "Turn it on clears the card");
+  await page.evaluate(() => {
+    const { state, render } = window.__dashboard;
+    Object.assign(state.serverState, { welcome: true, automation: "held" });
+    render();
+  });
+  const welcome = page.locator("#welcome-dialog[open]");
+  await welcome.waitFor();
+  const heights = [await welcome.evaluate((d) => d.offsetHeight)];
+  check((await welcome.textContent()).includes("Your coding agent."), "the welcome starts with what Shipyard does, naming no agent");
+  await welcome.locator('[data-wel="next"]').click();
+  heights.push(await welcome.evaluate((d) => d.offsetHeight));
+  check(await welcome.locator('[data-pick="o"]').count() === 1, "it suggests views from the owners of your PRs");
+  await welcome.locator('[data-wel="next"]').click();
+  heights.push(await welcome.evaluate((d) => d.offsetHeight));
+  check((await welcome.textContent()).includes("re-reviews PRs you reviewed when they change"),
+    "its last step says what turning Shipyard on would do, from your settings");
+  check(heights.every((h) => h === heights[0]), `the welcome keeps one size across its steps${heights.every((h) => h === heights[0]) ? "" : `: ${heights}`}`);
+  if (shots) await page.screenshot({ path: `${shots}/welcome.png` });
+  await welcome.locator('[data-wel="done"]').last().click();
+  await page.waitForSelector("#welcome-dialog[open]", { state: "detached" });
+  check(await page.locator(".auto-intro, .welcome").count() === 0, "after the welcome, the board shows no prompt of its own");
+  await page.evaluate(() => { window.__dashboard.state.serverState.automation = "on"; });
 
   console.log("settings");
   await page.click("#settings-btn");
