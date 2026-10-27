@@ -95,6 +95,14 @@ class Snapshot(unittest.TestCase):
         self.assertEqual([r["author"] for r in s["reviews"]], ["rev"])
         self.assertEqual(s["threads"][0]["comments"][0]["id"], 77)
 
+    def test_a_rerun_replaces_the_failed_run(self):
+        failed, passed = check_run("labels", "FAILURE", job=5), check_run("labels", "SUCCESS", job=9)
+        s = snapshot(pr_node(ci="FAILURE", contexts=[failed, passed]), VIEWER)
+        self.assertEqual((s["ci"], s["failing"]), ("SUCCESS", []))
+        self.assertEqual(s["page"]["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"], "SUCCESS")
+        other = check_run("rspec", "FAILURE", job=3)
+        self.assertEqual(snapshot(pr_node(ci="FAILURE", contexts=[failed, passed, other]), VIEWER)["ci"], "FAILURE")
+
     def test_team_requests(self):
         node = pr_node()
         node["reviewRequests"]["nodes"] = [{"requestedReviewer": {"__typename": "Team", "slug": "web"}}]
