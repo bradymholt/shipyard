@@ -208,6 +208,8 @@ try {
   check(direct.length === 0, `the page never calls api.github.com itself${direct.length ? `: ${direct.join(" | ")}` : ""}`);
 
   console.log("first run");
+  await page.route("**/api/setup-check", (route) => route.fulfill({ json: { ok: true, checks: [
+    { label: "GitHub", ok: false, detail: "no token", fix: "Run `gh auth login` in a terminal, then check again." }] } }));
   await page.evaluate(() => {
     const { state, render } = window.__dashboard;
     Object.assign(state.serverState, { welcome: true, automation: "held" });
@@ -217,6 +219,15 @@ try {
   await welcome.waitFor();
   const heights = [await welcome.evaluate((d) => d.offsetHeight)];
   check((await welcome.textContent()).includes("Your coding agent."), "the welcome starts with what Shipyard does, naming no agent");
+  await welcome.locator('[data-wel="next"]').click();
+  await welcome.locator(".wel-fix").waitFor();
+  check((await welcome.textContent()).includes("gh auth login"), "a failing setup check says how to fix it");
+  await page.unroute("**/api/setup-check");
+  await welcome.locator('[data-wel="recheck"]').click();
+  await welcome.locator(".wel-mark.ok").nth(1).waitFor();
+  check(await welcome.locator(".wel-mark.bad, [data-wel=recheck]").count() === 0, "checking again shows GitHub and the agent working");
+  if (shots) await page.screenshot({ path: `${shots}/welcome-checks.png` });
+  heights.push(await welcome.evaluate((d) => d.offsetHeight));
   await welcome.locator('[data-wel="next"]').click();
   heights.push(await welcome.evaluate((d) => d.offsetHeight));
   check(await welcome.locator('[data-pick="o"]').count() === 1, "it suggests views from the owners of your PRs");

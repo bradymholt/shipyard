@@ -218,6 +218,16 @@ dialog#welcome-dialog::backdrop { background: rgba(18,38,58,.5); }
 .wel-folder { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.625rem 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.8125rem; }
 .wel-folder code { font: 600 0.8125rem var(--mono); color: var(--fg); }
 .wel-folder span { flex: 1; color: var(--fg-muted); }
+.wel-checks { display: flex; flex-direction: column; gap: 0.375rem; }
+.wel-check { display: flex; align-items: flex-start; gap: 0.625rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.8125rem; line-height: 1.4; }
+.wel-check > div { display: flex; flex-direction: column; min-width: 0; color: var(--fg-muted); overflow-wrap: anywhere; }
+.wel-check strong { font-weight: 600; color: var(--fg); }
+.wel-check code { font: 0.75rem var(--mono); }
+.wel-mark { flex: none; width: 1rem; font-weight: 700; text-align: center; }
+.wel-mark.ok { color: var(--green-text); }
+.wel-mark.bad { color: var(--red-text); }
+.wel-mark.spinner { height: 1rem; margin: 0.0625rem 0 0; border-width: 2px; }
+.wel-fix { margin-top: 0.125rem; color: var(--fg); }
 .set-found { display: flex; align-items: center; gap: 0.75rem; margin: 0 0 0.75rem; padding: 0.625rem 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 .set-found span { flex: 1; }
 .set-found code { font: 600 0.8125rem var(--mono); color: var(--fg); }
