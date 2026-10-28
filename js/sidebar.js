@@ -304,6 +304,10 @@ function derivedCardHtml(pr, chip) {
     body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;
     actionsHtml = promptButton(pr, "resolve_conflicts", "Resolve")
       + `<a class="btn-link" href="${esc(pr.url)}/conflicts" target="_blank" rel="noopener">View on GitHub</a>`;
+  } else if (chip.kind === "update_branch") {
+    body = `#${chip.parent}, which this is stacked on, has ${chip.behind} commit${chip.behind === 1 ? "" : "s"} ${pr.headRefName || "this branch"} doesn't. Bring them in on GitHub:`;
+    actionsHtml = `<button type="button" class="nc-run" data-pr-action="update_branch" data-method="merge">Merge ${esc(pr.baseRefName || "base")} in</button>`
+      + `<button type="button" class="nc-run" data-pr-action="update_branch" data-method="rebase">Rebase</button>`;
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
       review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
@@ -585,6 +589,7 @@ $("#sidebar").addEventListener("click", async (e) => {
     if (field && TEXT_ACTIONS.has(action)) payload.body = fieldValue(field) || "";
     if (action === "submit_review") payload.event = fieldValue(`${field}-event`) || "COMMENT";
     if (btn.dataset.reviewers) payload.reviewers = btn.dataset.reviewers.split(",");
+    if (btn.dataset.method) payload.method = btn.dataset.method;
     return busy(btn, async () => {
       if (btn.dataset.prAction) {
         const done = btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : "";

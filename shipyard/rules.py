@@ -154,6 +154,11 @@ def next_steps(snap, rules, cards=()):
     if conflicting and rules.get("resolve_conflicts"):
         out.append({"kind": "resolve_conflicts", "label": "Resolve conflicts", "tone": "red",
                     "title": f"Conflicts with {snap.get('base')}"})
+    behind = snap.get("behind_parent")
+    if behind and not conflicting and rules.get("update_stack"):
+        out.append({"kind": "update_branch", "label": f"Update from #{snap['stack_parent']}", "tone": "gold",
+                    "behind": behind, "parent": snap["stack_parent"],
+                    "title": f"#{snap['stack_parent']} has {behind} commit{'s' if behind != 1 else ''} this branch doesn't"})
     if snap.get("ci") in events.FAILING and rules.get("fix_ci"):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
         out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),

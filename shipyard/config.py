@@ -83,6 +83,7 @@ AGENT_DEFAULTS = {
 RULE_DEFAULTS = {
     "address_feedback": {"prompt": "Address the review feedback on {url} (branch {branch})"},
     "resolve_conflicts": {"prompt": "Merge {base} into {branch} and resolve the conflicts on {url}"},
+    "update_stack": True,
     "fix_ci": True,
     "merge": True,
     "review": True,

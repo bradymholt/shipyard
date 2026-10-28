@@ -118,6 +118,15 @@ def merge(gh, snap, payload, ctx):
     return f"{done['verb']} ({method.lower()})"
 
 
+def update_branch(gh, snap, payload, ctx):
+    method = "REBASE" if payload.get("method") == "rebase" else "MERGE"
+    gh.graphql("mutation($id: ID!, $head: GitObjectID, $m: PullRequestBranchUpdateMethod) { updatePullRequestBranch("
+               "input: {pullRequestId: $id, expectedHeadOid: $head, updateMethod: $m}) { clientMutationId } }",
+               {"id": snap["id"], "head": snap.get("head"), "m": method})
+    return f"{'rebased the branch onto' if method == 'REBASE' else 'merged'} {snap.get('base')}" + (
+        "" if method == "REBASE" else " into the branch")
+
+
 def mark_ready(gh, snap, payload, ctx):
     gh.graphql("mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) "
                "{ clientMutationId } }", {"id": snap["id"]})
@@ -241,7 +250,7 @@ def draft_review(gh, snap, payload, ctx):
 RUN = {
     "rerun_checks": rerun_checks, "rerequest_review": rerequest_review,
     "enable_auto_merge": enable_auto_merge, "disable_auto_merge": undo_enable_auto_merge,
-    "merge": merge, "mark_ready": mark_ready,
+    "merge": merge, "mark_ready": mark_ready, "update_branch": update_branch,
     "post_reply": post_reply, "nudge": nudge, "approve": approve,
     "comment_unresolved": comment_unresolved, "submit_review": submit_review, "apply_fix": apply_fix,
     "draft_review": draft_review,
