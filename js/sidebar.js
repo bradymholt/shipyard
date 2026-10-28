@@ -3,7 +3,7 @@ import { $, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiGet, apiPost, automationHeld, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
-import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
+import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markSeen, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
 import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
 
 // One component whose sections appear when the server is connected, like the
@@ -459,6 +459,7 @@ export function renderSidebar() {
     return;
   }
   loadDetail(sidebarKey);
+  markSeen(pr);
   const html = sidebarHeader(pr) + nextSection(pr) + autoApproveSection(pr) + sessionSection(pr) + activitySection(pr);
   if (html === lastSidebarHtml) return;
   // Re-rendering on every pushed update must not eat what you're typing.
