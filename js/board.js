@@ -3,7 +3,7 @@ import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, laneOf, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { openNewTaskDialog } from "./settings.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -358,9 +358,11 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   const reviewUpdate = reviewMode ? reviewUpdateBadge(pr) : "";
   const authorReplied = reviewMode && reviewLaneOf(pr) === 1 ? authorRepliedBadge(pr) : "";
   const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
+  const unseen = isUnseen(pr) && sidebarKey !== prKey(pr)
+    ? '<span class="new-dot" title="Updated since you last opened it"></span>' : "";
   return `
     <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
-      <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
+      <div class="card-title">${unseen}<a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
       <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}</div>
       <div class="card-icons">
         ${ciHtml(pr)}
@@ -615,6 +617,7 @@ listBody.addEventListener("click", async (e) => {
     draftBtn.textContent = "…";
     try {
       await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(draftPr))}&action=mark_ready`, { payload: {} });
+      markSeen(draftPr);
       render();
     } catch (err) {
       alert(`Mark ready: ${err.message}`);
@@ -631,6 +634,7 @@ listBody.addEventListener("click", async (e) => {
   const action = btn.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
   try {
     await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(amPr))}&action=${action}`, { payload: {} });
+    markSeen(amPr);
     render();
   } catch (err) {
     alert(`Auto-merge: ${err.message}`);

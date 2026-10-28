@@ -195,6 +195,48 @@ export const findPr = (key) => allPrs().find((pr) => prKey(pr) === key);
 
 export const isReviewPr = (pr) => pr.author?.login !== state.viewer;
 
+// When you last opened each PR, so the board can mark what moved since. "since" is the first
+// load, so a new install starts with nothing marked. A stamp runs a minute ahead because an
+// action you take bumps updatedAt a moment after you take it.
+const SEEN_KEY = "ghpr.seen";
+const SEEN_AHEAD_MS = 60_000;
+const SEEN_KEEP_MS = 30 * 86_400_000;
+let seen = null;
+
+function seenStore() {
+  if (seen) return seen;
+  try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) || "null"); } catch { /* unreadable: start over */ }
+  if (!seen?.since || typeof seen.prs !== "object") {
+    seen = { since: new Date().toISOString(), prs: {} };
+    saveSeen();
+  }
+  return seen;
+}
+
+function saveSeen() {
+  const cutoff = new Date(Date.now() - SEEN_KEEP_MS).toISOString();
+  for (const [key, at] of Object.entries(seen.prs)) if (at < cutoff) delete seen.prs[key];
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch { /* storage unavailable */ }
+}
+
+export function markSeen(pr) {
+  if (!pr || pr.mergedAt) return;
+  const store = seenStore();
+  const key = prKey(pr);
+  if (new Date(store.prs[key] || 0) > new Date()) return;
+  store.prs[key] = new Date(Date.now() + SEEN_AHEAD_MS).toISOString();
+  saveSeen();
+}
+
+// A PR of yours you've never opened counts as seen when you created it.
+export function isUnseen(pr) {
+  if (pr.mergedAt || !state.targetedLoaded) return false;
+  const store = seenStore();
+  const created = pr.author?.login === state.viewer ? new Date(pr.createdAt).getTime() + SEEN_AHEAD_MS : 0;
+  const at = store.prs[prKey(pr)] ? new Date(store.prs[prKey(pr)]).getTime() : Math.max(new Date(store.since).getTime(), created);
+  return new Date(pr.updatedAt).getTime() > at;
+}
+
 export function stageOf(pr) {
   if (pr.mergedAt) return "Merged";
   if (isReviewPr(pr)) return reviewLaneOf(pr) === 0 ? "Waiting on you" : "Review submitted";

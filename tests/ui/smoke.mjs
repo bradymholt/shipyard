@@ -330,6 +330,16 @@ try {
   check(overflow <= 0, "no horizontal scroll on a phone-width window");
   if (shots) await narrow.page.screenshot({ path: `${shots}/narrow.png`, fullPage: true });
 
+  console.log("new activity");
+  check(await narrow.page.locator(".new-dot").count() === 0, "a first load marks nothing as new");
+  await narrow.page.evaluate(() => localStorage.setItem("ghpr.seen", JSON.stringify({ since: "2000-01-01T00:00:00Z", prs: {} })));
+  await narrow.page.reload();
+  await narrow.page.waitForSelector('.card[data-key="o/r#102"] .new-dot');
+  await narrow.page.locator('.card[data-key="o/r#102"] .card-meta').click();
+  await narrow.page.waitForSelector("#sidebar .sb-title");
+  await narrow.page.locator("#sidebar [data-close]").first().click();
+  check(await narrow.page.locator('.card[data-key="o/r#102"] .new-dot').count() === 0, "opening a PR clears its new-activity dot");
+
   console.log("GitHub failure");
   await narrow.page.evaluate(() => {
     const { state, updateGitHubStatus } = window.__dashboard;
