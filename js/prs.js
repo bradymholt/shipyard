@@ -179,7 +179,7 @@ export function nextChip(pr) {
   if (cp?.chip?.kind === "snoozed") return { ...cp.chip, tone: "muted" };
   const chip = serverSteps(pr)[0];
   if (chip) return chip;
-  if (cp?.chip?.kind === "nudge") return { ...cp.chip, tone: "gold", optional: true };
+  if (cp?.chip?.kind === "nudge" || cp?.chip?.kind === "rerequest_mine") return { ...cp.chip, tone: "gold", optional: true };
   if (cp?.chip) return { ...cp.chip, tone: "muted" };
   return null;
 }
