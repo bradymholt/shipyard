@@ -126,7 +126,7 @@ def post_reply(gh, snap, payload, ctx):
 
 
 NUDGED = "nudged the reviewers"
-NUDGED_AUTHOR = "nudged the author"
+NUDGED_AUTHOR = "asked the author for a re-review"
 
 
 def nudge(gh, snap, payload, ctx):
