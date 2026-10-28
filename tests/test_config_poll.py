@@ -17,6 +17,9 @@ class Config(unittest.TestCase):
         self.assertEqual(cfg["rules"]["passes"]["ci_failed"], "auto")
         self.assertEqual({k for k, v in cfg["auto"].items() if v}, {"approve_rereview", "rerun_checks"})
         self.assertIsNone(validate_config({"auto": {"approve_rereview": False}})["auto"]["approve_rereview"])
+        self.assertEqual(cfg["approve_replies"][:2], ["LGTM", "Looks great!"])
+        with self.assertRaises(ValueError):
+            validate_config({"approve_replies": ["LGTM", " "]})
 
     def test_rules_validation(self):
         self.assertEqual(validate_rules({"instructions": {"ci_failed": "Flaky specs live in spec/system."}})["instructions"],

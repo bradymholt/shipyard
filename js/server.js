@@ -115,7 +115,7 @@ export function connectServerEvents() {
     } catch { return; }
     if (lastPollAt() !== polledAt || githubProblem()) state.refreshing = false;
     const config = state.serverState.config;
-    if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER });
+    if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER, approveReplies: config.approveReplies || [] });
     applyViews();
     applyServerPrs();
     applyWorktrees();

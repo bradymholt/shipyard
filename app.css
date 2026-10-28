@@ -662,6 +662,9 @@ body.sidebar-open #sidebar { transform: none; visibility: visible; }
   border-radius: 0.25rem; background: var(--bg-inset); font: 600 0.875rem var(--sans); }
 .nc-verdict .nc-verdict-head { display: flex; align-items: baseline; gap: 0.5rem; }
 .nc-verdict .nc-verdict-why { margin: 0.25rem 0 0; font: 400 0.75rem var(--sans); color: var(--fg-muted); }
+.nc-pills { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem; }
+.nc-pills .nc-pill { padding: 0.0625rem 0.5rem; border-radius: 999px; font: 500 0.6875rem var(--sans); color: var(--fg-muted); }
+.nc-pills .nc-pill:hover { color: var(--fg); }
 .next-card .nc-label { margin: 0.5rem 0 0.125rem; font: 600 0.625rem var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--fg-faint); }
 .nc-verdict.red { border-left-color: var(--red); color: var(--red-text); }
 .nc-verdict.green { border-left-color: var(--green); color: var(--green-text); }
