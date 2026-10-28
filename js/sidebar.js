@@ -196,7 +196,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       body += `<ul class="nc-inline">${inline.map((c) => `<li><code>${esc(c.path)}:${esc(c.line)}</code> ${fmtCode(c.body)}</li>`).join("")}</ul>`;
     }
   }
-  let button = `<button type="button" class="nc-run" data-card="${card.id}" data-index="${i}" data-action="${esc(p.action)}" data-field="${field}">${esc(label)}</button>`;
+  let button = `<button type="button" class="nc-run${bare && p.action === "approve" ? " primary" : ""}" data-card="${card.id}" data-index="${i}" data-action="${esc(p.action)}" data-field="${field}">${esc(label)}</button>`;
   if (p.action === "apply_fix") {
     // Never the default: the diff shows first, and the button stays plain.
     button = shownDiffs.has(field)
