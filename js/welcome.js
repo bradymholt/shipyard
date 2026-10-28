@@ -1,7 +1,7 @@
 // The first-run welcome: what Shipyard does, whether GitHub and your agent work, views to narrow the board, and whether it
 // may act on its own. It shows once per install.
 import { $, state } from "./base.js";
-import { esc, fmtTitle, showError } from "./html.js";
+import { esc, fmtCode, showError } from "./html.js";
 import { apiCall, apiGet, automationHeld, getRepos, saveSetting, saveViews, turnOnAutomation } from "./server.js";
 import { render } from "./board.js";
 import { renderRepoSelect } from "./settings.js";
@@ -84,7 +84,7 @@ export async function maybeShowWelcome() {
 }
 
 const checkRow = (c) => `<div class="wel-check"><span class="wel-mark ${c.ok ? "ok" : "bad"}">${c.ok ? "✓" : "✕"}</span>
-  <div><strong>${esc(c.label)}</strong><span>${fmtTitle(c.detail)}</span>${c.fix ? `<span class="wel-fix">${fmtTitle(c.fix)}</span>` : ""}</div></div>`;
+  <div><strong>${esc(c.label)}</strong><span>${fmtCode(c.detail)}</span>${c.fix ? `<span class="wel-fix">${fmtCode(c.fix)}</span>` : ""}</div></div>`;
 
 const clonesText = (c) => `${c.clones} clone${c.clones === 1 ? "" : "s"}${c.matching ? `, ${c.matching} from your PRs` : ""}`;
 
