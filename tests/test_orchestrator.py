@@ -807,9 +807,30 @@ class PageRequests(OrchestratorCase):
         pr = self.comp.page_state()["prs"]["o/r#1"]
         self.assertEqual(pr["cards"][0]["kind"], "answer")
         self.assertFalse(pr["planReady"])  # an answer to your question doesn't flag the board
-        self.assertIn("asked a question in a fork of the pinned session", [a["text"] for a in pr["activity"]])
+        self.assertIn("asked “what did we decide about caching?”", [a["text"] for a in pr["activity"]])
         with self.assertRaises(ValueError):
             self.comp.ask("o/r#1", "   ")
+
+    def ask_for_comment(self, question):
+        self.gh.put(pr_node(), "author:@me")
+        self.poll()
+        self.agent.answers["Question:"] = {"summary": "Rev approved it.", "proposals": [
+            {"action": "post_reply", "confidence": "high", "reason": "asked", "payload": {"body": "Thanks for the review!"}}]}
+        self.comp.ask("o/r#1", question)
+        self.idle()
+        posted = [c for c in self.gh.calls if c[0] == "POST" and c[1].endswith("/issues/1/comments")]
+        return posted, self.comp.page_state()["prs"]["o/r#1"]
+
+    def test_ask_posts_a_comment_it_quotes(self):
+        posted, pr = self.ask_for_comment('Add "Thanks for the review!" on the PR')
+        self.assertEqual(posted[0][2], {"body": "Thanks for the review!"})
+        self.assertEqual(pr["cards"], [])
+        self.assertEqual(pr["handled"][0]["handled"]["result"], "posted a comment")
+
+    def test_ask_without_quoted_words_only_proposes(self):
+        posted, pr = self.ask_for_comment("thank them for the review")
+        self.assertEqual(posted, [])
+        self.assertEqual(pr["cards"][0]["proposals"][0]["action"], "post_reply")
 
     def test_new_session_starts_fresh_and_replaces_the_pin(self):
         self.gh.put(pr_node(), "author:@me")

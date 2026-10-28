@@ -31,7 +31,8 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
   the page's state over Server-Sent Events (`server.py`). `actions.py` holds the GitHub
   calls behind card buttons; `passes/*.md` are the prompt templates. Rules never call an
   agent directly, and nothing posts under the user's name without the page showing the
-  text first. Binds to localhost; discovery is read-only.
+  text first, unless the user typed those words (an Ask that quotes the comment to post).
+  Binds to localhost; discovery is read-only.
 - **`shipyard.config.json`** — server config (scan roots, app launcher, coding agent,
   `rules`, and the `auto` trust flags). Copy from `shipyard.config.example.json`; every
   setting is validated in `shipyard/config.py`.
