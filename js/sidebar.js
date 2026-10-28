@@ -143,7 +143,7 @@ function sidebarHeader(pr) {
       <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
       <button type="button" class="sb-close" data-close title="Close (Esc)" aria-label="Close">${CLOSE_ICON}</button>
     </div>
-    <div class="sb-title">${fmtCode(pr.title)}</div>
+    <div class="sb-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a></div>
     <div class="sb-state"><span>${esc(stageOf(pr))}</span>${checksText(pr)}${size}${comments ? `<span>${comments} comment${comments === 1 ? "" : "s"}</span>` : ""}</div>
     <div class="sb-launch">${launch}</div>`;
 }
@@ -186,10 +186,10 @@ function proposalHtml(pr, card, p, i, bare = false) {
     body += `<div class="nc-snippet-where">${esc(ctx.path || "")}${ctx.line ? `:${esc(ctx.line)}` : ""}${ctx.outdated ? " · outdated" : ""}</div>
       <pre class="nc-snippet">${esc(ctx.hunk)}</pre>`;
   }
-  if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
   if (p.action === "approve" && state.approveReplies?.length) {
     body += `<div class="nc-pills">${state.approveReplies.map((r) => `<button type="button" class="nc-pill" data-fill="${esc(field)}" data-text="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
   }
+  if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
   if (p.action === "submit_review") {
     const event = drafts.get(`${field}-event`) || p.payload?.event || "COMMENT";
     body += `<div class="nc-actions"><select data-field="${field}-event">${["COMMENT", "APPROVE", "REQUEST_CHANGES"].map((e) =>
