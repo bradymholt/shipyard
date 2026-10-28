@@ -49,6 +49,12 @@ class Actions(unittest.TestCase):
             actions.run(gh, "merge", snap(), {})
         self.assertEqual(len(gh.calls), 1)
 
+    def test_stacked_pr_merges_through_the_async_api(self):
+        gh = RecordingGitHub(graphql_errors=[GitHubError(
+            "This pull request is part of a stack and must be merged using the asynchronous merge REST API.")])
+        self.assertEqual(actions.run(gh, "merge", snap(), {}), "merging (squash)")
+        self.assertEqual(gh.calls[-1], ("PUT", "/repos/o/r/pulls/1/merge-async", {"merge_method": "squash", "sha": "aaa"}))
+
     def test_non_approval_review_needs_text(self):
         with self.assertRaises(actions.ActionError):
             actions.run(RecordingGitHub(), "submit_review", snap(author="alice"), {"event": "REQUEST_CHANGES"})
