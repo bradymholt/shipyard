@@ -93,13 +93,29 @@ def undo_enable_auto_merge(gh, snap, payload, ctx):
     return "disabled auto-merge"
 
 
+def _merge_with(gh, snap, method):
+    # expectedHeadOid / sha: commits pushed after you looked are not merged with it.
+    try:
+        gh.graphql(
+            "mutation($id: ID!, $m: PullRequestMergeMethod!, $head: GitObjectID) { mergePullRequest("
+            "input: {pullRequestId: $id, mergeMethod: $m, expectedHeadOid: $head}) { clientMutationId } }",
+            {"id": snap["id"], "m": method, "head": snap.get("head")})
+        return "merged"
+    except GitHubError as e:
+        # GitHub: "This pull request is part of a stack and must be merged using the asynchronous merge REST API"
+        if "asynchronous merge" not in str(e).lower():
+            raise
+    out = gh.rest("PUT", f"{_pulls(snap)}/merge-async",
+                  {"merge_method": method.lower(), "sha": snap.get("head")}) or {}
+    if out.get("status") == "failed":
+        raise GitHubError((out.get("details") or {}).get("message") or "GitHub could not merge it")
+    return "merged" if out.get("status") == "merged" else "merging"
+
+
 def merge(gh, snap, payload, ctx):
-    # expectedHeadOid: commits pushed after you looked are not merged with it.
-    method = _with_merge_method(lambda m: gh.graphql(
-        "mutation($id: ID!, $m: PullRequestMergeMethod!, $head: GitObjectID) { mergePullRequest("
-        "input: {pullRequestId: $id, mergeMethod: $m, expectedHeadOid: $head}) { clientMutationId } }",
-        {"id": snap["id"], "m": m, "head": snap.get("head")}))
-    return f"merged ({method.lower()})"
+    done = {}
+    method = _with_merge_method(lambda m: done.update(verb=_merge_with(gh, snap, m)))
+    return f"{done['verb']} ({method.lower()})"
 
 
 def mark_ready(gh, snap, payload, ctx):
