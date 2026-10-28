@@ -179,7 +179,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
     </div>`;
   }
   const field = `c${card.id}-${i}`;
-  const label = ACTION_LABELS[p.action] || p.action;
+  const label = p.action === "post_reply" && !p.payload?.comment_id ? "Post comment" : ACTION_LABELS[p.action] || p.action;
   let body = "";
   const ctx = p.action === "post_reply" ? p.context : null;
   if (ctx?.hunk) {
@@ -211,7 +211,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
     ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
   return `
     <div class="nc-proposal">
-      ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
+      ${bare || card.pass === "ask" ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
       ${body}
       <div class="nc-actions">${button}</div>
     </div>`;

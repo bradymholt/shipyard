@@ -46,7 +46,6 @@ PASS_ACTIVITY = {
     "ci_failed": "asked why CI failed",
     "pre_review": "ran a pre-review",
     "re_review": "asked for a re-check of the review threads",
-    "ask": "asked a question",
 }
 
 
@@ -519,6 +518,7 @@ class Orchestrator:
         if pin_after and produced:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
+                    f"asked “{question}”" if name == "ask" else
                     f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
         if name == "pre_review" and answer.get("auto_approve"):
             saved = self.db.auto_approve(snap["key"])
@@ -537,6 +537,8 @@ class Orchestrator:
                                    total=answer.get("total"), mode=mode, session_id=produced,
                                    kept_path=cwd if kept else None,
                                    status="done" if name == "new_session" else None)
+        if kind == "answer" and card:
+            self.post_spelled_out(card["id"], snap, question, answer["proposals"])
         if kind == "pass" and card:
             acted = False
             for proposal in answer["proposals"]:
@@ -646,6 +648,28 @@ class Orchestrator:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
+
+    def post_spelled_out(self, card_id, snap, question, proposals):
+        """An ask that quotes the comment to post posts it: you wrote those words yourself."""
+        for p in proposals:
+            body = " ".join(((p.get("payload") or {}).get("body") or "").split())
+            if p["action"] != "post_reply" or not body:
+                continue
+            if not any(f"{a}{body}{b}" in (question or "") for a, b in ('""', "''", "“”", "‘’")):
+                continue
+            if not self.db.claim_card(card_id):
+                return
+            try:
+                result = actions.run(self.github, "post_reply", snap, p["payload"], self.action_context(snap))
+            except Exception as e:
+                self.db.update_card(card_id, status="open")
+                self.db.log(snap["key"], f"tried to post your comment: {e}")
+                return
+            self.db.log(snap["key"], f"{result}: “{body}”")
+            self.db.update_card(card_id, status="handled", handled={
+                "action": "post_reply", "result": result, "reason": f"“{body}”", "payload": p["payload"]})
+            self.poke()
+            return
 
     def approve_ready_at(self, snap, minutes):
         seen = self.db.head_seen_at(snap["key"], snap.get("head")) or now_iso()
