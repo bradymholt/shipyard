@@ -298,7 +298,8 @@ function derivedCardHtml(pr, chip) {
     const verb = chip.approval ? "approved with comments"
       : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
     body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
-    actionsHtml = respondButton(pr) + (chip.approval ? "" : rerequest);
+    actionsHtml = respondButton(pr) + (chip.approval
+      ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
       review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
