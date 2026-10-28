@@ -87,6 +87,7 @@ RULE_DEFAULTS = {
     "review": True,
     "re_review": True,
     "nudge": {"after_hours": 24},
+    "ask_rereview": {"after_hours": 24},
     "rerequest_review": True,
     "passes": {
         "feedback": False,
@@ -96,7 +97,7 @@ RULE_DEFAULTS = {
     },
     "instructions": {},  # per pass, added to its prompt
 }
-RULE_THRESHOLDS = {"nudge": "after_hours"}
+RULE_THRESHOLDS = {"nudge": "after_hours", "ask_rereview": "after_hours"}
 RULE_PROMPTS = {"address_feedback"}
 PASS_MODES = ("auto", "ask", False)
 

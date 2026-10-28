@@ -80,14 +80,15 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
                     "until": snoozed_until}
     if snap.get("state") != "OPEN" or snap.get("draft"):
         return None
-    rule = rules.get("nudge")
     if not snap.get("mine"):
+        rule = rules.get("ask_rereview")
         moved = author_moved_at(snap)
         waited = min((h for h in (hours_since(moved, now), hours_since(nudged_at, now)) if h is not None), default=None)
         if rule and moved and waited >= rule["after_hours"]:
             age = f"{int(waited // 24)}d" if waited >= 24 else f"{int(waited)}h"
             return {"kind": "nudge", "label": f"Ask for re-review · {age}", "author": snap.get("author")}
         return None
+    rule = rules.get("nudge")
     waiting_on = [r for r in snap.get("requested") or []]
     if rule and waiting_on and snap.get("decision") not in ("APPROVED", "CHANGES_REQUESTED"):
         # A nudge restarts the clock, so the chip comes back only after another full wait.
