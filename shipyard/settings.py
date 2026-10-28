@@ -153,8 +153,8 @@ FIELDS = [
            lambda cfg: cfg["rules"]["rerequest_review"],
            help="When you've pushed or replied after changes were requested."),
     _field("rules", ("rules", "nudge"), "switch", "Nudge", lambda cfg: cfg["rules"]["nudge"] is not False,
-           help="When your PR has waited on reviewers, or an author you requested changes from updated without asking you back, for a while.",
-           sentence="When your PR has waited on reviewers, or an author you requested changes from updated without asking you back, for {after_hours} hours."),
+           help="When your PR has waited on reviewers for a while.",
+           sentence="When your PR has waited on reviewers for {after_hours} hours."),
     _field("rules", ("rules", "nudge", "after_hours"), "number", "Nudge after (hours)",
            lambda cfg: _rule_option(cfg, "nudge", "after_hours"), parent=("rules", "nudge")),
     _field("rules", ("rules", "merge"), "switch", "Merge", lambda cfg: cfg["rules"]["merge"],
@@ -163,6 +163,12 @@ FIELDS = [
            help="When your review is requested.", heading="Reviews"),
     _field("rules", ("rules", "re_review"), "switch", "Re-review", lambda cfg: cfg["rules"]["re_review"],
            help="When a PR you reviewed is ready for another look."),
+    _field("rules", ("rules", "ask_rereview"), "switch", "Ask for re-review",
+           lambda cfg: cfg["rules"]["ask_rereview"] is not False,
+           help="When an author updated a PR you requested changes on without asking you back, for a while.",
+           sentence="When an author updated a PR you requested changes on without asking you back, for {after_hours} hours."),
+    _field("rules", ("rules", "ask_rereview", "after_hours"), "number", "Ask after (hours)",
+           lambda cfg: _rule_option(cfg, "ask_rereview", "after_hours"), parent=("rules", "ask_rereview")),
 
     *[f for name, step, help, actions in PASS_GROUPS for f in [
         _field("rules", ("rules", "passes", name), "segments", "Agent pass",
