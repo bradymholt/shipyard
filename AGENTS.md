@@ -89,6 +89,6 @@ the full suite. Keep
 unrelated work out of the commit, and stop rather than merge when something looks wrong.
 
 The server serves the page from the main checkout, so a merge reaches it only
-after that checkout pulls. Finish with `git pull --ff-only` there. The reload-on-save watcher
+after that checkout pulls. Finish with `git pull --ff-only` there; open tabs reload themselves on the next push once nothing typed would be lost. The reload-on-save watcher
 restarts the server when the pull changes `shipyard.py` or `shipyard/`; if the server is
 still on its old process afterward, run `python3 shipyard-launchd.py restart`.

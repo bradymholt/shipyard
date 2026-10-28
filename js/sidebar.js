@@ -12,6 +12,10 @@ export let sidebarKey = null;
 
 const drafts = new Map();       // unsent text (edited replies, the Ask field), by field id
 
+// Text you typed and haven't sent; a review's event choice and a session pick are not text.
+export const hasUnsentText = () => [...drafts].some(([field, value]) =>
+  !field.endsWith("-event") && !field.startsWith("pin-") && String(value || "").trim());
+
 const shownDiffs = new Set();   // proposals whose diff was shown; Apply fix waits for that
 
 const detailCache = new Map();  // key -> { updatedAt, loading, data, error }

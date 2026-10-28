@@ -35,6 +35,7 @@ export const state = {
   sort: localStorage.getItem("ghpr.sort") || "priority",
   worktrees: {},        // "repo#branch" -> { path, workspace }
   sessionToken: BOOT.token || "",  // required for mutations
+  pageVersion: BOOT.pageVersion || "",  // the page files this tab loaded; the server reports when they change
   views: BOOT.views || { views: [], current: "" },  // saved on the server
   launcher: BOOT.launcher || DEFAULT_LAUNCHER,
   agent: BOOT.agent || null,  // coding agent whose latest session a checkout can resume
