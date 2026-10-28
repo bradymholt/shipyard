@@ -128,6 +128,7 @@ try {
   check(Math.abs(lefts[0] - lefts[1]) < 1, "the header stays lined up with the board when the sidebar opens");
   check((await sb.locator(".sb-title").textContent()).includes("Add retry to the webhook sender"), "sidebar header shows the PR");
   check((await sb.locator(".next-card.first p").first().textContent()).includes("Rev questions the retry count"), "Next card shows the agent's judgment");
+  check(await sb.locator(".next-card.first p code").first().textContent() === "MAX_RETRIES", "backticks in the agent's summary render as code");
   check((await sb.locator(".sess-title").textContent()).includes("Add retries to the webhook sender"), "PR session shows the pinned session's title");
   check((await sb.locator(".sess-meta").textContent()).includes("2 yours · 1 Shipyard's"), "session turn counts split yours vs Shipyard's");
   await page.waitForSelector("#sidebar .sb-activity li");

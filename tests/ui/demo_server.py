@@ -150,8 +150,8 @@ def main():
     agent = DemoAgent(str(checkout))
     agent.answers = {
         "reviewer requested changes": {
-            "summary": "Rev questions the retry count and wants the backoff capped. Plan: drop to 3 "
-                       "retries with jitter, and reply that GitHub doesn't retry failed deliveries.",
+            "summary": "Rev questions the retry count and wants the backoff capped. Plan: drop `MAX_RETRIES` "
+                       "to 3 with jitter, and reply that GitHub doesn't retry failed deliveries.",
             "proposals": [{"action": "continue", "confidence": "high", "reason": "the backoff change needs code"},
                           {"action": "post_reply", "confidence": "high", "reason": "the question has a factual answer",
                            "payload": {"comment_id": 501, "body": "GitHub doesn't retry failed deliveries, "

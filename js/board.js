@@ -1,6 +1,6 @@
 // The board: lanes, cards, and Recently merged.
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtTitle, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
+import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, laneOf, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
@@ -251,7 +251,7 @@ function mergedRepoPrefix(pr) {
 function mergedCard(pr) {
   return `
     <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}">
-      <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a></div>
+      <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a></div>
       <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
       ${mergedWorktreeLinks(pr)}
       ${nextRowHtml(pr)}
@@ -357,7 +357,7 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
   return `
     <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
-      <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtTitle(pr.title)}</a>${draft}${labels}</div>
+      <div class="card-title"><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
       <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}</div>
       <div class="card-icons">
         ${ciHtml(pr)}

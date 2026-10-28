@@ -1,6 +1,6 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
 import { $, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtTitle, GITHUB_ICON, showError, timeAgo } from "./html.js";
+import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiGet, apiPost, automationHeld, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
 import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
@@ -143,7 +143,7 @@ function sidebarHeader(pr) {
       <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
       <button type="button" class="sb-close" data-close title="Close (Esc)" aria-label="Close">${CLOSE_ICON}</button>
     </div>
-    <div class="sb-title">${fmtTitle(pr.title)}</div>
+    <div class="sb-title">${fmtCode(pr.title)}</div>
     <div class="sb-state"><span>${esc(stageOf(pr))}</span>${checksText(pr)}${size}${comments ? `<span>${comments} comment${comments === 1 ? "" : "s"}</span>` : ""}</div>
     <div class="sb-launch">${launch}</div>`;
 }
@@ -163,11 +163,11 @@ const verdictProposal = (card) => (card.pass === "pre_review" || card.pass === "
 function verdictHtml(p) {
   const [label, tone] = VERDICTS[p.action === "approve" ? "APPROVE" : p.payload?.event] || VERDICTS.COMMENT;
   return `<div class="nc-verdict ${tone}"><div class="nc-verdict-head"><span class="nc-verdict-pre">Recommends</span><span class="nc-verdict-label">${label}</span><span class="nc-verdict-conf">${esc(p.confidence)} confidence</span></div>
-    ${p.reason ? `<p class="nc-verdict-why">${esc(p.reason)}</p>` : ""}</div>`;
+    ${p.reason ? `<p class="nc-verdict-why">${fmtCode(p.reason)}</p>` : ""}</div>`;
 }
 
 function proposalHtml(pr, card, p, i, bare = false) {
-  if (p.action === "continue") return p.reason ? `<p class="nc-reason">${esc(p.reason)}</p>` : "";
+  if (p.action === "continue") return p.reason ? `<p class="nc-reason">${fmtCode(p.reason)}</p>` : "";
   if (p.action === "finish_on_github") {
     const n = p.payload?.comments || 0;
     const drafted = p.payload?.error ? esc(p.payload.error)
@@ -193,7 +193,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       `<option value="${e}"${e === event ? " selected" : ""}>${{ COMMENT: "Comment", APPROVE: "Approve", REQUEST_CHANGES: "Request changes" }[e]}</option>`).join("")}</select></div>`;
     const inline = p.payload?.comments || [];
     if (inline.length) {
-      body += `<ul class="nc-inline">${inline.map((c) => `<li><code>${esc(c.path)}:${esc(c.line)}</code> ${esc(c.body)}</li>`).join("")}</ul>`;
+      body += `<ul class="nc-inline">${inline.map((c) => `<li><code>${esc(c.path)}:${esc(c.line)}</code> ${fmtCode(c.body)}</li>`).join("")}</ul>`;
     }
   }
   let button = `<button type="button" class="nc-run" data-card="${card.id}" data-index="${i}" data-action="${esc(p.action)}" data-field="${field}">${esc(label)}</button>`;
@@ -207,7 +207,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
     ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
   return `
     <div class="nc-proposal">
-      ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${esc(p.reason || "")}</div>`}
+      ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
       ${body}
       <div class="nc-actions">${button}</div>
     </div>`;
@@ -238,8 +238,8 @@ function serverCardHtml(pr, card, first) {
       <p class="${card.kind === "error" ? "nc-error" : "nc-reason"}">${esc(card.error || "")}</p>${raw}${retry}</div>`;
   }
   if (card.kind === "proposal") {
-    return `<div class="${cls}"><div class="nc-head">${esc(card.title)}${dismiss}</div>
-      <p class="nc-reason">${esc(card.summary || "")}</p>
+    return `<div class="${cls}"><div class="nc-head">${fmtCode(card.title)}${dismiss}</div>
+      <p class="nc-reason">${fmtCode(card.summary || "")}</p>
       <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
         <button type="button" data-dismiss="${card.id}">Dismiss</button></div></div>`;
   }
@@ -256,7 +256,7 @@ function serverCardHtml(pr, card, first) {
     : card.auto_wait ? `<p class="nc-held">Re-runs the failed checks automatically once the running ones finish.</p>` : "";
   const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
-    ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${esc(card.summary || "")}</p>${proposals}
+    ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
     ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
 }
 
@@ -397,7 +397,7 @@ function sessionSection(pr) {
       <div class="sess-title">${esc(s.title || s.id)}</div>
       <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${agoSpan(s.updated * 1000)}`}
         · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
-      ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${agoSpan(ex.at)}${ex.mode === "fork" ? " · in a fork" : ""}<br>${esc(clip(ex.summary || "", 280))}</div>` : ""}
+      ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${agoSpan(ex.at)}${ex.mode === "fork" ? " · in a fork" : ""}<br>${fmtCode(clip(ex.summary || "", 280))}</div>` : ""}
       <div class="nc-actions">${repin}
         <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
   }

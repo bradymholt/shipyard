@@ -41,9 +41,9 @@ export const BRANCH_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-// Render `backtick`-delimited spans in a PR title as inline code, like GitHub.
+// Render `backtick`-delimited spans as inline code, like GitHub.
 // esc() runs first, so the code content is already HTML-safe.
-export const fmtTitle = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+export const fmtCode = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
 
 export function timeAgo(iso) {
   const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
