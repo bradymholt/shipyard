@@ -1057,7 +1057,7 @@ class Orchestrator:
             auto = None if snap["mine"] else self.auto_approve_setting(snap)
             prs[key] = {
                 "chip": rules.memory_chip(view, self.config["rules"], now, self.db.snooze(key),
-                                          self.db.last_logged(key, actions.NUDGED)),
+                                          self.db.last_logged(key, actions.NUDGED if snap["mine"] else actions.NUDGED_AUTHOR)),
                 "steps": rules.next_steps(view, self.config["rules"], open_cards),
                 # What the server last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
