@@ -187,6 +187,9 @@ function proposalHtml(pr, card, p, i, bare = false) {
       <pre class="nc-snippet">${esc(ctx.hunk)}</pre>`;
   }
   if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
+  if (p.action === "approve" && state.approveReplies?.length) {
+    body += `<div class="nc-pills">${state.approveReplies.map((r) => `<button type="button" class="nc-pill" data-fill="${esc(field)}" data-text="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
+  }
   if (p.action === "submit_review") {
     const event = drafts.get(`${field}-event`) || p.payload?.event || "COMMENT";
     body += `<div class="nc-actions"><select data-field="${field}-event">${["COMMENT", "APPROVE", "REQUEST_CHANGES"].map((e) =>
@@ -533,6 +536,12 @@ $("#sidebar").addEventListener("click", async (e) => {
     return;
   }
   if ((btn = t("button.wt-open"))) return busy(btn, () => openInApp(btn.dataset.target));
+  if ((btn = t("[data-fill]"))) {
+    drafts.set(btn.dataset.fill, btn.dataset.text);
+    const box = $("#sidebar").querySelector(`textarea[data-field="${CSS.escape(btn.dataset.fill)}"]`);
+    if (box) box.value = btn.dataset.text;
+    return;
+  }
   if ((btn = t("[data-show-diff]"))) { shownDiffs.add(btn.dataset.showDiff); return renderSidebar(); }
   if ((btn = t("[data-copy]"))) {
     const card = (serverPr(pr)?.cards || []).find((c) => String(c.id) === btn.dataset.copy);

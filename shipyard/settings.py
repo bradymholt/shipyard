@@ -169,6 +169,9 @@ FIELDS = [
            sentence="When an author updated a PR you requested changes on without asking you back, for {after_hours} hours."),
     _field("rules", ("rules", "ask_rereview", "after_hours"), "number", "Re-request after (hours)",
            lambda cfg: _rule_option(cfg, "ask_rereview", "after_hours"), parent=("rules", "ask_rereview")),
+    _field("rules", ("approve_replies",), "lines", "Approval replies", lambda cfg: "\n".join(cfg["approve_replies"]),
+           to_raw=lambda v: [line.strip() for line in v.splitlines() if line.strip()],
+           help="One per line. Each is a pill on an Approve card that fills in the approval's comment."),
 
     *[f for name, step, help, actions in PASS_GROUPS for f in [
         _field("rules", ("rules", "passes", name), "segments", "Agent pass",

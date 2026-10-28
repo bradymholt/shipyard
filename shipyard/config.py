@@ -115,8 +115,10 @@ HARD_LOCKED = {"post_reply"}
 RETIRED_AUTO = {"enable_auto_merge"}
 CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
 
+APPROVE_REPLIES = ["LGTM", "Looks great!", "\u2764\ufe0f", "\U0001faf6"]
+
 DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT,
-                  "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": []}
+                  "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": [], "approve_replies": APPROVE_REPLIES}
 TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
 
@@ -317,7 +319,11 @@ def validate_config(raw):
     rules = validate_rules(raw.get("rules", {}))
     auto = validate_auto(raw.get("auto", {}))
     views = validate_views(raw.get("views", []))
-    return {"roots": roots, "launcher": launcher, "agent": agent, "rules": rules, "auto": auto, "views": views}
+    replies = raw.get("approve_replies", APPROVE_REPLIES)
+    if not isinstance(replies, list) or any(not isinstance(r, str) or not r.strip() for r in replies):
+        raise ValueError('"approve_replies" must be an array of non-empty strings')
+    return {"roots": roots, "launcher": launcher, "agent": agent, "rules": rules, "auto": auto, "views": views,
+            "approve_replies": replies}
 
 
 def config_mtime(path=CONFIG_PATH):
@@ -383,4 +389,4 @@ def page_config(cfg):
     """The parts of the config the page needs."""
     return {"launcher": cfg["launcher"], "agent": cfg["agent"], "rules": cfg["rules"],
             "auto": {k: bool(v) for k, v in cfg["auto"].items()},
-            "approveRereview": cfg["auto"]["approve_rereview"]}
+            "approveRereview": cfg["auto"]["approve_rereview"], "approveReplies": cfg["approve_replies"]}
