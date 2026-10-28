@@ -203,6 +203,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       ? `<div class="nc-reason">Commit: ${esc(p.payload?.message || "")}</div><pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
       : `<button type="button" data-show-diff="${field}">Show diff</button>`;
   }
+  if (p.action === "approve") button += `<a class="btn-link" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a>`;
   const where = p.action === "post_reply" && p.payload?.comment_id
     ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
   return `
