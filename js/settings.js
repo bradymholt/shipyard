@@ -165,7 +165,7 @@ function settingControl(f, id) {
     case "number":
       return `<input type="number" id="${id}" min="0" step="any" value="${esc(f.value)}">`;
     case "lines":
-      return `<textarea id="${id}" rows="3" class="${mono.trim()}">${esc(f.value)}</textarea>`;
+      return `<textarea id="${id}" rows="${Math.max(3, String(f.value).split("\n").length + 1)}" class="${mono.trim()}">${esc(f.value)}</textarea>`;
     default:
       return `<input type="text" id="${id}" class="${mono.trim()}" value="${esc(f.value)}" spellcheck="false">`;
   }
