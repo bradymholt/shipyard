@@ -117,6 +117,17 @@ query($q: String!, $after: String, $first: Int!) {
   }
 }"""
 
+# Merges for the Insights charts: only the dates, so a few pages cover months.
+INSIGHTS_WEEKS = 12
+INSIGHTS_MAX_PAGES = 5
+INSIGHTS_QUERY = """
+query($q: String!, $after: String) {
+  search(query: $q, type: ISSUE, first: 100, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes { ... on PullRequest { createdAt mergedAt } }
+  }
+}"""
+
 # What the page's sidebar lists under Activity, read when it opens.
 TIMELINE_QUERY = """
 query($id: ID!) { node(id: $id) { ... on PullRequest {
@@ -395,6 +406,23 @@ class Poller:
         page = search["pageInfo"]
         return {"prs": [page_pr(n) for n in search["nodes"] if n and n.get("number")],
                 "after": page["endCursor"] if page["hasNextPage"] else None}
+
+    def insights(self, view, since):
+        """Your merges and the merges you reviewed since a date, as (created, merged) pairs."""
+        scope = f"{self.scope(view)} " if view else ""
+        out = {}
+        for kind, search in MERGED_SEARCHES.items():
+            q = f"is:pr archived:false {scope}{search} merged:>={since}"
+            rows, after = [], None
+            for _ in range(INSIGHTS_MAX_PAGES):
+                found = self.github.graphql(INSIGHTS_QUERY, {"q": q, "after": after})["search"]
+                rows += [{"created": n["createdAt"], "merged": n["mergedAt"]}
+                         for n in found["nodes"] if n and n.get("mergedAt")]
+                if not found["pageInfo"]["hasNextPage"]:
+                    break
+                after = found["pageInfo"]["endCursor"]
+            out[kind] = rows
+        return out
 
     def timeline(self, node_id):
         if not node_id:

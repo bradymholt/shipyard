@@ -217,6 +217,18 @@ class SharedCosts(OrchestratorCase):
             self.assertEqual(search.call_count, 1)
 
 
+    def test_insights_search_recent_merges_once_per_view(self):
+        node = pr_node(state="MERGED", merged_at="2026-10-20T00:00:00Z")
+        self.gh.put(node, "author:@me")
+        with mock.patch.object(self.gh, "graphql", wraps=self.gh.graphql) as gql:
+            out = self.comp.insights("")
+            self.comp.insights("")
+        self.assertEqual(out["merged"], {"mine": [{"created": node["createdAt"], "merged": "2026-10-20T00:00:00Z"}],
+                                         "review": []})
+        self.assertEqual(gql.call_count, 2)  # one search per list, then the cache
+        self.assertIn(f"merged:>={out['since']}", gql.call_args_list[0].args[1]["q"])
+
+
 class Settings(OrchestratorCase):
     def test_views_save_to_the_config_file_and_keep_the_rest(self):
         self.config_path.write_text(json.dumps({"roots": ["~/dev"]}))

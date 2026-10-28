@@ -16,7 +16,7 @@ from .agents import AgentError, adapter_for, process_cwds, read_text
 from .config import CONFIDENCE, CONFIG_PATH, HARD_LOCKED, config_mtime, page_config, read_config, read_raw, view_targets
 from .events import derive
 from .github import GitHub, GitHubError
-from .poll import MERGED_SEARCHES, Poller
+from .poll import INSIGHTS_WEEKS, MERGED_SEARCHES, Poller
 from .settings import MISSING, SECTIONS, fields as setting_fields, save as save_setting_file
 from .state import State, now_iso
 
@@ -39,6 +39,7 @@ AUTO_WORDS = {
 SOURCE_NAMES = {"re_review": "re-review", "ci_failed": "CI assessment", "feedback": "feedback pass"}
 LIVE_CACHE_SECONDS = 15
 MERGED_CACHE_SECONDS = 300
+INSIGHTS_CACHE_SECONDS = 900
 MERGED_EVERY_SECONDS = 15 * 60
 
 PASS_ACTIVITY = {
@@ -109,6 +110,7 @@ class Orchestrator:
         self.live_cache = {}
         self.info_cache = {}
         self.merged_cache = {}  # (view, kind, cursor) -> (time, page)
+        self.insights_cache = {}  # view -> (time, answer)
         self.pin_misses = {}  # PR key -> the transcripts a lookup found no session in
         self.stacks = {}  # PR key -> the open PR it's stacked on and how far behind it the branch is
         self.behind_cache = {}  # (repo, parent head, child head) -> commits the child is missing
@@ -915,6 +917,17 @@ class Orchestrator:
             self.merged_cache = {k: v for k, v in self.merged_cache.items() if now - v[0] < MERGED_CACHE_SECONDS}
             self.merged_cache[key] = (now, page)
         return {"ok": True, **page, "owners": dict(self.poller.owner_types)}
+
+    def insights(self, view):
+        key = ", ".join(view_targets(view)) if view else ""
+        now = time.time()
+        hit = self.insights_cache.get(key)
+        if not hit or now - hit[0] >= INSIGHTS_CACHE_SECONDS:
+            since = (datetime.now(timezone.utc) - timedelta(weeks=INSIGHTS_WEEKS)).strftime("%Y-%m-%d")
+            hit = (now, {"since": since, "merged": self.poller.insights(view, since)})
+            self.insights_cache = {k: v for k, v in self.insights_cache.items() if now - v[0] < INSIGHTS_CACHE_SECONDS}
+            self.insights_cache[key] = hit
+        return {"ok": True, **hit[1]}
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""

@@ -4,6 +4,7 @@ import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc,
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { insightsHtml, stackedPanels } from "./insights.js";
 import { openNewTaskDialog } from "./settings.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -439,6 +440,13 @@ function renderBoard() {
     : "";
   const attention = mineCount + reviewCount;
   document.title = attention ? `Shipyard (${attention})` : "Shipyard";
+  $("#sort-select").classList.toggle("hidden", state.filter === "insights");
+  if (state.filter === "insights") {
+    $("#list-title").innerHTML = `Insights · ${targetLinkHtml()}`;
+    listBody.innerHTML = state.targetedLoaded ? insightsHtml(render)
+      : githubProblem() ? loadErrorHtml() : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+    return;
+  }
   const reviewBoard = state.filter === "review";
   const dataset = reviewBoard ? reviewSet : state.prs;
   $("#sort-select").value = state.sort;
@@ -513,13 +521,7 @@ function renderBoard() {
     </div>`;
   }).join("") + "</div>";
   if (!count && !recentMerged.length) html = "";
-  const targetLink = getCurrentRepo() ? viewTargets(getCurrentRepo()).map((target) => {
-    const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
-      : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
-      : ownerType(target) === "user" ? `https://github.com/${esc(target)}?tab=repositories`
-      : `https://github.com/${esc(target)}`;
-    return `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
-  }).join(", ") : "everything you're involved in";
+  const targetLink = targetLinkHtml();
 
   // Until the server's first poll, show the spinner (or why it failed) rather than
   // the empty "No pull requests match." message.
@@ -533,24 +535,18 @@ function renderBoard() {
   const titleLabel = state.filter === "review"
     ? `${count} review pull request${count === 1 ? "" : "s"}`
     : `${count} open pull request${count === 1 ? "" : "s"}`;
-  $("#list-title").innerHTML = `${titleLabel} · ${targetLink}${reviewBoard ? reviewLoadHtml(laneItems[0]) : ""}`;
+  $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
   listBody.innerHTML = html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`;
 }
 
-// How much review you owe and how much you've done lately, from what the board already has.
-const WEEK_MS = 7 * 86_400_000;
-
-function reviewLoadHtml(waiting) {
-  const since = waiting.map((pr) => serverPr(pr)?.waitingSince).filter(Boolean).sort()[0];
-  const reviewed = new Map();
-  for (const pr of [...state.reviewedPrs, ...state.reviewedMerged]) {
-    const at = pr.viewerLatestReview?.submittedAt;
-    if (pr.author?.login !== state.viewer && at && Date.now() - new Date(at) < WEEK_MS) reviewed.set(prKey(pr), pr);
-  }
-  const parts = [`${waiting.length} waiting on you`];
-  if (since) parts.push(`oldest requested ${timeAgo(since)}`);
-  parts.push(`${reviewed.size} reviewed this week`);
-  return `<span class="review-load">${parts.map(esc).join(" · ")}</span>`;
+function targetLinkHtml() {
+  return getCurrentRepo() ? viewTargets(getCurrentRepo()).map((target) => {
+    const targetUrl = target.includes("/") ? `https://github.com/${esc(target)}/pulls`
+      : ownerType(target) === "org" ? `https://github.com/orgs/${esc(target)}/repositories`
+      : ownerType(target) === "user" ? `https://github.com/${esc(target)}?tab=repositories`
+      : `https://github.com/${esc(target)}`;
+    return `<a href="${targetUrl}" target="_blank" rel="noopener">${esc(target)}</a>`;
+  }).join(", ") : "everything you're involved in";
 }
 
 function loadErrorHtml() {
@@ -673,6 +669,7 @@ listBody.addEventListener("keydown", (e) => {
 });
 
 narrowViewport.addEventListener("change", render);
+stackedPanels.addEventListener("change", () => { if (state.filter === "insights") render(); });
 
 document.querySelectorAll(".tab").forEach((tab) =>
   tab.addEventListener("click", () => {
