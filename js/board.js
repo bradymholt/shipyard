@@ -533,8 +533,24 @@ function renderBoard() {
   const titleLabel = state.filter === "review"
     ? `${count} review pull request${count === 1 ? "" : "s"}`
     : `${count} open pull request${count === 1 ? "" : "s"}`;
-  $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
+  $("#list-title").innerHTML = `${titleLabel} · ${targetLink}${reviewBoard ? reviewLoadHtml(laneItems[0]) : ""}`;
   listBody.innerHTML = html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`;
+}
+
+// How much review you owe and how much you've done lately, from what the board already has.
+const WEEK_MS = 7 * 86_400_000;
+
+function reviewLoadHtml(waiting) {
+  const since = waiting.map((pr) => serverPr(pr)?.waitingSince).filter(Boolean).sort()[0];
+  const reviewed = new Map();
+  for (const pr of [...state.reviewedPrs, ...state.reviewedMerged]) {
+    const at = pr.viewerLatestReview?.submittedAt;
+    if (pr.author?.login !== state.viewer && at && Date.now() - new Date(at) < WEEK_MS) reviewed.set(prKey(pr), pr);
+  }
+  const parts = [`${waiting.length} waiting on you`];
+  if (since) parts.push(`oldest requested ${timeAgo(since)}`);
+  parts.push(`${reviewed.size} reviewed this week`);
+  return `<span class="review-load">${parts.map(esc).join(" · ")}</span>`;
 }
 
 function loadErrorHtml() {

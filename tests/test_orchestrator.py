@@ -276,6 +276,12 @@ class PageState(OrchestratorCase):
         self.assertEqual([w["branch"] for w in self.comp.page_state()["worktrees"]], ["feature"])
 
 
+    def test_carries_when_your_review_was_requested(self):
+        self.gh.put(pr_node(author="alice", requested=["me"], requested_at={"me": "2026-10-22T08:00:00Z"}),
+                    "review-requested:@me")
+        self.assertEqual(self.poll()["o/r#1"]["waitingSince"], "2026-10-22T08:00:00Z")
+
+
 class AfterAction(OrchestratorCase):
     def test_rereads_the_pr_for_the_page_before_the_poll_does(self):
         self.gh.put(pr_node(), "author:@me")

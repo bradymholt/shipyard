@@ -64,6 +64,7 @@ Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` an
 - **Action-focused views:** My PRs and Reviews, with priority, updated, and created sorting.
 - **Board layout:** reviewer state, new commits since your review, drafts, approvals, and ready-to-merge work at a glance, with lanes that stack and collapse on a phone.
 - **New since you looked:** a dot on each card updated since you last opened it.
+- **Review load:** the Reviews tab shows how many reviews wait on you, when the oldest was requested, and how many you reviewed this week.
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
