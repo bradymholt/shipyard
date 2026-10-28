@@ -91,6 +91,7 @@ RULE_DEFAULTS = {
     "nudge": {"after_hours": 24},
     "ask_rereview": {"after_hours": 24},
     "rerequest_review": True,
+    "image_sign_off": True,
     "passes": {
         "feedback": False,
         "ci_failed": "auto",
