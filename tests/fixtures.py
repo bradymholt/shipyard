@@ -41,11 +41,12 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
             {"id": f"T{i}", "isResolved": t.get("resolved", False), "isOutdated": False,
              "path": t.get("path", "app.py"), "line": t.get("line", 3),
              "comments": {"nodes": [{"databaseId": t.get("comment_id", 500 + i), "body": t["body"],
-                                     "createdAt": updated, "diffHunk": t.get("hunk"),
+                                     "createdAt": t.get("at", updated), "diffHunk": t.get("hunk"),
                                      "author": {"login": t.get("author", "rev")}}] +
-                                   [{"databaseId": 900 + i, "body": "reply", "createdAt": updated,
+                                   [{"databaseId": 900 + i, "body": "reply", "createdAt": t.get("at", updated),
                                      "author": {"login": who}} for who in t.get("replies", ())]},
-             "latest": {"nodes": [{"author": {"login": ([t.get("author", "rev")] + list(t.get("replies", ())))[-1]}}]}}
+             "latest": {"nodes": [{"createdAt": t.get("at", updated),
+                                   "author": {"login": ([t.get("author", "rev")] + list(t.get("replies", ())))[-1]}}]}}
             for i, t in enumerate(threads)]},
         "comments": {"totalCount": len(comments),
                      "nodes": [{"createdAt": c.get("at", updated), "author": {"login": c["author"]}}
