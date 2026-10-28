@@ -3,6 +3,7 @@ signature (updatedAt, head, checks, review decision, draft) moved. Check results
 bump a PR's updatedAt, which is why the signature carries them too.
 
 Each PR becomes a plain snapshot dict; events.py diffs two of them."""
+import concurrent.futures
 import hashlib
 from pathlib import Path
 
@@ -402,20 +403,20 @@ class Poller:
         return node
 
     def details(self, ids, viewer):
-        out = []
         ids = list(ids)
-        for i in range(0, len(ids), DETAIL_BATCH):
-            data = self.github.graphql(DETAIL_QUERY, {"ids": ids[i:i + DETAIL_BATCH]})
-            out += [snapshot(n, viewer) for n in data["nodes"] if n and n.get("number")]
-        return out
+        batches = [ids[i:i + DETAIL_BATCH] for i in range(0, len(ids), DETAIL_BATCH)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            pages = list(pool.map(lambda b: self.github.graphql(DETAIL_QUERY, {"ids": b}), batches))
+        return [snapshot(n, viewer) for data in pages for n in data["nodes"] if n and n.get("number")]
 
     def poll(self, known_open):
         """(viewer, changed snapshots, ids still open). `known_open` is the set of node
         ids the caller holds as open; any that dropped out of every list are re-read so a
         merge or close is seen."""
         viewer, light, lists = None, {}, {}
-        for name, q in SEARCHES.items():
-            viewer, nodes = self.search(q)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(SEARCHES)) as pool:
+            found = list(pool.map(self.search, SEARCHES.values()))
+        for name, (viewer, nodes) in zip(SEARCHES, found):
             for n in nodes:
                 light[n["id"]] = n
                 lists.setdefault(n["id"], []).append(name)

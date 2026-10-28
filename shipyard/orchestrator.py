@@ -284,11 +284,12 @@ class Orchestrator:
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
+        self.status = {"github": "ok", "lastPoll": now_iso()}
+        self.db.set_poll_memory({**self.poller.memory(), "viewer": viewer, "lastPoll": self.status["lastPoll"]})
+        self.publish()  # open PRs first; merged history goes out as its own event
         self.refresh_merged()
         self.retry_waiting_actions()
         self.db.prune()
-        self.status = {"github": "ok", "lastPoll": now_iso()}
-        self.db.set_poll_memory({**self.poller.memory(), "viewer": viewer, "lastPoll": self.status["lastPoll"]})
         self.publish()
 
     def ingest(self, snap):
