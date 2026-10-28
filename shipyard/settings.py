@@ -193,6 +193,10 @@ FIELDS = [
                template=passes.shown_template(name)),
         *[f for action in actions for f in _auto_fields(action, ("rules", "passes", name))],
     ]],
+    _field("rules", ("rules", "queue_rerun"), "switch", "Queue re-runs while CI is running",
+           lambda cfg: cfg["rules"]["queue_rerun"], under=("rules", "fix_ci"),
+           help="Re-run failed jobs, pressed while the rest of the workflow run is still going, waits for it "
+                "to finish. GitHub can't re-run jobs in a run until then."),
 
     _field("roots", ("roots",), "lines", "Folders", lambda cfg: "\n".join(cfg["roots"]),
            to_raw=lambda v: [line.strip() for line in v.splitlines() if line.strip()],

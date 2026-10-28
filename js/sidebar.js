@@ -170,6 +170,8 @@ function verdictHtml(p) {
     ${p.reason ? `<p class="nc-verdict-why">${fmtCode(p.reason)}</p>` : ""}</div>`;
 }
 
+const cancelWaitButton = (card) => `<button type="button" data-cancel-wait="${card.id}">Cancel re-run</button>`;
+
 function proposalHtml(pr, card, p, i, bare = false) {
   if (p.action === "continue") return p.reason ? `<p class="nc-reason">${fmtCode(p.reason)}</p>` : "";
   if (p.action === "finish_on_github") {
@@ -210,6 +212,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       ? `<div class="nc-reason">Commit: ${esc(p.payload?.message || "")}</div><pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
       : `<button type="button" data-show-diff="${field}">Show diff</button>`;
   }
+  if (p.action === "rerun_checks" && card.auto_wait?.manual) button = cancelWaitButton(card);
   if (p.action === "approve") button += `<a class="btn-link" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a>`;
   const where = p.action === "post_reply" && p.payload?.comment_id
     ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
@@ -228,7 +231,9 @@ function serverCardHtml(pr, card, first) {
   const viewLog = card.pass === "ci_failed" && failingChecks(pr)[0]?.url
     ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "";
   // Whether a re-run makes sense can hinge on what only you know (say, you freed a quota).
-  const rerun = card.pass === "ci_failed" && !(card.proposals || []).some((p) => p.action === "rerun_checks")
+  const rerun = (card.proposals || []).some((p) => p.action === "rerun_checks") ? ""
+    : card.auto_wait?.manual ? cancelWaitButton(card)
+    : card.pass === "ci_failed" && !card.auto_wait
     ? `<button type="button" class="nc-run" data-pr-action="rerun_checks" data-done-card="${card.id}">${esc(ACTION_LABELS.rerun_checks)}</button>` : "";
   if (card.kind === "running") {
     return `<div class="${cls}"><div class="nc-head"><span class="plan-dot running"></span>${title}</div>
@@ -261,6 +266,7 @@ function serverCardHtml(pr, card, first) {
   const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
   const held = card.auto_held ? `<p class="nc-held">${AUTO_HELD_LABELS[card.auto_action] || AUTO_HELD_LABELS.approve} is on, but this one waits for you: ${esc(card.auto_held)}.</p>`
     : card.auto_wait?.until ? `<p class="nc-held">Auto-approves at ${esc(new Date(card.auto_wait.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}, a few minutes after the push.</p>`
+    : card.auto_wait?.manual ? `<p class="nc-held">Re-runs the failed jobs once the rest of the workflow run finishes.</p>`
     : card.auto_wait ? `<p class="nc-held">Re-runs the failed checks automatically once the running ones finish.</p>` : "";
   const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
@@ -567,6 +573,7 @@ $("#sidebar").addEventListener("click", async (e) => {
     return busy(btn, () => apiCall(`api/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}${node}`), `Couldn't ask ${agentName()}`);
   }
   if ((btn = t("[data-dismiss]"))) return busy(btn, () => apiCall(`api/dismiss?card=${btn.dataset.dismiss}`));
+  if ((btn = t("[data-cancel-wait]"))) return busy(btn, () => apiCall(`api/cancel-wait?card=${btn.dataset.cancelWait}`));
   if ((btn = t("[data-undo]"))) return busy(btn, () => apiCall(`api/undo?card=${btn.dataset.undo}`), "Couldn't undo");
   if ((btn = t("[data-repin]"))) {
     return busy(btn, async () => {
@@ -596,12 +603,10 @@ $("#sidebar").addEventListener("click", async (e) => {
     if (btn.dataset.reviewers) payload.reviewers = btn.dataset.reviewers.split(",");
     if (btn.dataset.method) payload.method = btn.dataset.method;
     return busy(btn, async () => {
-      if (btn.dataset.prAction) {
-        const done = btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : "";
-        await apiCall(`api/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${done}`, { payload });
-      } else {
-        await apiCall(`api/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
-      }
+      const data = btn.dataset.prAction
+        ? await apiCall(`api/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : ""}`, { payload })
+        : await apiCall(`api/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
+      if (data?.queued) return;
       if (field) drafts.delete(field);
       // The server's update and GitHub's catch up in a second or two; show the result now.
       const cp = pr && serverPr(pr);

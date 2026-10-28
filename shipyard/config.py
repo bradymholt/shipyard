@@ -92,6 +92,7 @@ RULE_DEFAULTS = {
     "ask_rereview": {"after_hours": 24},
     "rerequest_review": True,
     "image_sign_off": True,
+    "queue_rerun": True,
     "passes": {
         "feedback": False,
         "ci_failed": "auto",

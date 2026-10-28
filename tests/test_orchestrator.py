@@ -24,6 +24,7 @@ class FakeGitHub:
         self.calls = []
         self.compare = {"files": [{"filename": "a.py", "status": "modified", "additions": 3, "deletions": 1}]}
         self.pr_files = [{"filename": "a.py"}]
+        self.running_runs = set()
 
     def put(self, node, *lists):
         self.nodes[node["id"]] = node
@@ -44,6 +45,8 @@ class FakeGitHub:
 
     def rest(self, method, path, body=None):
         self.calls.append((method, path, body))
+        if path.endswith("/rerun-failed-jobs") and int(path.split("/")[-2]) in self.running_runs:
+            raise GitHubError('403 {"message":"This workflow is already running"}', 403)
         if "/compare/" in path:
             return self.compare
         if path == "/user":
@@ -438,6 +441,30 @@ class CiFailed(OrchestratorCase):
         self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"], [])
         self.assertEqual(self.gh.calls[-1][1], "/repos/o/r/actions/runs/22/rerun-failed-jobs")
+
+    def test_rerun_while_the_run_is_going_waits_for_it(self):
+        self.trust("rerun_checks", False)
+        node = pr_node(ci="FAILURE", contexts=[check_run("rspec", "FAILURE", job=11, run=22)], running=2)
+        self.gh.put(node, "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.gh.running_runs.add(22)
+        self.assertTrue(self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])["queued"])
+        self.assertTrue(self.comp.page_state()["prs"]["o/r#1"]["cards"][0]["auto_wait"]["manual"])
+        self.gh.running_runs.clear()
+        node["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["checkRunCountsByState"] = []
+        self.poll()
+        reruns = [c for c in self.gh.calls if c[1] == "/repos/o/r/actions/runs/22/rerun-failed-jobs"]
+        self.assertEqual(len(reruns), 2)
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"], [])
+
+    def test_rerun_while_the_run_is_going_says_so_with_queueing_off(self):
+        self.trust("rerun_checks", False)
+        self.comp.config["rules"]["queue_rerun"] = False
+        self.gh.put(self.red(), "author:@me")
+        card = self.poll()["o/r#1"]["cards"][0]
+        self.gh.running_runs.add(22)
+        with self.assertRaisesRegex(RuntimeError, "still going"):
+            self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])
 
     def test_trusted_rerun_fires_itself_and_lands_in_handled(self):
         self.gh.put(self.red(), "author:@me")
