@@ -76,6 +76,13 @@ class DeriveMine(unittest.TestCase):
         self.assertEqual(derive(body, snap(head="bbb", **approved,
                                            reviews=[review("APPROVED", id=1, commit="aaa", body="Prefer a map")])), [])
 
+    def test_an_image_only_approval_is_a_sign_off_unless_turned_off(self):
+        gif = snap(decision="APPROVED", reviews=[review("APPROVED", id=1, body='<img alt="Image" src="https://x/y" />')])
+        self.assertEqual(names(derive(snap(), gif)), ["approved"])
+        self.assertEqual(names(derive(snap(), gif, image_sign_off=False)), ["feedback", "approved"])
+        captioned = snap(decision="APPROVED", reviews=[review("APPROVED", id=1, body="![x](https://x/y) rename this")])
+        self.assertEqual(names(derive(snap(), captioned)), ["feedback", "approved"])
+
     def test_push_after_changes_requested_proposes_re_request(self):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", commit="aaa")])
         cur = snap(head="bbb", decision="CHANGES_REQUESTED",

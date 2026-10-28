@@ -104,7 +104,7 @@ def _clip(text, n):
 
 
 def _approval_step(snap, rules):
-    approvers = [r["author"] for r in events.approval_feedback(snap)]
+    approvers = [r["author"] for r in events.approval_feedback(snap, rules.get("image_sign_off", True))]
     if approvers and rules.get("address_feedback"):
         return {"kind": "address_feedback", "label": f"Reply to approval · {len(approvers)}", "tone": "gold",
                 "reviewers": approvers, "approval": True}
@@ -193,7 +193,7 @@ def reactions(event, snap, rules):
                     "title": f"Re-request {', '.join(reviewers)}'s review",
                     "reason": "You pushed after changes were requested.",
                     "payload": {"reviewers": reviewers}})
-    elif name == "merged" and events.approval_feedback(snap):
+    elif name == "merged" and events.approval_feedback(snap, rules.get("image_sign_off", True)):
         out.append({"do": "close_cards", "except": ["feedback"]})
     elif name in ("merged", "closed"):
         out.append({"do": "close_cards"})

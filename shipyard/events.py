@@ -16,9 +16,10 @@ FEEDBACK = {"CHANGES_REQUESTED", "COMMENTED"}
 # An approval whose body is only one of these is a plain sign-off, not feedback to answer.
 SIGN_OFF = re.compile(r"^(lgtm|looks good( to me)?|ship ?it|:shipit:|approved?|nice( work| one)?|"
                       r"great( work)?|thanks?( you)?|ty)?[\s!.,:;)\U0001F300-\U0001FAFF\u2600-\u27BF]*$", re.I)
+IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)|<img\b[^>]*>", re.I)
 
 
-def approval_feedback(snap):
+def approval_feedback(snap, image_sign_off=True):
     """Approving reviews with something still to answer: a thread the approver opened that is
     unresolved without your reply last, or a review body beyond a sign-off that you haven't
     pushed or commented after."""
@@ -32,7 +33,8 @@ def approval_feedback(snap):
         if any(t["comments"][-1].get("author") != viewer for t in threads):
             out.append(r)
             continue
-        if SIGN_OFF.match((r.get("body") or "").strip()):
+        body = r.get("body") or ""
+        if SIGN_OFF.match((IMAGE.sub("", body) if image_sign_off else body).strip()):
             continue
         answered = (r.get("commit") and r["commit"] != snap.get("head")) or any(
             c.get("author") == viewer and (c.get("created") or "") > (r.get("submitted") or "")
@@ -43,9 +45,9 @@ def approval_feedback(snap):
     return out
 
 
-def _feedback_ids(snap):
+def _feedback_ids(snap, image_sign_off=True):
     return ({r["id"] for r in snap.get("reviews") or [] if r.get("state") in FEEDBACK} |
-            {r["id"] for r in approval_feedback(snap)})
+            {r["id"] for r in approval_feedback(snap, image_sign_off)})
 
 
 def requesters(snap):
@@ -62,11 +64,12 @@ def requesters(snap):
     return asked or [r["author"] for r in reviews if r.get("state") in FEEDBACK]
 
 
-def needs_changes(snap):
-    return snap.get("decision") == "CHANGES_REQUESTED" or bool(requesters(snap) or approval_feedback(snap))
+def needs_changes(snap, image_sign_off=True):
+    return (snap.get("decision") == "CHANGES_REQUESTED" or
+            bool(requesters(snap) or approval_feedback(snap, image_sign_off)))
 
 
-def derive(prev, cur):
+def derive(prev, cur, image_sign_off=True):
     events = []
 
     def add(name, key=None, **data):
@@ -79,7 +82,7 @@ def derive(prev, cur):
         if first or prev.get("state") != "MERGED":
             add("merged")
             # Auto-merge can land on the approval itself, before its comments were seen open.
-            approvals = approval_feedback(cur) if cur["mine"] else []
+            approvals = approval_feedback(cur, image_sign_off) if cur["mine"] else []
             if approvals:
                 ids = sorted(str(r["id"]) for r in approvals if r.get("id") is not None)
                 add("feedback", key=f":{','.join(ids)}" if ids else None,
@@ -93,16 +96,16 @@ def derive(prev, cur):
     if cur["mine"]:
         if first:
             add("pr_opened")
-        changes = needs_changes(cur)
+        changes = needs_changes(cur, image_sign_off)
         # A reviewer's comment-only review (each inline reply makes one) is new feedback too.
-        new_feedback = _feedback_ids(cur) - (set() if first else _feedback_ids(prev))
-        if changes and (first or not needs_changes(prev) or new_feedback):
-            ids = sorted(str(i) for i in _feedback_ids(cur) if i is not None)
+        new_feedback = _feedback_ids(cur, image_sign_off) - (set() if first else _feedback_ids(prev, image_sign_off))
+        if changes and (first or not needs_changes(prev, image_sign_off) or new_feedback):
+            ids = sorted(str(i) for i in _feedback_ids(cur, image_sign_off) if i is not None)
             reviewers = requesters(cur)
-            reviewers += [r["author"] for r in approval_feedback(cur) if r["author"] not in reviewers]
+            reviewers += [r["author"] for r in approval_feedback(cur, image_sign_off) if r["author"] not in reviewers]
             add("feedback", key=f":{','.join(ids)}" if ids else None, reviewers=reviewers)
         if (not first and prev.get("head") != cur.get("head") and
-                needs_changes(prev)):
+                needs_changes(prev, image_sign_off)):
             pending = set(cur.get("requested") or [])
             reviewers = [r for r in requesters(cur) if r not in pending]
             if reviewers:

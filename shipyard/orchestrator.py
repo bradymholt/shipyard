@@ -319,7 +319,7 @@ class Orchestrator:
     def ingest(self, snap):
         prev = self.db.pr(snap["key"])
         self.db.save_pr(snap)
-        for event in derive(prev, snap):
+        for event in derive(prev, snap, self.config["rules"]["image_sign_off"]):
             # Activity holds Shipyard's own actions; the page reads GitHub's timeline itself.
             if not self.db.record_event(snap["key"], event):
                 continue
