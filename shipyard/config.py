@@ -82,6 +82,7 @@ AGENT_DEFAULTS = {
 # set to false shows no chip and runs no pass. Thresholds take their window here.
 RULE_DEFAULTS = {
     "address_feedback": {"prompt": "Address the review feedback on {url} (branch {branch})"},
+    "resolve_conflicts": {"prompt": "Merge {base} into {branch} and resolve the conflicts on {url}"},
     "fix_ci": True,
     "merge": True,
     "review": True,
@@ -98,7 +99,7 @@ RULE_DEFAULTS = {
     "instructions": {},  # per pass, added to its prompt
 }
 RULE_THRESHOLDS = {"nudge": "after_hours", "ask_rereview": "after_hours"}
-RULE_PROMPTS = {"address_feedback"}
+RULE_PROMPTS = {"address_feedback", "resolve_conflicts"}
 PASS_MODES = ("auto", "ask", False)
 
 # Trust flags: every action type but re-review approval and re-running flaky checks starts manual. "when" sets the confidence an

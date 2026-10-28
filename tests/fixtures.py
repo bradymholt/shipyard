@@ -16,7 +16,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
             contexts=None, requested=(), reviews=(), threads=(), draft=False, my_review=None,
             updated="2026-10-20T10:00:00Z", requested_at=None, committed="2026-10-20T09:00:00Z",
             created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=(), running=0,
-            title=None, merged_at=None, standing=()):
+            title=None, merged_at=None, standing=(), mergeable="MERGEABLE"):
     """A PullRequest node shaped like the server's detail query returns."""
     requested_at = requested_at or {}
     return copy.deepcopy({
@@ -26,7 +26,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
         "body": "Does a thing.", "headRefName": branch, "headRefOid": head, "baseRefName": "main",
         "additions": 10, "deletions": 2, "changedFiles": 3,
         "repository": {"nameWithOwner": repo}, "author": {"login": author},
-        "reviewDecision": decision, "mergeable": "MERGEABLE", "autoMergeRequest": None,
+        "reviewDecision": decision, "mergeable": mergeable, "autoMergeRequest": None,
         "labels": {"nodes": []}, "viewerCanEnableAutoMerge": True, "viewerCanDisableAutoMerge": False,
         "viewerLatestReview": my_review,
         "latestOpinionatedReviews": {"nodes": [{"state": s, "author": {"login": a}} for s, a in standing]},

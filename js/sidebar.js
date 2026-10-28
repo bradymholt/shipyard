@@ -113,16 +113,16 @@ function continueButton(pr) {
   return target ? sessionLink(target.path, target.session, `Continue in ${esc(agentName())}`, "btn-link", prKey(pr)) : "";
 }
 
-// A new session with the feedback prompt typed in; agents without a prompt URL resume instead.
-function respondButton(pr) {
+// A new session with the rule's prompt typed in; agents without a prompt URL resume instead.
+function promptButton(pr, rule, verb) {
   const url = state.agent?.prompt_url;
-  const template = state.rules?.address_feedback?.prompt;
+  const template = state.rules?.[rule]?.prompt;
   if (!url || !template) return continueButton(pr);
   const prompt = template.replaceAll("{url}", pr.url).replaceAll("{repo}", pr.repository?.nameWithOwner || "")
-    .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "");
+    .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "").replaceAll("{base}", pr.baseRefName || "");
   const path = continueTarget(pr)?.path || worktreeFor(pr)?.path || serverPr(pr)?.path || "";
   const href = url.replaceAll("{prompt}", encodeURIComponent(prompt)).replaceAll("{path}", encodeURIComponent(path));
-  return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">Address in ${esc(agentName())}</a>`;
+  return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">${esc(verb)} in ${esc(agentName())}</a>`;
 }
 
 function sidebarHeader(pr) {
@@ -249,7 +249,7 @@ function serverCardHtml(pr, card, first) {
   }
   const chip = card.pass === "feedback"
     ? serverSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
-  const rerequest = card.pass === "feedback" ? respondButton(pr) + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
+  const rerequest = card.pass === "feedback" ? promptButton(pr, "address_feedback", "Address") + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
   const openKept = card.kept
     ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
   const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
@@ -298,8 +298,12 @@ function derivedCardHtml(pr, chip) {
     const verb = chip.approval ? "approved with comments"
       : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
     body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
-    actionsHtml = respondButton(pr) + (chip.approval
+    actionsHtml = promptButton(pr, "address_feedback", "Address") + (chip.approval
       ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
+  } else if (chip.kind === "resolve_conflicts") {
+    body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;
+    actionsHtml = promptButton(pr, "resolve_conflicts", "Resolve")
+      + `<a class="btn-link" href="${esc(pr.url)}/conflicts" target="_blank" rel="noopener">View on GitHub</a>`;
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
       review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];

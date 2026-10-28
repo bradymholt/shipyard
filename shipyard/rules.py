@@ -150,12 +150,16 @@ def next_steps(snap, rules, cards=()):
     approval = _approval_step(snap, rules)
     if approval:
         out.append(approval)
+    conflicting = snap.get("mergeable") == "CONFLICTING"
+    if conflicting and rules.get("resolve_conflicts"):
+        out.append({"kind": "resolve_conflicts", "label": "Resolve conflicts", "tone": "red",
+                    "title": f"Conflicts with {snap.get('base')}"})
     if snap.get("ci") in events.FAILING and rules.get("fix_ci"):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
         out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
     if (snap.get("decision") == "APPROVED" and snap.get("ci") in (None, "SUCCESS") and not snap.get("auto_merge")
-            and not snap.get("draft") and rules.get("merge")):
+            and not snap.get("draft") and not conflicting and rules.get("merge")):
         out.append({"kind": "merge", "label": "Merge", "tone": "green"})
     return out
 
