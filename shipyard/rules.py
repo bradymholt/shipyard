@@ -54,6 +54,23 @@ def waiting_since(snap):
     return max(times) if times else snap.get("ready_at") or snap.get("created")
 
 
+def author_moved_at(snap):
+    """When the author last pushed or commented after your changes request, while it still
+    stands and they haven't asked you to look again; None otherwise."""
+    review = snap.get("my_review") or {}
+    since = review.get("submitted")
+    if review.get("state") != "CHANGES_REQUESTED" or snap.get("requested_me") or not since:
+        return None
+    author = snap.get("author")
+    times = [c.get("created") for t in snap.get("threads") or [] for c in t.get("comments") or []
+             if c.get("author") == author]
+    times += [c.get("created") for c in snap.get("comments") or [] if c.get("author") == author]
+    if review.get("commit") != snap.get("head"):
+        times.append(snap.get("last_commit_at"))
+    times = [t for t in times if t and t > since]
+    return max(times) if times else None
+
+
 def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
     now = now or datetime.now(timezone.utc)
     if snoozed_until:
@@ -61,11 +78,16 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
         if until and until > now:
             return {"kind": "snoozed", "label": f"Snoozed · {until.strftime('%b %-d')}",
                     "until": snoozed_until}
-    if snap.get("state") != "OPEN" or not snap.get("mine"):
-        return None
-    if snap.get("draft"):
+    if snap.get("state") != "OPEN" or snap.get("draft"):
         return None
     rule = rules.get("nudge")
+    if not snap.get("mine"):
+        moved = author_moved_at(snap)
+        waited = min((h for h in (hours_since(moved, now), hours_since(nudged_at, now)) if h is not None), default=None)
+        if rule and moved and waited >= rule["after_hours"]:
+            age = f"{int(waited // 24)}d" if waited >= 24 else f"{int(waited)}h"
+            return {"kind": "nudge", "label": f"Nudge author · {age}", "author": snap.get("author")}
+        return None
     waiting_on = [r for r in snap.get("requested") or []]
     if rule and waiting_on and snap.get("decision") not in ("APPROVED", "CHANGES_REQUESTED"):
         # A nudge restarts the clock, so the chip comes back only after another full wait.

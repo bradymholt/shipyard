@@ -279,6 +279,9 @@ function derivedCardHtml(pr, chip) {
   if (chip.kind === "merge") {
     body = "Approved and checks are green.";
     actionsHtml = run("merge", "Merge") + (pr.viewerCanEnableAutoMerge ? run("enable_auto_merge", "Enable auto-merge") : "");
+  } else if (chip.kind === "nudge" && chip.author) {
+    body = `@${chip.author} updated this after you requested changes but hasn't asked you to look again. The nudge posts as a PR comment under your name:`;
+    actionsHtml = textField(field, `@${chip.author} is this ready for another look? Re-request my review when it is and I'll take a pass. Thanks!`) + run("nudge", "Post nudge");
   } else if (chip.kind === "nudge") {
     const owner = (pr.repository?.nameWithOwner || "").split("/")[0];
     const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
