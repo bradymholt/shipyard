@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from shipyard.config import validate_config
-from shipyard.server import Handler
+from shipyard.server import Handler, page_version
 
 
 class FakeOrchestrator:
@@ -195,6 +195,18 @@ class Endpoints(ServerCase):
         conn.close()
         self.assertEqual((res.status, res.getheader("Content-Type"), res.getheader("Cache-Control")),
                          (200, "text/javascript", "no-cache"))
+
+
+class PageVersion(unittest.TestCase):
+    def test_changes_when_a_page_file_does(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "js").mkdir()
+            script = Path(tmp) / "js" / "main.js"
+            script.write_text("a")
+            before = page_version(tmp)
+            self.assertEqual(page_version(tmp), before)
+            script.write_text("ab")
+            self.assertNotEqual(page_version(tmp), before)
 
 
 if __name__ == "__main__":

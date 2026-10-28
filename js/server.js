@@ -4,6 +4,7 @@ import { clip, esc, refreshAgoLabels, showError } from "./html.js";
 import { applyServerPrs, githubProblem, lastPollAt, resetData, updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
 import { renderRepoSelect, renderViewsList } from "./settings.js";
+import { hasUnsentText } from "./sidebar.js";
 
 export const getRepos = () => state.views.views;
 
@@ -114,6 +115,9 @@ export function connectServerEvents() {
       state.serverState = JSON.parse(e.data);
     } catch { return; }
     if (lastPollAt() !== polledAt || githubProblem()) state.refreshing = false;
+    if (state.pageVersion && state.serverState.pageVersion && state.serverState.pageVersion !== state.pageVersion) {
+      reloadWhenIdle();
+    }
     const config = state.serverState.config;
     if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER, approveReplies: config.approveReplies || [] });
     applyViews();
@@ -166,6 +170,19 @@ export function serverStatusHtml() {
 const FOCUS_POLL_MS = 30 * 1000;
 
 // A poll re-scans checkouts too, so ask for one or the other.
+// New page code is on disk: reload once nothing would be lost, right away for a hidden tab.
+let reloadTimer = null;
+
+function reloadWhenIdle() {
+  const tryReload = () => {
+    const busy = document.querySelector("dialog[open]") || hasUnsentText()
+      || document.activeElement?.matches("input, textarea, select, [contenteditable]");
+    if (document.hidden || !busy) location.reload();
+  };
+  if (!reloadTimer) reloadTimer = setInterval(tryReload, 5000);
+  tryReload();
+}
+
 export function refreshOnFocus() {
   if (document.hidden) return;
   if (serverLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {

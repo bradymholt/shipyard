@@ -5,6 +5,7 @@ checkouts (once as JSON and as a Server-Sent Events stream), the GitHub reads th
 Binds to localhost. Every request must carry a localhost Host header (against DNS
 rebinding), and every mutation must also come from the page's own origin with the
 token written into the page it serves."""
+import hashlib
 import http.server
 import json
 import re
@@ -18,6 +19,15 @@ from .settings import MISSING
 
 MAX_BODY = 1_000_000
 SSE_KEEPALIVE = 15
+PAGE_FILES = ("index.html", "app.css", "js/*.js")
+
+
+def page_version(directory):
+    """Changes whenever a file the page loads does, so an open tab knows to reload. A
+    pull that touches only the page doesn't restart the server, so this is read live."""
+    stamps = sorted((str(p.relative_to(directory)), p.stat().st_mtime_ns, p.stat().st_size)
+                    for pattern in PAGE_FILES for p in Path(directory).glob(pattern))
+    return hashlib.sha1(repr(stamps).encode()).hexdigest()[:12]
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -137,7 +147,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """index.html with the session token and config written in, so the page can POST
         without first asking for them."""
         boot = json.dumps({**page_config(self.orchestrator.config), "token": self.session_token,
-                           "views": self.orchestrator.views()}).replace("<", "\\u003c")
+                           "views": self.orchestrator.views(),
+                           "pageVersion": page_version(self.directory)}).replace("<", "\\u003c")
         tag = f'<script id="shipyard-boot" type="application/json">{boot}</script>\n</head>'
         html = Path(self.directory, "index.html").read_text().replace("</head>", tag, 1)
         body = html.encode()
@@ -165,7 +176,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if sent_merged != self.orchestrator.merged_version:
                         sent_merged = self.orchestrator.merged_version
                         self.wfile.write(f"event: merged\ndata: {json.dumps(self.orchestrator.recent_merged)}\n\n".encode())
-                    state = self.orchestrator.page_state()
+                    state = {**self.orchestrator.page_state(), "pageVersion": page_version(self.directory)}
                     status = state.get("status") or {}
                     # Every poll bumps the version and lastPoll; only the rest is worth a re-render.
                     content = json.dumps({**state, "version": None,
