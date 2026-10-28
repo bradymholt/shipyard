@@ -156,7 +156,7 @@ class MemoryChips(unittest.TestCase):
     def test_nudge_author_who_updated_after_changes_requested(self):
         mine = {"databaseId": 7, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-22T10:00:00Z", "commit": {"oid": "old"}}
         s = snap(author="alice", my_review=mine, committed="2026-10-23T10:00:00Z")
-        self.assertEqual(rules.memory_chip(s, RULES, NOW), {"kind": "nudge", "label": "Nudge author · 1d", "author": "alice"})
+        self.assertEqual(rules.memory_chip(s, RULES, NOW), {"kind": "nudge", "label": "Ask for re-review · 1d", "author": "alice"})
         self.assertIsNone(rules.memory_chip(s, RULES, NOW, nudged_at="2026-10-24T02:00:00Z"))
         self.assertIsNone(rules.memory_chip(snap(author="alice", my_review=mine, requested=["me"],
                                                  committed="2026-10-23T10:00:00Z"), RULES, NOW))
