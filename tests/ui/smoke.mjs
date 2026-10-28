@@ -101,6 +101,7 @@ try {
   check(await page.locator('.card[data-key="o/r#99"] .wt-links').count() === 1, "a merged card keeps its worktree links");
   check((await chipText(page, 98))?.includes("Reply to approval · 1"), "merged before you answered the approval → Reply to approval");
   check(await page.locator('.card[data-key="o/r#99"] .next-row').count() === 0, "a merged card without approval comments gets no chip");
+  check(await chipText(page, 110) === "Resolve conflicts", "an approved PR with conflicts asks you to resolve them, not merge");
   await page.locator('.card[data-key="o/r#98"] .next-row').click();
   await page.waitForSelector("#sidebar .next-card");
   check((await page.locator("#sidebar").locator(".next-card").first().textContent()).includes("I'd prefer a Map") &&

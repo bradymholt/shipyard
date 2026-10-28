@@ -212,6 +212,7 @@ class NextSteps(unittest.TestCase):
             (snap(**red), ["Fix CI · rspec"]),
             (snap(**cr, **red), ["Address feedback · 1", "Fix CI · rspec"]),
             (snap(decision="APPROVED"), ["Merge"]),
+            (snap(decision="APPROVED", mergeable="CONFLICTING"), ["Resolve conflicts"]),
             (snap(**cr, threads=[{"body": "Typo", "author": "me"}]), ["Re-request review · 1"]),
             (snap(**cr, requested=["rev"]), []),
             (snap(**approved), ["Reply to approval · 1", "Merge"]),

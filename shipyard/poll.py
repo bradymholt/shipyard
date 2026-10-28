@@ -24,7 +24,7 @@ query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 50, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
-      id updatedAt isDraft reviewDecision headRefOid
+      id updatedAt isDraft reviewDecision headRefOid mergeable
       commits(last: 1) { nodes { commit { statusCheckRollup { state contexts {
         checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
     } }
@@ -161,7 +161,8 @@ def signature(node):
     commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
     rollup = commit.get("statusCheckRollup") or {}
     return "|".join(str(v) for v in (node.get("updatedAt"), node.get("headRefOid"), rollup.get("state"),
-                                     checks_running(rollup), node.get("reviewDecision"), node.get("isDraft")))
+                                     checks_running(rollup), node.get("reviewDecision"), node.get("isDraft"),
+                                     node.get("mergeable")))
 
 
 def reviewer_name(rr):
