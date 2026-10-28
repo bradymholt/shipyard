@@ -163,11 +163,11 @@ FIELDS = [
            help="When your review is requested.", heading="Reviews"),
     _field("rules", ("rules", "re_review"), "switch", "Re-review", lambda cfg: cfg["rules"]["re_review"],
            help="When a PR you reviewed is ready for another look."),
-    _field("rules", ("rules", "ask_rereview"), "switch", "Ask for re-review",
+    _field("rules", ("rules", "ask_rereview"), "switch", "Re-request your review",
            lambda cfg: cfg["rules"]["ask_rereview"] is not False,
            help="When an author updated a PR you requested changes on without asking you back, for a while.",
            sentence="When an author updated a PR you requested changes on without asking you back, for {after_hours} hours."),
-    _field("rules", ("rules", "ask_rereview", "after_hours"), "number", "Ask after (hours)",
+    _field("rules", ("rules", "ask_rereview", "after_hours"), "number", "Re-request after (hours)",
            lambda cfg: _rule_option(cfg, "ask_rereview", "after_hours"), parent=("rules", "ask_rereview")),
 
     *[f for name, step, help, actions in PASS_GROUPS for f in [

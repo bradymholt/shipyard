@@ -82,11 +82,10 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
         return None
     if not snap.get("mine"):
         rule = rules.get("ask_rereview")
-        moved = author_moved_at(snap)
-        waited = min((h for h in (hours_since(moved, now), hours_since(nudged_at, now)) if h is not None), default=None)
-        if rule and moved and waited >= rule["after_hours"]:
+        waited = hours_since(author_moved_at(snap), now)
+        if rule and waited is not None and waited >= rule["after_hours"]:
             age = f"{int(waited // 24)}d" if waited >= 24 else f"{int(waited)}h"
-            return {"kind": "nudge", "label": f"Ask for re-review · {age}", "author": snap.get("author")}
+            return {"kind": "rerequest_mine", "label": f"Re-request review · {age}", "author": snap.get("author")}
         return None
     rule = rules.get("nudge")
     waiting_on = [r for r in snap.get("requested") or []]
