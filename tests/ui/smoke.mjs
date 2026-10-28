@@ -182,6 +182,8 @@ try {
   await page.locator('.tab[data-filter="review"]').click();
   await page.waitForSelector('.card[data-key="o/r#201"] .next-row');
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
+  check(/^\d+ waiting on you · oldest requested .+ ago · \d+ reviewed this week$/.test(await page.locator("#list-title .review-load").textContent()),
+    "Reviews shows how many wait on you, the oldest request, and this week's reviews");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
   check(await page.locator('.card[data-key="o/r#203"]').count() === 1, "a comment after your changes request keeps the PR on Reviews");
   check((await page.locator('.card[data-key="o/r#203"] .review-badge').allTextContents()).some((t) => t.includes("Author replied · 1 of 3")),

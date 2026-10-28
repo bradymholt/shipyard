@@ -1115,6 +1115,8 @@ class Orchestrator:
                 "state": snap.get("state"), "dropped": bool(snap.get("dropped")),
                 "openThreads": sum(1 for t in snap.get("threads") or [] if not t.get("resolved")),
                 "snoozedUntil": self.db.snooze(key),
+                "waitingSince": ((snap.get("requested_at") or {}).get(snap.get("viewer")) or snap.get("ready_at")
+                                 or snap.get("created")) if snap.get("requested_me") else None,
                 "cards": open_cards,
                 "handled": [c for c in cards if c["status"] == "handled"],
                 "planReady": any(c["kind"] in ("pass", "answer") for c in next_cards),
