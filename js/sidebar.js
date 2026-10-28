@@ -608,3 +608,11 @@ $("#sidebar").addEventListener("click", async (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && sidebarKey && !document.querySelector("dialog[open]")) closeSidebar();
 });
+
+// A click on the board's empty space closes the sidebar; cards and controls keep their own behavior.
+document.addEventListener("click", (e) => {
+  // A sidebar button may re-render before this runs, detaching its target.
+  if (!sidebarKey || !e.target.isConnected || document.querySelector("dialog[open]")) return;
+  if (e.target.closest("#sidebar, .card[data-key], dialog, a, button, input, select, textarea, label, summary")) return;
+  closeSidebar();
+});

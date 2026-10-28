@@ -204,6 +204,11 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-review.png` });
   await page.keyboard.press("Escape");
   check(!(await sb.isVisible()), "Esc closes the sidebar");
+  await page.locator(".card[data-key] .card-meta").first().click();
+  await sb.locator(".nc-head").first().click();
+  check(await sb.isVisible(), "a click inside the sidebar keeps it open");
+  await page.mouse.click(8, 890);
+  check(!(await sb.isVisible()), "a click on the board's empty space closes the sidebar");
   check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 
   check(mergedCalls.length === 0, "merged history arrives with the server's pushes, without the page asking");
