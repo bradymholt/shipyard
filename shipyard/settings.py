@@ -154,6 +154,8 @@ FIELDS = [
     _field("rules", ("rules", "resolve_conflicts", "prompt"), "text", "Resolve button prompt",
            lambda cfg: _rule_option(cfg, "resolve_conflicts", "prompt"), parent=("rules", "resolve_conflicts"),
            help="Typed into a new session by the Resolve button: {url}, {repo}, {number}, {branch}, {base}."),
+    _field("rules", ("rules", "update_stack"), "switch", "Update stacked branch", lambda cfg: cfg["rules"]["update_stack"],
+           help="When the PR yours is stacked on has commits your branch doesn't."),
     _field("rules", ("rules", "rerequest_review"), "switch", "Re-request review",
            lambda cfg: cfg["rules"]["rerequest_review"],
            help="When you've pushed or replied after changes were requested."),

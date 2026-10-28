@@ -53,6 +53,8 @@ class DemoGitHub(FakeGitHub):
         return super().graphql(query, variables)
 
     def rest(self, method, path, body=None):
+        if path.endswith("/compare/h111...h110"):
+            return {"ahead_by": 3}
         if path.endswith("/requested_reviewers"):
             number = int(path.split("/")[-2])
             node = next(n for n in self.nodes.values() if n["number"] == number)
@@ -95,6 +97,8 @@ def main():
            "author:@me")
     gh.put(pr_node(110, head="h110", branch="me/schema", decision="APPROVED", mergeable="CONFLICTING",
                    reviews=[{"state": "APPROVED", "author": "jm", "body": ""}]), "author:@me")
+    gh.put(pr_node(111, head="h111", branch="me/schema-docs", base="me/schema", requested=["jm"],
+                   requested_at={"jm": ago(hours=1)}), "author:@me")
     lookups = pr_node(98, head="h98", branch="me/merge-on-approval", requested=["jm"])
     gh.put(lookups, "author:@me")
     gh.put(pr_node(104, head="h104", branch="me/onboarding", draft=True, committed=ago(days=5),

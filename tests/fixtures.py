@@ -16,14 +16,15 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
             contexts=None, requested=(), reviews=(), threads=(), draft=False, my_review=None,
             updated="2026-10-20T10:00:00Z", requested_at=None, committed="2026-10-20T09:00:00Z",
             created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=(), running=0,
-            title=None, merged_at=None, standing=(), mergeable="MERGEABLE"):
+            title=None, merged_at=None, standing=(), mergeable="MERGEABLE",
+            base="main"):
     """A PullRequest node shaped like the server's detail query returns."""
     requested_at = requested_at or {}
     return copy.deepcopy({
         "id": f"PR_{repo}_{number}", "number": number, "title": title or f"PR {number}",
         "url": f"https://github.com/{repo}/pull/{number}", "state": state, "isDraft": draft,
         "createdAt": created, "updatedAt": updated, "mergedAt": merged_at, "closedAt": None,
-        "body": "Does a thing.", "headRefName": branch, "headRefOid": head, "baseRefName": "main",
+        "body": "Does a thing.", "headRefName": branch, "headRefOid": head, "baseRefName": base,
         "additions": 10, "deletions": 2, "changedFiles": 3,
         "repository": {"nameWithOwner": repo}, "author": {"login": author},
         "reviewDecision": decision, "mergeable": mergeable, "autoMergeRequest": None,

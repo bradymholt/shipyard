@@ -110,6 +110,8 @@ class Orchestrator:
         self.info_cache = {}
         self.merged_cache = {}  # (view, kind, cursor) -> (time, page)
         self.pin_misses = {}  # PR key -> the transcripts a lookup found no session in
+        self.stacks = {}  # PR key -> the open PR it's stacked on and how far behind it the branch is
+        self.behind_cache = {}  # (repo, parent head, child head) -> commits the child is missing
         self.recent_merged = {kind: [] for kind in MERGED_SEARCHES}
         self.merged_version = 0  # bumped when recent_merged changes, so the page gets it only then
         self.merged_checked = 0
@@ -283,6 +285,7 @@ class Orchestrator:
                 if snap["mine"] and not any(p["status"] in ("queued", "running")
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
+        self.refresh_stacks()
         self.status = {"github": "ok", "lastPoll": now_iso()}
         self.db.set_poll_memory({**self.poller.memory(), "viewer": viewer, "lastPoll": self.status["lastPoll"]})
         self.publish()  # open PRs first; merged history goes out as its own event
@@ -290,6 +293,28 @@ class Orchestrator:
         self.retry_waiting_actions()
         self.db.prune()
         self.publish()
+
+    def refresh_stacks(self):
+        """For each of your open PRs based on another open PR's branch, how many of that
+        PR's commits it lacks. A compare of two commits never changes, so each is asked once."""
+        open_prs = [s for s in self.db.prs() if s.get("state") == "OPEN" and not s.get("dropped")]
+        by_branch = {(s["repo"], s.get("branch")): s for s in open_prs}
+        stacks, cache = {}, {}
+        for snap in open_prs:
+            parent = by_branch.get((snap["repo"], snap.get("base")))
+            if not snap["mine"] or not parent or parent is snap:
+                continue
+            pair = (snap["repo"], parent.get("head"), snap.get("head"))
+            if pair not in self.behind_cache:
+                try:
+                    out = self.github.rest("GET", f"/repos/{snap['repo']}/compare/{pair[2]}...{pair[1]}")
+                    self.behind_cache[pair] = int((out or {}).get("ahead_by") or 0)
+                except Exception as e:
+                    print(f"Warning: comparing {snap['key']} with #{parent['number']} failed: {e}")
+                    continue
+            cache[pair] = self.behind_cache[pair]
+            stacks[snap["key"]] = {"stack_parent": parent["number"], "behind_parent": cache[pair]}
+        self.stacks, self.behind_cache = stacks, cache
 
     def ingest(self, snap):
         prev = self.db.pr(snap["key"])
@@ -785,6 +810,8 @@ class Orchestrator:
             self.db.log(key, "continued in " + self.config["agent"]["name"])
             return {"ok": True}
         result = actions.run(self.github, action, snap, payload, self.action_context(snap))
+        if action == "update_branch":
+            self.stacks.pop(key, None)
         if action == "rerequest_review":
             # Next steps come from the snapshot, so record the request before the poll sees it.
             requested = snap.get("requested") or []
@@ -1063,7 +1090,7 @@ class Orchestrator:
         prs = {}
         for snap in self.db.prs():
             key = snap["key"]
-            view = {**snap, **(snap.get("pending") or {})}
+            view = {**snap, **(snap.get("pending") or {}), **self.stacks.get(key, {})}
             pin = self.db.pin(key)
             session = None
             if pin and pin.get("session_id") and pin.get("path"):

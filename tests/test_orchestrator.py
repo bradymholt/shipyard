@@ -292,6 +292,22 @@ class AfterAction(OrchestratorCase):
         self.assertFalse(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
 
 
+class Stacks(OrchestratorCase):
+    def test_a_branch_behind_the_pr_it_is_stacked_on_gets_an_update_step(self):
+        self.gh.put(pr_node(1, head="p1", branch="parent"), "author:@me")
+        self.gh.put(pr_node(2, head="c1", branch="child", base="parent"), "author:@me")
+        self.gh.compare = {"ahead_by": 2}
+        steps = self.poll()["o/r#2"]["steps"]
+        self.assertEqual([s["label"] for s in steps], ["Update from #1"])
+        self.assertIn(("GET", "/repos/o/r/compare/c1...p1", None), self.gh.calls)
+        self.gh.calls.clear()
+        self.poll()
+        self.assertFalse([c for c in self.gh.calls if "/compare/" in c[1]], "an unchanged pair isn't compared again")
+        self.comp.do_action("o/r#2", "update_branch", {"method": "rebase"})
+        self.assertEqual(self.gh.calls[-1][2]["m"], "REBASE")
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#2"]["steps"], [])
+
+
 class ChangesRequested(OrchestratorCase):
     def setUp(self):
         super().setUp()
