@@ -86,12 +86,15 @@ function reviewUpdateBadge(pr) {
 }
 
 function authorRepliedBadge(pr) {
-  const mine = (pr.reviewThreads?.nodes || [])
-    .filter((t) => !t.isResolved && t.opener?.nodes?.[0]?.author?.login === state.viewer);
-  const replied = mine.filter((t) => t.comments?.nodes?.[0]?.author?.login === pr.author?.login).length;
   const comments = pr.recentComments?.nodes || [];
   const since = [pr.viewerLatestReview?.submittedAt,
     ...comments.filter((c) => c.author?.login === state.viewer).map((c) => c.createdAt)].filter(Boolean).sort().at(-1);
+  const mine = (pr.reviewThreads?.nodes || [])
+    .filter((t) => !t.isResolved && t.opener?.nodes?.[0]?.author?.login === state.viewer);
+  const replied = mine.filter((t) => {
+    const last = t.comments?.nodes?.[0];
+    return last?.author?.login === pr.author?.login && (!since || !last.createdAt || last.createdAt > since);
+  }).length;
   const commented = !!since && comments.some((c) => c.author?.login === pr.author?.login && c.createdAt > since);
   if (!replied && !commented) return "";
   const count = replied && replied < mine.length ? ` · ${replied} of ${mine.length}` : "";

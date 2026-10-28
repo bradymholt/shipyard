@@ -50,7 +50,7 @@ DETAIL_FIELDS = """
   reviewThreads(first: 50) { nodes {
     id isResolved isOutdated path line
     comments(first: 20) { nodes { databaseId body createdAt diffHunk author { login } } }
-    latest: comments(last: 1) { nodes { author { login } } }
+    latest: comments(last: 1) { nodes { createdAt author { login } } }
   } }
   commits(last: 1) { nodes { commit {
     oid committedDate
@@ -107,7 +107,7 @@ query($q: String!, $after: String, $first: Int!) {
       pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
       reviewThreads(first: 20) { nodes { isResolved
         comments(first: 1) { nodes { author { login } } }
-        latest: comments(last: 1) { nodes { author { login } } } } }
+        latest: comments(last: 1) { nodes { createdAt author { login } } } } }
       commits(last: 1) { nodes { commit { oid statusCheckRollup { state contexts(first: 30) { nodes {
         __typename
         ... on CheckRun { name conclusion detailsUrl }
@@ -234,7 +234,8 @@ def page_pr(node):
         "recentComments": {"nodes": comments.get("nodes") or []},
         "reviewThreads": {"nodes": [{"isResolved": bool(t.get("isResolved")),
                                      "opener": {"nodes": first_author(t.get("comments"))},
-                                     "comments": {"nodes": first_author(t.get("latest"))}}
+                                     "comments": {"nodes": [{"author": n.get("author"), "createdAt": n.get("createdAt")}
+                                                            for n in ((t.get("latest") or {}).get("nodes") or [])[:1]]}}
                                     for t in (node.get("reviewThreads") or {}).get("nodes") or []]},
         "commits": {"nodes": [{"commit": {"oid": commit.get("oid"), "statusCheckRollup": rollup and {
             "state": ci_state(rollup),

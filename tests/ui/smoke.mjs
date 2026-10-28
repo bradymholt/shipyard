@@ -182,8 +182,8 @@ try {
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
   check(await page.locator('.card[data-key="o/r#203"]').count() === 1, "a comment after your changes request keeps the PR on Reviews");
-  check((await page.locator('.card[data-key="o/r#203"] .review-badge').allTextContents()).some((t) => t.includes("Author replied · 1 of 2")),
-    "a reply from the author on your thread shows Author replied");
+  check((await page.locator('.card[data-key="o/r#203"] .review-badge').allTextContents()).some((t) => t.includes("Author replied · 1 of 3")),
+    "an author's thread reply counts only when it came after your latest review");
   check((await page.locator('.card.merged[data-key="o/r#97"] .review-badge').allTextContents()).some((t) => t.includes("Author replied")),
     "an author's reply after merge shows Author replied on the Recently merged card");
   check((await page.locator('.card.merged[data-key="o/r#96"] .review-badge').allTextContents()).some((t) => t.includes("Author replied")),

@@ -116,7 +116,7 @@ class Snapshot(unittest.TestCase):
                        reviews=[{"state": "APPROVED", "author": "rev", "body": "lgtm"}],
                        threads=[{"body": "why?", "author": VIEWER, "replies": ["you", "me2"]}])
         node["comments"]["totalCount"] = 4
-        node["reviewThreads"]["nodes"][0]["latest"] = {"nodes": [{"author": {"login": "me2"}}]}
+        node["reviewThreads"]["nodes"][0]["latest"] = {"nodes": [{"author": {"login": "me2"}, "createdAt": "T"}]}
         page = snapshot(node, VIEWER)["page"]
         self.assertEqual(page["comments"], {"totalCount": 4})
         self.assertEqual(page["recentComments"]["nodes"][0]["author"], {"login": "rev"})
@@ -124,7 +124,7 @@ class Snapshot(unittest.TestCase):
                                                           "commit": {"oid": "aaa"}}])
         self.assertEqual(page["reviewThreads"]["nodes"], [{"isResolved": False,
                                                           "opener": {"nodes": [{"author": {"login": VIEWER}}]},
-                                                          "comments": {"nodes": [{"author": {"login": "me2"}}]}}])
+                                                          "comments": {"nodes": [{"author": {"login": "me2"}, "createdAt": "T"}]}}])
         [ctx] = page["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"]
         self.assertEqual((ctx["name"], set(ctx)), ("rspec", {"__typename", "name", "conclusion", "detailsUrl"}))
         self.assertIsNone(snapshot(pr_node(ci=None), VIEWER)["page"]["commits"]["nodes"][0]["commit"]["statusCheckRollup"])

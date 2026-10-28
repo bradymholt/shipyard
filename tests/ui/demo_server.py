@@ -114,7 +114,9 @@ def main():
                    threads=[{"body": "Handle empty export", "author": "me"}], updated=ago(hours=5)),
            "review-requested:@me", "reviewed-by:@me")
     gh.put(pr_node(203, author="cy", head="h203", branch="cy/follow-up", standing=[("CHANGES_REQUESTED", "me")],
-                   threads=[{"body": "Rename this", "author": "me", "replies": ["cy"]}, {"body": "And this", "author": "me"}],
+                   threads=[{"body": "Rename this", "author": "me", "replies": ["cy"], "at": ago(hours=2)},
+                            {"body": "And this", "author": "me"},
+                            {"body": "Old one", "author": "me", "replies": ["cy"], "at": ago(days=2)}],
                    my_review={"databaseId": 10, "state": "COMMENTED", "submittedAt": ago(days=1),
                               "commit": {"oid": "h203"}, "onBehalfOf": {"nodes": []}}), "reviewed-by:@me")
     gh.put(pr_node(204, author="di", head="h204", branch="di/drive-by",
@@ -123,7 +125,8 @@ def main():
     gh.merged["author:@me"] = [pr_node(99, head="h99", branch="me/old-feature", state="MERGED", merged_at=ago(hours=20))]
     gh.merged["reviewed-by:@me"] = [
         pr_node(97, author="cy", head="h97", state="MERGED", merged_at=ago(hours=5),
-                threads=[{"body": "Why?", "author": "me", "replies": ["cy"]}], my_review=approved(ago(hours=6), "h97")),
+                threads=[{"body": "Why?", "author": "me", "replies": ["cy"], "at": ago(hours=5)}],
+                my_review=approved(ago(hours=6), "h97")),
         pr_node(96, author="cy", head="h96", state="MERGED", merged_at=ago(hours=1),
                 comments=[{"author": "cy", "at": ago(hours=1)}], my_review=approved(ago(hours=2), "h96")),
         pr_node(95, author="cy", head="h95", state="MERGED", merged_at=ago(hours=1),
