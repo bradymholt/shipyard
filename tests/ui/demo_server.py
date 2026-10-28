@@ -37,6 +37,11 @@ class DemoGitHub(FakeGitHub):
 
     def graphql(self, query, variables=None):
         q = (variables or {}).get("q", "")
+        if "merged:>=" in q:
+            mine = "reviewed-by:@me" not in q
+            rows = [{"createdAt": ago(days=d + 1 + (d * 7) % (5 if mine else 3), hours=3), "mergedAt": ago(days=d)}
+                    for d in range(0, 84, 3 if mine else 4)]
+            return {"search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": rows}}
         if "is:merged" in q:
             nodes = self.merged["reviewed-by:@me" if "reviewed-by:@me" in q else "author:@me"]
             return {"search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": copy.deepcopy(nodes)}}

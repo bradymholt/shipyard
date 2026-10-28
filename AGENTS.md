@@ -16,7 +16,7 @@ Claude Code, Codex, and other agents all read this file. Never create a separate
   `state` and DOM handles; it imports nothing, so code that runs at load can rely on it),
   `server.js` (requests, the event stream, views, checkouts), `data.js` (PR lists and
   merged history), `prs.js` (review state, next steps, lanes), `board.js`, `sidebar.js`,
-  `settings.js`, and `html.js` (icons, escaping, formatting). A module can't assign to
+  `settings.js`, `insights.js` (the Insights tab's charts), and `html.js` (icons, escaping, formatting). A module can't assign to
   another's export, so shared mutable values live on `state`.
 - **`shipyard.py`** — thin launcher for the server (Python 3 stdlib
   only). Keep it as the entry point: the run command, the launchd plist, and these docs

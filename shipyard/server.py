@@ -123,6 +123,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/merged":
             q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             return self._api_call(lambda c: c.merged_history(q.get("view", ""), q.get("kind", ""), q.get("after")))
+        if path == "/api/insights":
+            q = parse_qs(parsed.query)
+            return self._api_call(lambda c: c.insights((q.get("view") or [""])[0]))
         if path == "/api/sessions":
             q = parse_qs(parsed.query)
             return self._api_call(lambda c: c.sessions_for((q.get("key") or [""])[0]))

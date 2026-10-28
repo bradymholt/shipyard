@@ -31,7 +31,7 @@ export const state = {
   targetedLoaded: false,     // true once the server has polled GitHub
   viewer: null,
   ownerTypes: {},            // login -> "org" | "user", from the server's merged searches
-  filter: localStorage.getItem(LS.FILTER) === "review" ? "review" : "mine",
+  filter: ["review", "insights"].includes(localStorage.getItem(LS.FILTER)) ? localStorage.getItem(LS.FILTER) : "mine",
   sort: localStorage.getItem("ghpr.sort") || "priority",
   worktrees: {},        // "repo#branch" -> { path, workspace }
   sessionToken: BOOT.token || "",  // required for mutations
