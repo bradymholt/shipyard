@@ -707,7 +707,9 @@ class Orchestrator:
         now = now_iso()
         for card in self.db.cards(statuses=("open",)):
             wait = card.get("auto_wait")
-            if wait and (wait.get("until") or "") <= now:
+            if wait and wait.get("manual"):
+                self.retry_queued_rerun(card, wait)
+            elif wait and (wait.get("until") or "") <= now:
                 self.db.update_card(card["id"], auto_wait=None)
                 self.maybe_auto(card["id"], wait["action"], {}, wait["confidence"],
                                 wait["reason"], wait["source"], checks=wait.get("checks"))
@@ -811,7 +813,12 @@ class Orchestrator:
         if action == "continue":
             self.db.log(key, "continued in " + self.config["agent"]["name"])
             return {"ok": True}
-        result = actions.run(self.github, action, snap, payload, self.action_context(snap))
+        try:
+            result = actions.run(self.github, action, snap, payload, self.action_context(snap))
+        except actions.RunsStillRunning as e:
+            if not card_id or not self.config["rules"]["queue_rerun"]:
+                raise
+            return self.queue_rerun(snap, card_id, e.runs)
         if action == "update_branch":
             self.stacks.pop(key, None)
         if action == "rerequest_review":
@@ -828,6 +835,29 @@ class Orchestrator:
         self.poke()
         self.publish()
         return {"ok": True, "result": result}
+
+    def queue_rerun(self, snap, card_id, runs):
+        self.db.update_card(card_id, status="open", auto_wait={
+            "action": "rerun_checks", "manual": True, "runs": runs, "head": snap.get("head"),
+            "running": snap.get("checks_running") or 0})
+        self.db.log(snap["key"], "queued a re-run of failed jobs for when the workflow run finishes")
+        self.publish()
+        return {"ok": True, "result": "queued", "queued": True}
+
+    def retry_queued_rerun(self, card, wait):
+        """Tried again whenever a check finishes; GitHub's refusal says whether the run is done."""
+        snap = self.db.pr(card["key"])
+        if not snap or snap.get("state") != "OPEN" or snap.get("head") != wait.get("head"):
+            self.db.update_card(card["id"], auto_wait=None)
+            return
+        running = snap.get("checks_running") or 0
+        if running and running >= wait.get("running", 0):
+            return
+        self.db.update_card(card["id"], auto_wait=None)
+        try:
+            self.do_action(card["key"], "rerun_checks", {"runs": wait.get("runs")}, card["id"])
+        except Exception as e:
+            self.db.log(card["key"], f"tried the queued re-run: {e}")
 
     def record_pending(self, snap, action, payload):
         """What an action just changed on GitHub, for the page's steps until the poll re-reads
@@ -977,6 +1007,14 @@ class Orchestrator:
         self.poke()
         self.publish()
         return {"ok": True, "result": result}
+
+    def cancel_wait(self, card_id):
+        card = self.db.update_card(card_id, auto_wait=None)
+        if not card:
+            raise LookupError("That card is gone.")
+        self.db.log(card["key"], "cancelled the queued re-run")
+        self.publish()
+        return {"ok": True}
 
     def dismiss(self, card_id):
         card = self.db.update_card(card_id, status="dismissed")

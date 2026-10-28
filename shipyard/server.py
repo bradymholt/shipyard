@@ -38,7 +38,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       "/open-default-main", "/open-app", "/open-agent"}
     CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main"}
     API_ACTIONS = {"/api/snooze", "/api/pin", "/api/unpin", "/api/ask", "/api/run-pass",
-                         "/api/card-action", "/api/dismiss", "/api/undo",
+                         "/api/card-action", "/api/dismiss", "/api/undo", "/api/cancel-wait",
                          "/api/pr-action", "/api/auto-approve",
                          "/api/check-now", "/api/rescan-worktrees", "/api/settings",
                          "/api/current-view", "/api/automation",
@@ -246,6 +246,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "card-action": lambda c: c.card_action(card_id(), int(arg("index") or 0), body.get("payload")),
             "dismiss": lambda c: c.dismiss(card_id()),
             "undo": lambda c: c.undo(card_id()),
+            "cancel-wait": lambda c: c.cancel_wait(card_id()),
             "check-now": lambda c: c.check_now(bool(body.get("merged"))),
             "rescan-worktrees": lambda c: c.rescan_worktrees(),
             "settings": lambda c: c.save_setting(body.get("path"), body.get("value"), bool(body.get("reset")),

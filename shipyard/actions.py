@@ -26,16 +26,33 @@ class ActionError(RuntimeError):
     pass
 
 
+class RunsStillRunning(ActionError):
+    def __init__(self, runs):
+        super().__init__("The workflow run is still going, and GitHub re-runs failed jobs only once the whole run "
+                         "finishes. Try again when it's done.")
+        self.runs = runs
+
+
 def _pulls(snap):
     return f"/repos/{snap['repo']}/pulls/{snap['number']}"
 
 
 def rerun_checks(gh, snap, payload, ctx):
     runs = sorted({c["run_id"] for c in snap.get("failing") or [] if c.get("run_id")})
+    if payload.get("runs"):
+        runs = [r for r in runs if r in payload["runs"]]
     if not runs:
         raise ActionError("No failed GitHub Actions runs to re-run (other CI has to be re-run there).")
+    running = []
     for run in runs:
-        gh.rest("POST", f"/repos/{snap['repo']}/actions/runs/{run}/rerun-failed-jobs")
+        try:
+            gh.rest("POST", f"/repos/{snap['repo']}/actions/runs/{run}/rerun-failed-jobs")
+        except GitHubError as e:
+            if "already running" not in str(e):
+                raise
+            running.append(run)
+    if running:
+        raise RunsStillRunning(running)
     return f"re-ran failed jobs in {len(runs)} workflow run{'s' if len(runs) != 1 else ''}"
 
 
