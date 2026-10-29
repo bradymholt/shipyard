@@ -291,6 +291,18 @@ class PageState(OrchestratorCase):
         self.assertEqual([w["branch"] for w in self.comp.page_state()["worktrees"]], ["feature"])
 
 
+    def test_a_pr_search_briefly_misses_keeps_its_cards(self):
+        node = pr_node(author="alice", requested=["me"])
+        self.gh.put(node, "review-requested:@me")
+        self.poll()
+        card = self.comp.db.add_card("o/r#1", {"kind": "pass", "pass": "pre_review", "head": node["headRefOid"]})
+        self.gh.lists["review-requested:@me"] = []
+        pr = self.poll()["o/r#1"]
+        self.assertFalse(pr["dropped"])
+        self.assertEqual(self.comp.db.card(card)["status"], "open")
+        node["reviewRequests"] = {"nodes": []}
+        self.assertTrue(self.poll()["o/r#1"]["dropped"])
+
     def test_carries_when_your_review_was_requested(self):
         self.gh.put(pr_node(author="alice", requested=["me"], requested_at={"me": "2026-10-22T08:00:00Z"}),
                     "review-requested:@me")
