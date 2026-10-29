@@ -234,6 +234,13 @@ class NextSteps(unittest.TestCase):
         for s, labels in cases:
             self.assertEqual([step["label"] for step in rules.next_steps(s, RULES)], labels)
 
+    def test_merge_follows_your_approval_of_a_bot_pr(self):
+        def theirs(bot):
+            s = snap(author="dependabot", decision="APPROVED", my_review=mine_review("APPROVED"))
+            return {**s, "author_bot": bot}
+        self.assertEqual([step["label"] for step in rules.next_steps(theirs(True), RULES)], ["Merge"])
+        self.assertEqual(rules.next_steps(theirs(False), RULES), [])
+
     def test_a_rule_turned_off_drops_its_step(self):
         self.assertEqual(rules.next_steps(snap(decision="APPROVED"), validate_rules({"merge": False})), [])
 
