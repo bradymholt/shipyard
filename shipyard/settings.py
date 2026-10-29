@@ -168,7 +168,7 @@ FIELDS = [
     _field("rules", ("rules", "nudge", "after_hours"), "number", "Nudge after (hours)",
            lambda cfg: _rule_option(cfg, "nudge", "after_hours"), parent=("rules", "nudge")),
     _field("rules", ("rules", "merge"), "switch", "Merge", lambda cfg: cfg["rules"]["merge"],
-           help="When your PR is approved and green."),
+           help="When your PR, or a bot's PR you approved, is approved and green."),
     _field("rules", ("rules", "review"), "switch", "Review", lambda cfg: cfg["rules"]["review"],
            help="When your review is requested.", heading="Reviews"),
     _field("rules", ("rules", "re_review"), "switch", "Re-review", lambda cfg: cfg["rules"]["re_review"],

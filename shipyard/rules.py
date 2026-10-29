@@ -131,6 +131,9 @@ def next_steps(snap, rules, cards=()):
             card = next((c for c in cards if c.get("pass") == "re_review" and c.get("total")), None)
             out.append({"kind": "re_review", "tone": "gold",
                         "label": f"Re-review · {card['addressed']} of {card['total']} addressed" if card else "Re-review"})
+        # A bot's PR has no author to merge it, so whoever approved it does.
+        if snap.get("author_bot") and (review or {}).get("state") == "APPROVED" and _mergeable(snap, rules):
+            out.append(dict(MERGE_STEP))
         return out
     pending = set(snap.get("requested") or [])
     waiting = [a for a in dict.fromkeys(events.requesters(snap)) if a not in pending]
@@ -163,10 +166,17 @@ def next_steps(snap, rules, cards=()):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
         out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
-    if (snap.get("decision") == "APPROVED" and snap.get("ci") in (None, "SUCCESS") and not snap.get("auto_merge")
-            and not snap.get("draft") and not conflicting and rules.get("merge")):
-        out.append({"kind": "merge", "label": "Merge", "tone": "green"})
+    if _mergeable(snap, rules):
+        out.append(dict(MERGE_STEP))
     return out
+
+
+MERGE_STEP = {"kind": "merge", "label": "Merge", "tone": "green"}
+
+
+def _mergeable(snap, rules):
+    return (snap.get("decision") == "APPROVED" and snap.get("ci") in (None, "SUCCESS") and not snap.get("auto_merge")
+            and not snap.get("draft") and snap.get("mergeable") != "CONFLICTING" and rules.get("merge"))
 
 
 def pass_mode(event_name, rules):

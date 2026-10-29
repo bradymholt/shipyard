@@ -35,7 +35,7 @@ DETAIL_FIELDS = """
   id number title url state isDraft createdAt updatedAt mergedAt closedAt body
   headRefName headRefOid baseRefName additions deletions changedFiles
   repository { nameWithOwner }
-  author { login avatarUrl }
+  author { __typename login avatarUrl }
   reviewDecision mergeable
   labels(first: 10) { nodes { name color } }
   viewerCanEnableAutoMerge viewerCanDisableAutoMerge
@@ -317,6 +317,7 @@ def snapshot(node, viewer):
         "author": author,
         "viewer": viewer,
         "mine": author == viewer,
+        "author_bot": (node.get("author") or {}).get("__typename") == "Bot",
         "branch": node.get("headRefName"),
         "base": node.get("baseRefName"),
         "head": node.get("headRefOid"),
