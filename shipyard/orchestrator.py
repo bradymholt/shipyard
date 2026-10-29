@@ -274,7 +274,9 @@ class Orchestrator:
         viewer, snaps, listed = self.poller.poll(self.db.open_node_ids())
         self.viewer = viewer
         for snap in snaps:
-            if snap["state"] == "OPEN" and snap["id"] not in listed:
+            # Search can drop a PR from one poll's results; the re-read says whether you're still on it.
+            involved = snap["mine"] or snap.get("requested_me") or snap.get("my_review")
+            if snap["state"] == "OPEN" and snap["id"] not in listed and not involved:
                 snap["dropped"] = True  # still open, but no longer yours to act on
                 for card in self.db.cards(snap["key"], ("open",)):
                     self.db.update_card(card["id"], status="done")
