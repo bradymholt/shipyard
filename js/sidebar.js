@@ -224,6 +224,12 @@ function proposalHtml(pr, card, p, i, bare = false) {
     </div>`;
 }
 
+function afterApprovalButton(pr) {
+  const kinds = serverSteps(pr).map((s) => s.kind);
+  return kinds.includes("merge") ? `<button type="button" class="nc-run" data-pr-action="merge">Merge</button>`
+    : kinds.includes("resolve_conflicts") ? promptButton(pr, "resolve_conflicts", "Resolve conflicts") : "";
+}
+
 function serverCardHtml(pr, card, first) {
   const cls = `next-card${first ? " first" : ""}`;
   const dismiss = `<button type="button" class="sb-close nc-x" data-dismiss="${card.id}" title="Dismiss" aria-label="Dismiss">${CLOSE_ICON}</button>`;
@@ -258,7 +264,8 @@ function serverCardHtml(pr, card, first) {
   }
   const chip = card.pass === "feedback"
     ? serverSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
-  const rerequest = card.pass === "feedback" ? promptButton(pr, "address_feedback", "Address") + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
+  const rerequest = card.pass === "feedback" ? (chip?.approval ? afterApprovalButton(pr) : "") + promptButton(pr, "address_feedback", "Address")
+    + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
   const openKept = card.kept
     ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
   const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
@@ -308,7 +315,7 @@ function derivedCardHtml(pr, chip) {
     const verb = chip.approval ? "approved with comments"
       : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
     body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
-    actionsHtml = promptButton(pr, "address_feedback", "Address") + (chip.approval
+    actionsHtml = (chip.approval ? afterApprovalButton(pr) : "") + promptButton(pr, "address_feedback", "Address") + (chip.approval
       ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
   } else if (chip.kind === "resolve_conflicts") {
     body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;

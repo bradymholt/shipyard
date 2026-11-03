@@ -110,6 +110,12 @@ try {
     "a merged PR keeps its approval feedback card, without re-request");
   if (shots) await page.screenshot({ path: `${shots}/sidebar-merged-approval.png` });
   await page.keyboard.press("Escape");
+  await page.locator('.card[data-key="o/r#109"] .next-row').click();
+  await page.locator("#sidebar .next-card [data-dismiss]").click();
+  await page.waitForSelector('#sidebar .next-card:has-text("approved with comments")');
+  check(await page.locator('#sidebar .next-card [data-pr-action="merge"]').count() === 1,
+    "an approval with comments on a mergeable PR offers Merge on its card");
+  await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
