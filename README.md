@@ -10,8 +10,6 @@
 
 Shipyard is a local dashboard that watches your GitHub pull requests and has your coding agent help get them merged. It brings reviewer state, CI status, stacked PRs, and the work that needs your attention into one place.
 
-When something happens to a PR (CI fails, your review is requested, a reviewer pushes back), Shipyard asks your coding agent (Claude Code or Codex) about it and turns the answer into a card with the buttons that fit: re-run the failed jobs, apply a fix, post a reply, approve. You decide; it prepares. Nothing posts under your name without showing you the text first.
-
 Everything runs on your machine: a small local server serves the dashboard, makes the GitHub calls with your `gh` token, and matches PRs to your local clones so you can open them in your preferred app or IDE.
 
 Want a simple hosted dashboard with nothing to run? See [Harbor](https://github.com/bradymholt/harbor).
@@ -20,7 +18,7 @@ Want a simple hosted dashboard with nothing to run? See [Harbor](https://github.
 
 ### Your agent does the legwork
 
-When something happens to a PR, Shipyard asks your coding agent about it and hands you a card with its take and the buttons that fit. You stay in charge: nothing posts under your name until you've seen the text.
+When something happens to a PR (CI fails, your review is requested, a reviewer pushes back), Shipyard asks your coding agent (Claude Code or Codex) about it and hands you a card with its take and the buttons that fit: re-run the failed jobs, apply a fix, post a reply, approve. You decide; it prepares. Nothing posts under your name without showing you the text first.
 
 <table>
   <tr>
@@ -56,7 +54,7 @@ Open http://localhost:4321: the board shows every PR you're involved in, and vie
 
 ## GitHub access
 
-Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` and run `gh auth login`. The server reads it with `gh auth token` and makes every GitHub call itself, so the token never reaches the browser. Your views are saved in `shipyard.config.json` (as `"views"`), so every browser sees the same ones and you can edit them there too; display preferences stay in your browser's local storage.
+Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` and run `gh auth login`. The server reads it with `gh auth token` and makes every GitHub call itself, so the token never reaches the browser.
 
 ## Features
 
@@ -73,26 +71,22 @@ Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` an
 
 ## Running Shipyard
 
-Shipyard runs `shipyard.py`, the server process that serves the dashboard, watches your PRs with your coding agent, opens checkouts in your preferred app or IDE, and adds branch/worktree actions. It requires Git, Python 3, and a signed-in [GitHub CLI](#github-access); start it as in [Quick start](#quick-start). Replace `~/dev` with a folder that directly contains your Git clones; you can pass more than one folder or use `--port` to choose another port. Without folders, Shipyard still runs and uses the ones set in Settings (Folders to scan), which apply without a restart.
-
-On macOS, you can keep it running in the background instead. Copy the example config, set `roots` to your folders, and install it as a login agent:
+`shipyard.py` is the whole thing: it serves the dashboard, watches your PRs with your coding agent, and opens or creates checkouts. It needs Git, Python 3, and a signed-in [GitHub CLI](#github-access).
 
 ```bash
-cp shipyard.config.example.json shipyard.config.json
-./shipyard-launchd.py install
+python3 shipyard.py ~/dev ~/code --port 4321
 ```
 
-See [Run at login (macOS)](#run-at-login-macos) for details.
+Each folder should directly contain Git clones; the server matches PR branches to them. Without folders, Shipyard uses the ones set in Settings (Folders to scan), which apply without a restart. On macOS, you can [run it at login](#run-at-login-macos) instead.
 
-The server matches GitHub PR branches to clones found under your configured folders. It binds to localhost and accepts branch actions only from the dashboard it serves.
+Discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees (under `<repo>/.claude/worktrees/`). Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes a worktree. The server binds to localhost and accepts branch actions only from the dashboard it serves.
 
-Worktree discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees. Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes existing worktrees. New worktrees are created under `<repo>/.claude/worktrees/`.
+### Configuration
 
-For a persistent setup, copy the example configuration and adjust `roots`:
+Settings live in `shipyard.config.json` next to `shipyard.py`. The settings page (⚙, at `#settings`) edits the same file: it shows each setting's default, marks the ones the file changes, and has a Reset that takes a setting back out. The server picks up a hand edit within a minute (`roots` needs a restart). Start from the example:
 
 ```bash
 cp shipyard.config.example.json shipyard.config.json
-python3 shipyard.py
 ```
 
 ```json
@@ -104,12 +98,20 @@ python3 shipyard.py
     "target": "workspace",
     "url": "vscode://file/{path}",
     "command": ["code", "{path}"]
-  },
-  "branchPrefix": ""
+  }
 }
 ```
 
-`app` picks a preset: `vscode` (the default), `cursor`, `windsurf`, or `zed`; it fills in the rest, and anything you set here overrides it. Opening by command needs the app's command-line tool on your PATH. The launcher is app-agnostic beyond the presets. URL mode opens a custom URL scheme in the browser; command mode asks the server to run a command. Use `{path}` where the checkout path belongs. `target` can be `folder`, or `workspace` to prefer a `.code-workspace` file when one exists.
+- `roots`: the folders that hold your clones, the same as the command-line folders.
+- `views`: your saved views, so every browser sees the same ones. Display preferences (tab, sort, collapsed lanes) stay in the browser.
+- `launcher`: how to open a checkout, below.
+- `agent`: which coding agent to resume and run, under [Resume a coding agent](#resume-a-coding-agent).
+- `rules` and `auto`: what Shipyard offers and what it may do on its own, under [Rules, passes, and trust](#rules-passes-and-trust).
+- `approve_replies`: the pills on an Approve card (`LGTM`, `Looks great!`, ❤️, 🫶 by default).
+
+### Open checkouts in your app
+
+`app` picks a preset: `vscode` (the default), `cursor`, `windsurf`, or `zed`; it fills in the rest, and anything you set in `launcher` overrides it. URL mode opens a custom URL scheme in the browser; command mode asks the server to run a command, which needs the app's command-line tool on your PATH. Use `{path}` where the checkout path belongs. `target` can be `folder`, or `workspace` to prefer a `.code-workspace` file when one exists.
 
 For example, this opens the checkout folder in Xcode on macOS:
 
@@ -141,46 +143,93 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
 }
 ```
 
-`sessions` picks where to look for transcripts: `claude-code` reads `~/.claude/projects/`, and `codex` reads `~/.codex/sessions/`. Each brings its own defaults for the other agent settings, so `"agent": {"sessions": "codex"}` alone is enough: Codex has no resume URL, so its default runs a command that opens Terminal in the checkout and runs `codex resume` there (macOS), and it has no `prompt_url`. The server matches sessions to checkouts by working directory and uses the most recently written one. `mode` works as it does for the launcher; `{session}` is the session id and `{path}` the checkout path. Set `"agent": null` to hide the icon. `prompt_url` opens a new session with `{prompt}` typed in, for the **Address** button on Address feedback; it defaults to `null` for Codex, where that button resumes the session instead.
-
-`branchPrefix` optionally prefills new branch names.
+`sessions` picks where to look for transcripts: `claude-code` reads `~/.claude/projects/`, and `codex` reads `~/.codex/sessions/`. Each brings its own defaults for the other settings, so `"agent": {"sessions": "codex"}` alone is enough: Codex has no resume URL, so its default runs a command that opens Terminal in the checkout and runs `codex resume` there (macOS). The server matches sessions to checkouts by working directory and uses the most recently written one. `mode` works as it does for the launcher; `{session}` is the session id and `{path}` the checkout path. `prompt_url` opens a new session with `{prompt}` typed in, for the **Address** and **Resolve** buttons; it is `null` for Codex, where those buttons resume the session instead. Set `"agent": null` to hide the icon.
 
 ### Next actions and the sidebar
 
-Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**. You also get:
+Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**.
 
-- **Approval replies:** an Approve card has pills (`LGTM`, `Looks great!`, ❤️, 🫶 by default) that fill in the approval's comment. Set your own as `"approve_replies"` in the config, or under Workflows in settings.
-- **Memory next steps:** `Nudge · 1d` when a reviewer has sat on it past a threshold, `Re-request review · 1d` when an author updated a PR you requested changes on but never asked you back (its button requests your own review, which starts the re-review), and snoozed cards that dim in place.
-- **Passes:** when something happens to a PR (CI failed, your review requested or re-requested, and changes requested if you turn that pass on), the server asks your coding agent about it and turns the answer into a Next card: a short judgment and the buttons that fit it. On your PRs it asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. For someone else's PR it runs a pre-review in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`). The pre-review's comments go up as a pending review, which only you can see until you edit and submit it on GitHub; an approval with no comments stays an Approve button instead, with its note editable on the card. It never adds a turn to a session that is open right now; the card gives you the event to paste instead.
-- **Buttons:** Continue in your agent, Re-run failed jobs, Post reply, Submit as review, Re-request review, Merge, and so on. Anything that posts under your name shows the full, editable text first, and Apply fix shows the diff first. An **Ask** field puts one question to the PR's session (as a fork).
+- **Next steps** come from the PR's GitHub state: Address feedback, Re-request review, Resolve conflicts, Update from a stacked parent, Fix CI, Merge, Review, Re-review. Waiting steps show their age (`Nudge · 1d` when a reviewer has sat on your PR, `Re-request review · 1d` when an author updated a PR you requested changes on but never asked you back), and snoozed cards dim in place.
+- **Cards** are what a pass turned the agent's answer into: a short judgment and the buttons that fit it. Continue in your agent, Re-run failed jobs, Apply fix, Post reply, Submit as review, Re-request review, Merge, and so on. Anything that posts under your name shows the full, editable text first, and Apply fix shows the diff first. An **Ask** field puts one question to the PR's session (as a fork).
+- **Approval replies:** an Approve card has pills that fill in the approval's comment; set your own as `approve_replies`.
 - **PR session:** the pinned session (the one whose transcript ran `gh pr create` for the PR), whether it's active, turns yours vs Shipyard's, the last exchange, and Re-pin.
 
-Passes run your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) headlessly with read-only tools, on your existing subscription. State lives in `shipyard.db` next to the config.
+### Rules, passes, and trust
 
-#### Rule and trust settings
-
-What each rule does is code; when it fires, and whether it fires at all, is config:
+What each rule does is code; whether and when it fires is config, under `rules` and `auto` in the config file or on the settings page. The example shows overrides, not defaults:
 
 ```json
 {
   "rules": {
-    "nudge":       { "after_hours": 24 },
-    "merge":       true,
+    "nudge": { "after_hours": 48 },
+    "merge": false,
     "address_feedback": { "prompt": "/pr-review-respond {url} (branch {branch})" },
-    "passes": { "feedback": false, "ci_failed": "auto", "pre_review": "auto", "re_review": "ask" },
+    "passes": { "feedback": "auto", "re_review": "ask" },
     "instructions": { "ci_failed": "Specs under spec/system are often flaky; prefer a re-run there." }
   },
   "auto": {
-    "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 }
+    "rerun_checks": { "when": "confidence >= medium", "max_per_pr": 3 },
+    "apply_fix": true
   }
 }
 ```
 
-Set a rule to `false` to drop its next step and pass (`address_feedback`, `resolve_conflicts`, `update_stack`, `fix_ci`, `merge`, `review`, `re_review`, `nudge`, `ask_rereview`, `rerequest_review`). A pass set to `"ask"` waits for **Ask** in the sidebar instead of running on its own. Address feedback runs no pass by default: its card's **Address** button opens a new session with the rule's `prompt` (`{url}`, `{repo}`, `{number}`, `{branch}`; default `Address the review feedback on {url} (branch {branch})`), so a skill of yours can take it from there. Resolve conflicts works the same way: when your PR conflicts with its base, its **Resolve** button opens a new session with that rule's `prompt` (`{base}` as well; default `Merge {base} into {branch} and resolve the conflicts on {url}`). When your PR is stacked on another open PR whose branch has commits yours doesn't, `update_stack` offers to merge them in or rebase onto them on GitHub. The session starts from the repository, not the PR's checkout, so the prompt names the branch to work on. Set `"feedback": "auto"` to have the agent draft a plan and replies on the card as well. `instructions` adds your own text to a pass's prompt (`feedback`, `ci_failed`, `pre_review`, `re_review`), ahead of the answer format Shipyard reads back.
+On a new install, a short welcome says what Shipyard does, suggests views and the folder your code is in, and asks before Shipyard acts on its own. Until you turn that on there or in Settings, passes wait for Ask and nothing is pressed for you. An install that has polled before keeps going as configured.
 
-On a new install, a short welcome says what Shipyard does, suggests views and the folder your code is in, and asks before Shipyard acts on its own. Until you turn that on there or in Settings, passes wait for Ask and nothing is pressed for you; an install that has polled before keeps going as configured. `auto` is the trust ladder. Every action type but `approve_rereview` and `rerun_checks` starts manual; turn one on here to let the server press its button when the agent is confident. Handled cards offer Undo where there is one. Trustable: `rerun_checks`, `approve_rereview`, `apply_fix`. `post_reply` is locked, and submitting a review is never automatic: both put words in front of a colleague under your name. An automatic action only fires on its own kind of pass (re-running checks from a CI pass on your PR, approving from a re-review of someone else's), only while the card's PR is still open at the same head, and an automatic approval never carries text. `approve_rereview` is on by default and is the master switch for a per-PR Auto-approve checkbox in the sidebar of each PR you review. The pre-review sets the checkbox: on when what it asks for is small and checkable from the diff, whatever the verdict, so a Request changes review can be approved once the push addresses it. Your own click wins over the pre-review. With no pre-review, it starts on only when your last review was an approval (one dismissed by a new push still counts). `approve_rereview` takes `max_lines` (default 30): it approves only when the change since your last review touches at most that many lines (additions + deletions) and adds no files, per GitHub's compare API; otherwise, or when the size can't be told, the card stays a button and says why. It also takes `min_wait_minutes` (default 3): an automatic approval waits until at least that long after the server first saw the push, so it never lands seconds after the author's commit. The re-review pass diffs from your last reviewed commit and lowers its confidence when anything goes beyond your threads. `rerun_checks` is on by default (high confidence, at most 2 per PR); set it to `false` to keep re-runs manual. An automatic `rerun_checks` waits while other checks on the PR are still running, then re-runs the failed jobs once they finish, unless more checks failed in the meantime. `apply_fix` takes `max_lines` (default 20): it pushes the agent's diff only when it changes at most that many lines, adds no files, and edits only files the PR already changes. Whenever an automatic action holds back, its card says why. Apart from that checkbox, settings change in this file or in the settings page (⚙, at `#settings`), never from a card; the server picks up a hand edit within a minute. The page shows each setting's default and which ones the file changes, with a Reset that takes a setting back out of the file. `post_reply` stays locked there too.
+#### Rules
 
-Passes on someone else's PR run in its review worktree with only your user-level agent settings, so a PR can't bring its own hooks or permission rules along.
+Most rules gate one next step. Set a rule to `false` to drop its step and any pass behind it.
+
+| Rule | What it does | Options |
+|---|---|---|
+| `address_feedback` | Address feedback when a reviewer is waiting on you; Reply to approval when an approval asks for something | `prompt` |
+| `rerequest_review` | Re-request review once you've pushed or replied after feedback | |
+| `resolve_conflicts` | Resolve conflicts when your PR conflicts with its base | `prompt` |
+| `update_stack` | Update from a stacked parent whose branch has commits yours doesn't: merge or rebase on GitHub | |
+| `fix_ci` | Fix CI when checks fail | |
+| `queue_rerun` | A re-run pressed while the workflow run is still going waits for it to finish, since GitHub can't re-run jobs until then | |
+| `merge` | Merge once approved, green, and not conflicting | |
+| `review` | Review when your review is requested | |
+| `re_review` | Re-review when your review is requested again or a push dismissed it | |
+| `nudge` | Nudge a reviewer who has sat on your PR | `after_hours` (24) |
+| `ask_rereview` | Re-request review on a PR you requested changes on, when the author moved on without asking you back | `after_hours` (24) |
+| `image_sign_off` | An approval whose comment is only an image (a GIF, say) needs no reply | |
+
+The two `prompt` rules hand the work to a new agent session instead of a pass: the card's **Address** or **Resolve** button opens one with the prompt typed in, so a skill of yours can take it from there. Placeholders are `{url}`, `{repo}`, `{number}`, `{branch}`, and `{base}` for conflicts. The defaults are `Address the review feedback on {url} (branch {branch})` and `Merge {base} into {branch} and resolve the conflicts on {url}`. The session starts from the repository, not the PR's checkout, so the prompt names the branch to work on.
+
+#### Passes
+
+A pass runs your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) headlessly with read-only tools, on your existing subscription, and turns its answer into a card. `rules.passes` sets each to `"auto"` (run when the event happens), `"ask"` (wait for **Ask** in the sidebar), or `false`.
+
+| Pass | Default | Runs when | Can propose |
+|---|---|---|---|
+| `ci_failed` | `auto` | CI fails on your PR; the agent reads the failing job's log and tells flaky from real | Re-run failed jobs, Apply fix |
+| `feedback` | `false` | A reviewer requests changes on your PR; `auto` has the agent draft a plan and replies | Post reply |
+| `pre_review` | `auto` | Your review is requested | A pending review, or Approve |
+| `re_review` | `auto` | Your review is requested again | Approve |
+
+`rules.instructions` adds your own text to a pass's prompt, keyed by pass name, ahead of the answer format Shipyard reads back.
+
+On your PRs, a pass asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. It never adds a turn to a session that is open right now; the card gives you the event to paste instead. On someone else's PR, a pass runs in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`) with only your user-level agent settings, so a PR can't bring its own hooks or permission rules along. A pre-review's comments go up as a pending review, which only you can see until you edit and submit it on GitHub; an approval with no comments stays an Approve button, with its note editable on the card.
+
+#### Trust
+
+`auto` lets the server press a card's button itself when the agent is confident. Each action is `true`, `false`, or an object with `when` (`"confidence >= low|medium|high"`, default `high`), `max_per_pr` (default 2), and the limits below.
+
+| Action | Default | Limits |
+|---|---|---|
+| `rerun_checks` | on | Waits while other checks on the PR are still running, then re-runs the failed jobs, unless more failed in the meantime |
+| `approve_rereview` | on | `max_lines` (30): the change since your last review touches at most that many lines and adds no files, per GitHub's compare API. `min_wait_minutes` (3): the approval waits that long after the server first saw the push, so it never lands seconds after the author's commit |
+| `apply_fix` | off | `max_lines` (20): the diff changes at most that many lines, adds no files, and edits only files the PR already changes |
+| `post_reply` | locked | Never automatic, and neither is submitting a review: both put words in front of a colleague under your name |
+
+Every automatic action keeps these rules:
+
+- It fires only from its own kind of pass (re-running checks from a CI pass on your PR, approving from a re-review of someone else's), and only while the PR is still open at the same head.
+- An automatic approval never carries text.
+- When it holds back, the card stays a button and says why. Handled cards offer Undo where there is one.
+
+**Auto-approve per PR.** `approve_rereview` is the master switch for an Auto-approve checkbox in the sidebar of each PR you review. The pre-review sets it: on when what it asks for is small and checkable from the diff, whatever the verdict, so a Request changes review can be approved once the push addresses it. With no pre-review, it starts on only when your last review was an approval (one dismissed by a new push still counts). Your own click wins over the pre-review. The re-review pass diffs from your last reviewed commit and lowers its confidence when anything goes beyond your threads. Apart from that checkbox, settings change only in the file or on the settings page, never from a card.
 
 ### Run at login (macOS)
 
@@ -193,7 +242,7 @@ Passes on someone else's PR run in its review worktree with only your user-level
 ./shipyard-launchd.py install
 ```
 
-That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the server, and `local.shipyard-restart` watches `shipyard.py` and the `shipyard/` package to restart it when you save. The server picks up edits to `shipyard.config.json` itself within a minute (except `roots`, which needs a restart). `install` then confirms the server actually stayed running rather than crash-looping. Re-run it after moving the repo or upgrading Python.
+That installs two agents, using absolute paths taken from this checkout: `local.shipyard` runs the server, and `local.shipyard-restart` watches `shipyard.py` and the `shipyard/` package to restart it when you save. `install` then confirms the server actually stayed running rather than crash-looping. Re-run it after moving the repo or upgrading Python.
 
 ```bash
 ./shipyard-launchd.py status     # state, pid, restart count, log sizes
