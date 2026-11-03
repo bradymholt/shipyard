@@ -63,6 +63,17 @@ class DeriveMine(unittest.TestCase):
         resolved = snap(reviews=[review("COMMENTED", id=1)], threads=[{"body": "Nit", "resolved": True}])
         self.assertEqual(derive(snap(), resolved), [])
 
+    def test_a_comment_review_body_is_feedback_until_re_requested(self):
+        body = dict(reviews=[review("COMMENTED", id=1, body="This blocks normal Bash commands", commit="old",
+                                    at="2026-10-20T10:00:00Z")])
+        self.assertEqual(names(derive(snap(), snap(**body))), ["feedback"])
+        self.assertEqual([s["kind"] for s in rules.next_steps(snap(head="old", **body), RULES)], ["address_feedback"])
+        self.assertEqual([s["kind"] for s in rules.next_steps(snap(**body), RULES)], ["rerequest_review"])
+        replied = snap(head="old", comments=[{"author": "me", "at": "2026-10-20T11:00:00Z"}], **body)
+        self.assertEqual([s["kind"] for s in rules.next_steps(replied, RULES)], ["rerequest_review"])
+        self.assertEqual(rules.next_steps(snap(requested=["rev"], **body), RULES), [])
+        self.assertEqual(derive(snap(), snap(reviews=[review("COMMENTED", id=1, body="Thanks!")])), [])
+
     def test_an_approval_with_comments_is_feedback(self):
         approved = dict(decision="APPROVED")
         self.assertEqual(names(derive(snap(), snap(**approved, reviews=[review("APPROVED", body="LGTM 🚀")]))),
