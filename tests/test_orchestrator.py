@@ -308,6 +308,14 @@ class PageState(OrchestratorCase):
                     "review-requested:@me")
         self.assertEqual(self.poll()["o/r#1"]["waitingSince"], "2026-10-22T08:00:00Z")
 
+    def test_keeps_when_your_review_was_asked_for(self):
+        review = {"databaseId": 9, "state": "COMMENTED", "submittedAt": "2026-10-22T09:00:00Z", "commit": {"oid": "aaa"}}
+        self.gh.put(pr_node(author="alice", requested_at={"me": "2026-10-22T08:00:00Z"}, my_review=review),
+                    "reviewed-by:@me")
+        pr = self.poll()["o/r#1"]
+        self.assertEqual(pr["requestedAt"], "2026-10-22T08:00:00Z")
+        self.assertIsNone(pr["waitingSince"])
+
 
 class AfterAction(OrchestratorCase):
     def test_rereads_the_pr_for_the_page_before_the_poll_does(self):

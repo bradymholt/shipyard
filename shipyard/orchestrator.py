@@ -1170,6 +1170,7 @@ class Orchestrator:
                 "snoozedUntil": self.db.snooze(key),
                 "waitingSince": ((snap.get("requested_at") or {}).get(snap.get("viewer")) or snap.get("ready_at")
                                  or snap.get("created")) if snap.get("requested_me") else None,
+                "requestedAt": (snap.get("requested_at") or {}).get(snap.get("viewer")),
                 "cards": open_cards,
                 "handled": [c for c in cards if c["status"] == "handled"],
                 "planReady": any(c["kind"] in ("pass", "answer") for c in next_cards),

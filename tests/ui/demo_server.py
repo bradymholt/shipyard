@@ -133,6 +133,9 @@ def main():
     gh.put(pr_node(204, author="di", head="h204", branch="di/drive-by",
                    my_review={"databaseId": 11, "state": "COMMENTED", "submittedAt": ago(days=1),
                               "commit": {"oid": "h204"}, "onBehalfOf": {"nodes": []}}), "reviewed-by:@me")
+    gh.put(pr_node(205, author="ed", head="h205", branch="ed/asked", requested_at={"me": ago(days=2)},
+                   my_review={"databaseId": 13, "state": "COMMENTED", "submittedAt": ago(days=1),
+                              "commit": {"oid": "h205"}, "onBehalfOf": {"nodes": []}}), "reviewed-by:@me")
     gh.merged["author:@me"] = [pr_node(99, head="h99", branch="me/old-feature", state="MERGED", merged_at=ago(hours=20))]
     gh.merged["reviewed-by:@me"] = [
         pr_node(97, author="cy", head="h97", state="MERGED", merged_at=ago(hours=5),

@@ -8,14 +8,18 @@ export function reviewRequestedForViewer(pr) {
 
 // GitHub has no diff comment outside a review: "Add single comment" still creates a
 // review with state COMMENTED, so reviewed-by:@me matches PRs you merely chimed in
-// on. A COMMENTED review only counts when onBehalfOf names a team, which GitHub sets
-// just for a review submitted to fulfill that team's request, or when an earlier
+// on. A COMMENTED review only counts when it answered a request: onBehalfOf names a
+// team (GitHub sets it just for a review that fulfills that team's request), the
+// timeline shows your review was asked for before you submitted it, or an earlier
 // approval or changes request of yours still stands.
 function viewerGaveVerdict(pr) {
   const verdict = pr.viewerLatestReview?.state;
-  if (verdict === "COMMENTED")
+  if (verdict === "COMMENTED") {
+    const requestedAt = serverPr(pr)?.requestedAt;
     return (pr.viewerLatestReview?.onBehalfOf?.nodes || []).length > 0 ||
+      (!!requestedAt && requestedAt <= (pr.viewerLatestReview?.submittedAt || "")) ||
       (pr.latestOpinionatedReviews?.nodes || []).some((r) => r.author?.login === state.viewer);
+  }
   return verdict === "APPROVED" || verdict === "CHANGES_REQUESTED" || verdict === "DISMISSED";
 }
 

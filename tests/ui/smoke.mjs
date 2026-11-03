@@ -199,6 +199,7 @@ try {
   check(await page.locator('.card.merged[data-key="o/r#95"] .review-badge').count() === 0,
     "an author's comment you already answered shows no Author replied");
   check(await page.locator('.card[data-key="o/r#204"]').count() === 0, "a comment-only review doesn't add the PR to Reviews");
+  check(await page.locator('.card[data-key="o/r#205"]').count() === 1, "a comment-only review that answered your review request keeps the PR on Reviews");
   await page.locator('.card[data-key="o/r#201"] .next-row').click();
   await page.waitForSelector('#sidebar a.btn-link:has-text("Finish review on GitHub")');
   check((await sb.locator('a.btn-link:has-text("Finish review on GitHub")').getAttribute("href")).endsWith("/files"), "pre-review drafts on GitHub and links to the diff");
