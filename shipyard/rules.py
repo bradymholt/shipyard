@@ -136,17 +136,22 @@ def next_steps(snap, rules, cards=()):
             out.append(dict(MERGE_STEP))
         return out
     pending = set(snap.get("requested") or [])
-    waiting = [a for a in dict.fromkeys(events.requesters(snap)) if a not in pending]
+    waiting = [a for a in dict.fromkeys(events.requesters(snap, rules.get("image_sign_off", True))) if a not in pending]
     if waiting:
         commits = {r["author"]: r.get("commit") for r in snap.get("reviews") or []}
         pushed = all(commits.get(a) and commits[a] != snap.get("head") for a in waiting)
         open_threads = [t for t in snap.get("threads") or [] if not t.get("resolved")]
-        replied = bool(open_threads) and all((t.get("comments") or [{}])[-1].get("author") == snap.get("viewer")
-                                             for t in open_threads)
+        if open_threads:
+            replied = all((t.get("comments") or [{}])[-1].get("author") == snap.get("viewer") for t in open_threads)
+        else:
+            submitted = {r["author"]: r.get("submitted") or "" for r in snap.get("reviews") or []}
+            replied = all(any(c.get("author") == snap.get("viewer") and (c.get("created") or "") > submitted.get(a, "")
+                              for c in snap.get("comments") or []) for a in waiting)
         if (pushed or replied) and rules.get("rerequest_review"):
             out.append({"kind": "rerequest_review", "label": f"Re-request review · {len(waiting)}", "tone": "gold",
                         "reviewers": waiting,
-                        "title": "You pushed since the review" if pushed else "You replied last on every open thread"})
+                        "title": "You pushed since the review" if pushed else
+                        "You replied last on every open thread" if open_threads else "You replied since the review"})
         elif rules.get("address_feedback"):
             out.append({"kind": "address_feedback", "label": f"Address feedback · {len(waiting)}", "tone": "red",
                         "reviewers": waiting})

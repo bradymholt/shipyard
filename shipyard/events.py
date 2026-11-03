@@ -19,6 +19,11 @@ SIGN_OFF = re.compile(r"^(lgtm|looks good( to me)?|ship ?it|:shipit:|approved?|n
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)|<img\b[^>]*>", re.I)
 
 
+def signed_off(body, image_sign_off=True):
+    body = body or ""
+    return bool(SIGN_OFF.match((IMAGE.sub("", body) if image_sign_off else body).strip()))
+
+
 def approval_feedback(snap, image_sign_off=True):
     """Approving reviews with something still to answer: a thread the approver opened that is
     unresolved without your reply last, or a review body beyond a sign-off that you haven't
@@ -33,8 +38,7 @@ def approval_feedback(snap, image_sign_off=True):
         if any(t["comments"][-1].get("author") != viewer for t in threads):
             out.append(r)
             continue
-        body = r.get("body") or ""
-        if SIGN_OFF.match((IMAGE.sub("", body) if image_sign_off else body).strip()):
+        if signed_off(r.get("body"), image_sign_off):
             continue
         answered = (r.get("commit") and r["commit"] != snap.get("head")) or any(
             c.get("author") == viewer and (c.get("created") or "") > (r.get("submitted") or "")
@@ -50,23 +54,25 @@ def _feedback_ids(snap, image_sign_off=True):
             {r["id"] for r in approval_feedback(snap, image_sign_off)})
 
 
-def requesters(snap):
+def requesters(snap, image_sign_off=True):
     """Who a PR with feedback is waiting to hear back from. GitHub keeps the decision
     until that reviewer approves, but a later comment-only review replaces theirs in
     latestReviews; then it's whoever hasn't approved. Without a changes-requested
-    decision, a comment-only review counts while its threads are open."""
+    decision, a comment-only review counts while its threads are open, or while its
+    body says more than a sign-off."""
     reviews = snap.get("reviews") or []
     if snap.get("decision") != "CHANGES_REQUESTED":
+        commented = [r for r in reviews if r.get("state") == "COMMENTED"]
         if not any(not t.get("resolved") for t in snap.get("threads") or []):
-            return []
-        return [r["author"] for r in reviews if r.get("state") == "COMMENTED"]
+            commented = [r for r in commented if not signed_off(r.get("body"), image_sign_off)]
+        return [r["author"] for r in commented]
     asked = [r["author"] for r in reviews if r.get("state") == "CHANGES_REQUESTED"]
     return asked or [r["author"] for r in reviews if r.get("state") in FEEDBACK]
 
 
 def needs_changes(snap, image_sign_off=True):
     return (snap.get("decision") == "CHANGES_REQUESTED" or
-            bool(requesters(snap) or approval_feedback(snap, image_sign_off)))
+            bool(requesters(snap, image_sign_off) or approval_feedback(snap, image_sign_off)))
 
 
 def derive(prev, cur, image_sign_off=True):
@@ -101,13 +107,13 @@ def derive(prev, cur, image_sign_off=True):
         new_feedback = _feedback_ids(cur, image_sign_off) - (set() if first else _feedback_ids(prev, image_sign_off))
         if changes and (first or not needs_changes(prev, image_sign_off) or new_feedback):
             ids = sorted(str(i) for i in _feedback_ids(cur, image_sign_off) if i is not None)
-            reviewers = requesters(cur)
+            reviewers = requesters(cur, image_sign_off)
             reviewers += [r["author"] for r in approval_feedback(cur, image_sign_off) if r["author"] not in reviewers]
             add("feedback", key=f":{','.join(ids)}" if ids else None, reviewers=reviewers)
         if (not first and prev.get("head") != cur.get("head") and
                 needs_changes(prev, image_sign_off)):
             pending = set(cur.get("requested") or [])
-            reviewers = [r for r in requesters(cur) if r not in pending]
+            reviewers = [r for r in requesters(cur, image_sign_off) if r not in pending]
             if reviewers:
                 add("pushed_after_feedback", reviewers=reviewers)
         failing = cur.get("ci") in FAILING
