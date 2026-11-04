@@ -82,6 +82,19 @@ class ReviewWorktree(GitCase):
         self.assertFalse(again["ok"])
 
 
+    def test_clones_when_no_root_holds_the_repo(self):
+        clones = Path(self.tmp.name) / "clones"
+        origin = git(self.clone, "config", "--get", "remote.origin.url")
+        with mock.patch.object(worktrees, "CLONES_DIR", clones), \
+                mock.patch.object(worktrees, "clone_url", return_value=origin):
+            out = worktrees.review_worktree(self.repo, 5, self.pr_head, [], clone_missing=True)
+            self.assertTrue(out["ok"], out)
+            self.assertEqual(out["path"], str(clones / "o" / "r" / ".claude" / "worktrees" / "review-5"))
+            self.assertEqual(git(out["path"], "rev-parse", "HEAD"), self.pr_head)
+            out = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots, clone_missing=True)
+            self.assertEqual(out["path"], str(self.clone / ".claude" / "worktrees" / "review-5"))
+        self.assertFalse(worktrees.review_worktree(self.repo, 5, self.pr_head, [])["ok"])
+
     def test_refuses_to_move_a_review_worktree_with_its_own_commits(self):
         out = worktrees.review_worktree(self.repo, 5, self.pr_head, self.roots)
         Path(out["path"], "app.py").write_text("tried something\n")

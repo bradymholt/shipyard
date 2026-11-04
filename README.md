@@ -79,7 +79,7 @@ python3 shipyard.py ~/dev ~/code --port 4321
 
 Each folder should directly contain Git clones; the server matches PR branches to them. Without folders, Shipyard uses the ones set in Settings (Folders to scan), which apply without a restart. On macOS, you can [run it at login](#run-at-login-macos) instead.
 
-Discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees (under `<repo>/.claude/worktrees/`). Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes a worktree. The server binds to localhost and accepts branch actions only from the dashboard it serves.
+Discovery is read-only. Actions you choose can fetch, create, or switch local branches and create worktrees (under `<repo>/.claude/worktrees/`). A pass on a repository with no clone under your folders runs in a clone Shipyard makes for itself under `~/.cache/shipyard/clones/`; a clone of yours is used whenever one exists. Shipyard refuses to switch a main clone with tracked changes, opens an existing checkout when one already owns the branch, and never removes a worktree. The server binds to localhost and accepts branch actions only from the dashboard it serves.
 
 ### Configuration
 
@@ -210,7 +210,7 @@ A pass runs your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) h
 
 `rules.instructions` adds your own text to a pass's prompt, keyed by pass name, ahead of the answer format Shipyard reads back.
 
-On your PRs, a pass asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. It never adds a turn to a session that is open right now; the card gives you the event to paste instead. On someone else's PR, a pass runs in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`) with only your user-level agent settings, so a PR can't bring its own hooks or permission rules along. A pre-review's comments go up as a pending review, which only you can see until you edit and submit it on GitHub; an approval with no comments stays an Approve button, with its note editable on the card.
+On your PRs, a pass asks the session that opened the PR, so earlier decisions are in context: a fork for questions (nothing is written back) and a resume for a plan you'll continue. It never adds a turn to a session that is open right now; the card gives you the event to paste instead. On someone else's PR, a pass runs in a review worktree at the PR's head (`<repo>/.claude/worktrees/review-<n>`, cloning the repository under `~/.cache/shipyard/clones/` first when none of your folders holds it) with only your user-level agent settings, so a PR can't bring its own hooks or permission rules along. A pre-review's comments go up as a pending review, which only you can see until you edit and submit it on GitHub; an approval with no comments stays an Approve button, with its note editable on the card.
 
 #### Trust
 
