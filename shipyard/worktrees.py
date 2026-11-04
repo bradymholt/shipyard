@@ -9,6 +9,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 
 from .agents import latest_sessions
@@ -298,6 +299,40 @@ def find_clone(repo, roots):
     return None
 
 
+CLONES_DIR = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "shipyard" / "clones"
+_clone_lock = threading.Lock()
+
+
+def clone_url(repo):
+    return f"https://github.com/{repo}.git"
+
+
+def managed_clone(repo):
+    """A clone Shipyard keeps for itself, for a repo with no clone under the roots:
+    CLONES_DIR/<owner>/<name>, made on first use (blobless, so a large repo is quick)
+    and authenticated through gh."""
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo) or ".." in repo.split("/"):
+        return {"ok": False, "error": f"Can't clone {repo!r}: not an owner/name."}
+    path = os.path.join(CLONES_DIR, *repo.split("/"))
+    with _clone_lock:
+        if os.path.isdir(os.path.join(path, ".git")):
+            return {"ok": True, "path": path}
+        parent = os.path.dirname(path)
+        os.makedirs(parent, exist_ok=True)
+        error = mutate_git(parent, "clone", "--quiet", "--filter=blob:none",
+                           "-c", "credential.helper=!gh auth git-credential",
+                           clone_url(repo), path, timeout=600)
+    if error:
+        return {"ok": False, "error": f"Couldn't clone {repo}: {error}"}
+    return {"ok": True, "path": path}
+
+
+def ensure_clone(repo, roots):
+    """A clone under the roots, or failing that Shipyard's own."""
+    clone = find_clone(repo, roots)
+    return {"ok": True, "path": clone} if clone else managed_clone(repo)
+
+
 def default_branch(clone):
     ref = try_git(clone, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
     prefix = "refs/remotes/origin/"
@@ -531,11 +566,18 @@ def has_review_commits(clone, path, number):
     return run_git(clone, "merge-base", "--is-ancestor", here, known).returncode != 0
 
 
-def review_worktree(repo, number, head, roots):
+def review_worktree(repo, number, head, roots, clone_missing=False):
     """A detached worktree at a PR's head, for reviewing someone else's PR:
     <clone>/.claude/worktrees/review-<number>. Reused (and moved to the new head) when
-    it already exists; refuses to move one with local edits or commits of its own."""
-    clone = find_clone(repo, roots)
+    it already exists; refuses to move one with local edits or commits of its own.
+    With no clone under the roots, clone_missing makes one (see managed_clone)."""
+    if clone_missing:
+        made = ensure_clone(repo, roots)
+        if not made["ok"]:
+            return made
+        clone = made["path"]
+    else:
+        clone = find_clone(repo, roots)
     if not clone:
         return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
     path = os.path.join(managed_worktree_dir(clone), f"review-{int(number)}")

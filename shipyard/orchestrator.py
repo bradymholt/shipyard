@@ -487,7 +487,8 @@ class Orchestrator:
         if not snap["mine"]:
             # Someone else's PR is always read at its current head, in the review
             # worktree (made here when a re-review predates the server).
-            made = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots)
+            made = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots,
+                                             clone_missing=True)
             if not made["ok"]:
                 return self.fail_pass(row, made["error"])
             review_path = made["path"]
@@ -502,11 +503,11 @@ class Orchestrator:
         else:
             cwd = self.checkout_for(snap)
             if not cwd:
-                cwd = worktrees.find_clone(snap["repo"], self.roots)
+                made = worktrees.ensure_clone(snap["repo"], self.roots)
+                if not made["ok"]:
+                    return self.fail_pass(row, made["error"], raw=passes.raw_event_text(name, snap))
+                cwd = made["path"]
             pin = self.db.pin(snap["key"])
-            if not cwd:
-                return self.fail_pass(row, f"No local clone of {snap['repo']} under your roots.",
-                                      raw=passes.raw_event_text(name, snap))
             session = pin["session_id"] if pin else None
             if name == "new_session":
                 old = adapter.session_file(pin["path"], session) if session else None
