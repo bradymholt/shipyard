@@ -199,7 +199,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
     body += `<div class="nc-pills">${state.approveReplies.map((r) => `<button type="button" class="nc-pill" data-fill="${esc(field)}" data-text="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
   }
   if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
-  if (p.action === "approve" && !pr.autoMergeRequest) {
+  if (p.action === "approve" && !pr.autoMergeRequest && pr.author?.__typename === "Bot") {
     body += `<label class="nc-check" title="Turns auto-merge on with the approval, or merges right away when GitHub has nothing left to wait for.">
       <input type="checkbox" data-merge-on-approve="${field}"${mergeOnApprove() ? " checked" : ""}> Merge once green</label>`;
   }
