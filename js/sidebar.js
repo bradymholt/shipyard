@@ -39,6 +39,9 @@ const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review
 
 const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
 
+const MERGE_ON_APPROVE_KEY = "ghpr.mergeOnApprove";
+const mergeOnApprove = () => localStorage.getItem(MERGE_ON_APPROVE_KEY) === "1";
+
 export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
 
 const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
@@ -196,6 +199,10 @@ function proposalHtml(pr, card, p, i, bare = false) {
     body += `<div class="nc-pills">${state.approveReplies.map((r) => `<button type="button" class="nc-pill" data-fill="${esc(field)}" data-text="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
   }
   if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
+  if (p.action === "approve" && !pr.autoMergeRequest) {
+    body += `<label class="nc-check" title="Turns auto-merge on with the approval, or merges right away when GitHub has nothing left to wait for.">
+      <input type="checkbox" data-merge-on-approve="${field}"${mergeOnApprove() ? " checked" : ""}> Merge once green</label>`;
+  }
   if (p.action === "submit_review") {
     const event = drafts.get(`${field}-event`) || p.payload?.event || "COMMENT";
     body += `<div class="nc-actions"><select data-field="${field}-event">${["COMMENT", "APPROVE", "REQUEST_CHANGES"].map((e) =>
@@ -529,6 +536,7 @@ $("#sidebar").addEventListener("change", async (e) => {
   if (t.dataset.autoApprove !== undefined) {
     await busy(null, () => apiCall(`api/auto-approve?key=${encodeURIComponent(t.dataset.autoApprove)}`, { on: t.checked }));
   }
+  if (t.dataset.mergeOnApprove !== undefined) localStorage.setItem(MERGE_ON_APPROVE_KEY, t.checked ? "1" : "0");
 });
 
 $("#sidebar").addEventListener("submit", async (e) => {
@@ -607,6 +615,7 @@ $("#sidebar").addEventListener("click", async (e) => {
     const payload = {};
     if (field && TEXT_ACTIONS.has(action)) payload.body = fieldValue(field) || "";
     if (action === "submit_review") payload.event = fieldValue(`${field}-event`) || "COMMENT";
+    if (action === "approve" && field) payload.merge = !!$(`#sidebar [data-merge-on-approve="${field}"]`)?.checked;
     if (btn.dataset.reviewers) payload.reviewers = btn.dataset.reviewers.split(",");
     if (btn.dataset.method) payload.method = btn.dataset.method;
     return busy(btn, async () => {
@@ -614,6 +623,7 @@ $("#sidebar").addEventListener("click", async (e) => {
         ? await apiCall(`api/pr-action?key=${encodeURIComponent(key)}&action=${encodeURIComponent(action)}${btn.dataset.doneCard ? `&card=${encodeURIComponent(btn.dataset.doneCard)}` : ""}`, { payload })
         : await apiCall(`api/card-action?card=${btn.dataset.card}&index=${btn.dataset.index}`, { payload });
       if (data?.queued) return;
+      if (data?.warning) showError(data.warning, "Not merged");
       if (field) drafts.delete(field);
       // The server's update and GitHub's catch up in a second or two; show the result now.
       const cp = pr && serverPr(pr);
@@ -622,11 +632,12 @@ $("#sidebar").addEventListener("click", async (e) => {
       if (action === "rerequest_review") markRequested(pr, payload.reviewers || card?.payload?.reviewers);
       const reviewState = REVIEW_STATES[action === "submit_review" ? payload.event : action];
       if (reviewState && pr) markReviewed(pr, reviewState);
-      if (action === "merge" && pr) markMerged(pr);
+      const merged = action === "merge" || data?.merged === "merged";
+      if (merged && pr) markMerged(pr);
       if (action === "mark_ready" && pr) pr.isDraft = false;
-      if (action === "enable_auto_merge" && pr) pr.autoMergeRequest = { enabledAt: new Date().toISOString() };
+      if ((action === "enable_auto_merge" || data?.merged === "auto_merge") && pr) pr.autoMergeRequest = { enabledAt: new Date().toISOString() };
       if (card) cp.cards = cp.cards.filter((c) => c !== card);
-      if (action === "merge") closeSidebar();
+      if (merged) closeSidebar();
       else render();
     });
   }

@@ -837,7 +837,12 @@ class Orchestrator:
             self.db.update_card(card_id, status="done", result=result)
         self.poke()
         self.publish()
-        return {"ok": True, "result": result}
+        out = {"ok": True, "result": result}
+        if payload.get("merged"):
+            out["merged"] = payload["merged"]
+        elif payload.get("merge"):
+            out["warning"] = result  # approved, but the merge after it failed
+        return out
 
     def queue_rerun(self, snap, card_id, runs):
         self.db.update_card(card_id, status="open", auto_wait={
@@ -870,6 +875,8 @@ class Orchestrator:
                    "undo_enable_auto_merge": {"auto_merge": False}, "disable_auto_merge": {"auto_merge": False},
                    "merge": {"state": "MERGED"},
                    "mark_ready": {"draft": False}}.get(action)
+        if action == "approve" and payload.get("merged"):
+            pending = {"state": "MERGED"} if payload["merged"] == "merged" else {"auto_merge": True}
         if action == "post_reply":
             comment = {"id": None, "author": self.viewer, "created": now_iso()}
             reply_to = payload.get("comment_id")

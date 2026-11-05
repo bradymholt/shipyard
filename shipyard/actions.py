@@ -76,6 +76,11 @@ def _method_not_allowed(error):
     return "merge method" in text and "not allowed" in text
 
 
+def _nothing_to_wait_for(error):
+    # GitHub: "Pull request is in clean status": auto-merge has nothing left to wait on.
+    return "clean status" in str(error).lower()
+
+
 def _with_merge_method(run):
     """Try merge methods in order, moving on only when the repo disallows one; any
     other failure (branch protection, a network error) stops there."""
@@ -199,9 +204,33 @@ def _review(gh, snap, event, body, comments=()):
         gh.rest("POST", f"{_pulls(snap)}/reviews", review)
 
 
+def _merge_after_approval(gh, snap, payload):
+    """Turn auto-merge on, or merge now when GitHub has nothing left to wait for.
+    payload["merged"] tells the orchestrator which happened."""
+    if snap.get("auto_merge"):
+        return "auto-merge was already on"
+    if (snap.get("page") or {}).get("viewerCanEnableAutoMerge"):
+        try:
+            _auto_merge(gh, snap, True)
+            payload["merged"] = "auto_merge"
+            return "enabled auto-merge"
+        except ActionError as e:
+            if not _nothing_to_wait_for(e):
+                raise
+    result = merge(gh, snap, payload, {})
+    payload["merged"] = "merged"
+    return result
+
+
 def approve(gh, snap, payload, ctx):
     _review(gh, snap, "APPROVE", (payload.get("body") or "").strip())
-    return "approved"
+    if not payload.get("merge"):
+        return "approved"
+    try:
+        return f"approved and {_merge_after_approval(gh, snap, payload)}"
+    except Exception as e:
+        # The approval is already posted, so the card is done; Merge comes back as a next step.
+        return f"approved, but merging failed: {e}"
 
 
 def comment_unresolved(gh, snap, payload, ctx):
