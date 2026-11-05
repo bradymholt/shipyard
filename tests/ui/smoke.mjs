@@ -183,7 +183,12 @@ try {
   await page.waitForSelector("#sidebar select[data-snooze]");
   await sb.locator("select[data-snooze]").selectOption("24");
   await page.waitForSelector('.card.snoozed[data-key="o/r#105"]');
-  check((await chipText(page, 105))?.startsWith("Snoozed"), "snoozed card dims in place with the until-date on the chip");
+  check((await chipText(page, 105))?.startsWith("Snoozed"), "snoozed card dims with the until-date on the chip");
+  check(await page.evaluate(() => {
+    const lane = document.querySelector('.card[data-key="o/r#105"]').closest(".lane");
+    const keys = [...lane.querySelectorAll(".card[data-key]")].map((c) => c.dataset.key);
+    return keys.length > 1 && keys.at(-1) === "o/r#105";
+  }), "a snoozed card sinks to the bottom of its lane");
 
   await page.locator('.tab[data-filter="review"]').click();
   await page.waitForSelector('.card[data-key="o/r#201"] .next-row');
