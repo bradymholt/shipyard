@@ -71,7 +71,15 @@ function reviewSortRank(pr) {
   return 2;
 }
 
+const isSnoozed = (pr) => serverPr(pr)?.chip?.kind === "snoozed";
+
+// Snoozed cards sink to the bottom of their lane under every sort, keeping that sort among themselves.
 export function sortComparator() {
+  const inner = innerComparator();
+  return (a, b) => isSnoozed(a) - isSnoozed(b) || inner(a, b);
+}
+
+function innerComparator() {
   if (state.sort === "priority")
     return (a, b) => {
       const rank = state.filter === "review" ? reviewSortRank : sortRank;
