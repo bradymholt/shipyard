@@ -325,6 +325,14 @@ class AfterAction(OrchestratorCase):
         self.comp.do_action("o/r#1", "merge", {})
         self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["pr"]["state"], "MERGED")
 
+    def test_approving_with_merge_shows_the_outcome_before_the_poll(self):
+        self.gh.put(pr_node(author="bob", requested=[VIEWER]), "review-requested:@me")
+        self.poll()
+        out = self.comp.do_action("o/r#1", "approve", {"merge": True})
+        self.assertEqual(out["merged"], "auto_merge")
+        self.assertTrue(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
+        self.assertEqual(self.comp.db.pr("o/r#1")["my_review"]["state"], "APPROVED")
+
     def test_turns_auto_merge_off_for_the_page(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()

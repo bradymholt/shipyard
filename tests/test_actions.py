@@ -55,6 +55,26 @@ class Actions(unittest.TestCase):
         self.assertEqual(actions.run(gh, "merge", snap(), {}), "merging (squash)")
         self.assertEqual(gh.calls[-1], ("PUT", "/repos/o/r/pulls/1/merge-async", {"merge_method": "squash", "sha": "aaa"}))
 
+    def test_approve_can_turn_auto_merge_on_or_merge_when_nothing_is_pending(self):
+        gh = RecordingGitHub()
+        payload = {"merge": True}
+        self.assertEqual(actions.run(gh, "approve", snap(author="bob"), payload), "approved and enabled auto-merge")
+        self.assertEqual(gh.calls[0][1], "/repos/o/r/pulls/1/reviews")
+        self.assertIn("enablePullRequestAutoMerge", gh.calls[1][1])
+        self.assertEqual(payload["merged"], "auto_merge")
+        gh = RecordingGitHub(graphql_errors=[GitHubError("Pull request is in clean status")])
+        payload = {"merge": True}
+        self.assertEqual(actions.run(gh, "approve", snap(author="bob"), payload), "approved and merged (squash)")
+        self.assertIn("mergePullRequest", gh.calls[-1][1])
+        self.assertEqual(payload["merged"], "merged")
+        gh = RecordingGitHub(graphql_errors=[GitHubError("Required status check \"ci\" is expected")])
+        payload = {"merge": True}
+        self.assertTrue(actions.run(gh, "approve", snap(author="bob"), payload).startswith("approved, but merging failed"))
+        self.assertNotIn("merged", payload)
+        gh = RecordingGitHub()
+        self.assertEqual(actions.run(gh, "approve", snap(author="bob"), {}), "approved")
+        self.assertEqual(len(gh.calls), 1)
+
     def test_non_approval_review_needs_text(self):
         with self.assertRaises(actions.ActionError):
             actions.run(RecordingGitHub(), "submit_review", snap(author="alice"), {"event": "REQUEST_CHANGES"})
