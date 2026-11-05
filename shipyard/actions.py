@@ -208,6 +208,7 @@ def _merge_after_approval(gh, snap, payload):
     """Turn auto-merge on, or merge now when GitHub has nothing left to wait for.
     payload["merged"] tells the orchestrator which happened."""
     if snap.get("auto_merge"):
+        payload["merged"] = "auto_merge"
         return "auto-merge was already on"
     if (snap.get("page") or {}).get("viewerCanEnableAutoMerge"):
         try:

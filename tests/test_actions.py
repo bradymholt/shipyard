@@ -71,6 +71,10 @@ class Actions(unittest.TestCase):
         payload = {"merge": True}
         self.assertTrue(actions.run(gh, "approve", snap(author="bob"), payload).startswith("approved, but merging failed"))
         self.assertNotIn("merged", payload)
+        payload = {"merge": True}
+        self.assertEqual(actions.run(RecordingGitHub(), "approve", {**snap(author="bob"), "auto_merge": True}, payload),
+                         "approved and auto-merge was already on")
+        self.assertEqual(payload["merged"], "auto_merge")
         gh = RecordingGitHub()
         self.assertEqual(actions.run(gh, "approve", snap(author="bob"), {}), "approved")
         self.assertEqual(len(gh.calls), 1)
