@@ -3,7 +3,7 @@ import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
 import { openNewTaskDialog } from "./settings.js";
 import { maybeShowWelcome } from "./welcome.js";
@@ -695,6 +695,5 @@ function nextRowHtml(pr) {
 }
 
 function cardClasses(pr, extra) {
-  const snoozed = serverPr(pr)?.chip?.kind === "snoozed";
-  return ["card", extra, snoozed ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : ""].filter(Boolean).join(" ");
+  return ["card", extra, isSnoozed(pr) ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : ""].filter(Boolean).join(" ");
 }

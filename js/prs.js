@@ -71,7 +71,7 @@ function reviewSortRank(pr) {
   return 2;
 }
 
-const isSnoozed = (pr) => serverPr(pr)?.chip?.kind === "snoozed";
+export const isSnoozed = (pr) => !pr.mergedAt && serverPr(pr)?.chip?.kind === "snoozed";
 
 // Snoozed cards sink to the bottom of their lane under every sort, keeping that sort among themselves.
 export function sortComparator() {
@@ -188,9 +188,10 @@ export function serverSteps(pr) {
 
 export function nextChip(pr) {
   const cp = serverPr(pr);
-  if (cp?.chip?.kind === "snoozed") return { ...cp.chip, tone: "muted" };
+  if (isSnoozed(pr)) return { ...cp.chip, tone: "muted" };
   const chip = serverSteps(pr)[0];
   if (chip) return chip;
+  if (cp?.chip?.kind === "snoozed") return null;
   if (cp?.chip?.kind === "nudge" || cp?.chip?.kind === "rerequest_mine") return { ...cp.chip, tone: "gold", optional: true };
   if (cp?.chip) return { ...cp.chip, tone: "muted" };
   return null;
