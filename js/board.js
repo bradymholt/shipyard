@@ -49,7 +49,7 @@ function buildReviewers(pr) {
     const rr = req.requestedReviewer;
     if (!rr) continue;
     const login = rr.login || rr.name;
-    if (reviewed.has(login)) continue;
+    if (!login || reviewed.has(login)) continue;
     parts.push(reviewerHtml(login, rr.avatarUrl, "state-pending", ICONS.clock, `${login} — review requested`));
   }
   return parts.join("");
