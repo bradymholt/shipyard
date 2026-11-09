@@ -198,9 +198,11 @@ def main():
            {"repo": "o/r", "branch": "me/old-feature", "path": str(merged_wt), "main": False,
             "workspace": None, "dirty": False, "activity": 0, "session": None}]
     for target in ("shipyard.orchestrator.adapter_for", "shipyard.server.worktrees.discover",
-                   "shipyard.orchestrator.worktrees.discover", "shipyard.orchestrator.worktrees.review_worktree"):
+                   "shipyard.orchestrator.worktrees.discover", "shipyard.orchestrator.worktrees.review_worktree",
+                   "shipyard.orchestrator.worktrees.ensure_clone"):
         value = {"shipyard.orchestrator.adapter_for": agent,
-                 "shipyard.orchestrator.worktrees.review_worktree": {"ok": True, "path": str(checkout)}}.get(target, wts)
+                 "shipyard.orchestrator.worktrees.review_worktree": {"ok": True, "path": str(checkout)},
+                 "shipyard.orchestrator.worktrees.ensure_clone": {"ok": False, "error": "No local clone of o/r."}}.get(target, wts)
         mock.patch(target, return_value=value).start()
 
     comp = Orchestrator(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
