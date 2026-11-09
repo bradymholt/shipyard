@@ -43,7 +43,7 @@ DETAIL_FIELDS = """
   autoMergeRequest { enabledAt }
   viewerLatestReview { databaseId state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
   reviewRequests(first: 20) { nodes { requestedReviewer {
-    __typename ... on User { login avatarUrl } ... on Team { slug name } } } }
+    __typename ... on User { login avatarUrl } ... on Bot { login avatarUrl } ... on Team { slug name } } } }
   latestReviews(first: 20) { nodes { databaseId state submittedAt body author { login avatarUrl } commit { oid } } }
   latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
   pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
@@ -101,7 +101,7 @@ query($q: String!, $after: String, $first: Int!) {
       comments(last: 10) { totalCount nodes { createdAt author { login } } }
       viewerLatestReview { state submittedAt commit { oid } onBehalfOf(first: 1) { nodes { slug } } }
       reviewRequests(first: 10) { nodes { requestedReviewer {
-        __typename ... on User { login avatarUrl } ... on Team { slug name } } } }
+        __typename ... on User { login avatarUrl } ... on Bot { login avatarUrl } ... on Team { slug name } } } }
       latestReviews(first: 10) { nodes { state author { login avatarUrl } commit { oid } } }
       latestOpinionatedReviews(first: 20) { nodes { state author { login } } }
       pendingReviews: reviews(first: 10, states: [PENDING]) { nodes { author { login } } }
@@ -137,7 +137,7 @@ query($id: ID!) { node(id: $id) { ... on PullRequest {
     __typename
     ... on PullRequestCommit { commit { messageHeadline committedDate author { user { login } name } } }
     ... on PullRequestReview { state submittedAt author { login } }
-    ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } ... on Team { name } } }
+    ... on ReviewRequestedEvent { createdAt actor { login } requestedReviewer { ... on User { login } ... on Bot { login } ... on Team { name } } }
     ... on IssueComment { createdAt author { login } }
     ... on ReadyForReviewEvent { createdAt actor { login } }
     ... on ConvertToDraftEvent { createdAt actor { login } }
