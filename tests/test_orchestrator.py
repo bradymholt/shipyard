@@ -478,6 +478,7 @@ class CiFailed(OrchestratorCase):
         self.gh.running_runs.add(22)
         self.assertTrue(self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])["queued"])
         self.assertTrue(self.comp.page_state()["prs"]["o/r#1"]["cards"][0]["auto_wait"]["manual"])
+        self.assertEqual([s["kind"] for s in self.comp.page_state()["prs"]["o/r#1"]["steps"]], ["rerun_queued"])
         self.gh.running_runs.clear()
         node["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["checkRunCountsByState"] = []
         self.poll()
