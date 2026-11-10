@@ -20,7 +20,6 @@ EVENT_PASSES = {
     "review_requested_of_me": ("pre_review", "review"),
     "review_rerequested": ("re_review", "re_review"),
     "review_dismissed": ("re_review", "re_review"),
-    "conflicted": ("conflicts", "resolve_conflicts"),
 }
 
 

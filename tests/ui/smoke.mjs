@@ -117,10 +117,9 @@ try {
     "an approval with comments on a mergeable PR offers Merge on its card");
   await page.keyboard.press("Escape");
   await page.locator('.card[data-key="o/r#110"] .next-row').click();
-  await page.locator('#sidebar button[data-run-pass="conflicts"]').click();
-  await page.waitForSelector('#sidebar button[data-action="push_merge"]');
-  check((await page.locator("#sidebar .next-card").first().textContent()).includes("owner_id INTEGER NOT NULL DEFAULT 0"),
-    "a conflicts pass shows the resolved merge with a Push merge button");
+  await page.locator('#sidebar button[data-run-pass="conflicts"]:has-text("Fix conflicts")').click();
+  await page.waitForSelector('#sidebar .sb-handled:has-text("pushed the merge")');
+  check(true, "Fix conflicts resolves the conflicts and pushes the merge");
   if (shots) await page.screenshot({ path: `${shots}/sidebar-conflicts.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");

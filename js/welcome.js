@@ -11,7 +11,6 @@ const PASS_STARTS = {
   pre_review: "pre-reviews PRs when your review is requested",
   re_review: "re-reviews PRs you reviewed when they change",
   feedback: "plans a response when a reviewer requests changes",
-  conflicts: "resolves merge conflicts on your PRs, for you to push",
 };
 const AUTO_STARTS = {
   rerun_checks: "re-runs flaky checks",

@@ -31,7 +31,7 @@ const ACTION_LABELS = {
   rerun_checks: "Re-run failed jobs", apply_fix: "Apply fix and push", post_reply: "Post reply",
   approve: "Approve", comment_unresolved: "Comment on unresolved", submit_review: "Submit as review",
   enable_auto_merge: "Enable auto-merge", merge: "Merge", mark_ready: "Mark ready", nudge: "Post nudge",
-  rerequest_review: "Re-request review", push_merge: "Push merge",
+  rerequest_review: "Re-request review",
 };
 
 // Actions that put words in front of someone show the full text, editable, before they post.
@@ -225,12 +225,6 @@ function proposalHtml(pr, card, p, i, bare = false) {
       ? `<div class="nc-reason">Commit: ${esc(p.payload?.message || "")}</div><pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
       : `<button type="button" data-show-diff="${field}">Show diff</button>`;
   }
-  if (p.action === "push_merge") {
-    const hunks = p.payload?.hunks || [];
-    body += hunks.length ? hunks.map((h) => `<div class="nc-snippet-where">${esc(h.path)}</div><pre class="nc-snippet">${esc(h.resolved || "(removed)")}</pre>
-      <details class="nc-sides"><summary>Both sides</summary><pre class="nc-snippet">${esc(h.ours)}</pre><pre class="nc-snippet">${esc(h.theirs)}</pre></details>`).join("")
-      : `<p class="nc-reason">Merges without conflicts.</p>`;
-  }
   if (p.action === "rerun_checks" && card.auto_wait?.manual) button = cancelWaitButton(card);
   if (p.action === "approve") button += `<a class="btn-link" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a>`;
   const where = p.action === "post_reply" && p.payload?.comment_id
@@ -262,11 +256,12 @@ function serverCardHtml(pr, card, first) {
     ? `<button type="button" class="nc-run" data-pr-action="rerun_checks" data-done-card="${card.id}">${esc(ACTION_LABELS.rerun_checks)}</button>` : "";
   if (card.kind === "running") {
     return `<div class="${cls}"><div class="nc-head"><span class="plan-dot running"></span>${title}</div>
-      <p class="nc-reason">${esc(agentName())} is reading the PR${card.question ? `: “${esc(card.question)}”` : ""}…</p></div>`;
+      <p class="nc-reason">${card.pass === "conflicts" ? `${esc(agentName())} is resolving the conflicts…`
+        : `${esc(agentName())} is reading the PR${card.question ? `: “${esc(card.question)}”` : ""}…`}</p></div>`;
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
-      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">${card.pass === "conflicts" ? "Resolve with" : "Ask"} ${esc(agentName())}</button>${continueButton(pr)}</div></div>`;
+      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div></div>`;
   }
   if (card.kind === "error" || card.kind === "raw") {
     const raw = card.raw ? `<pre>${esc(card.raw)}</pre><div class="nc-actions"><button type="button" data-copy="${card.id}">Copy</button>${continueButton(pr)}</div>` : "";
@@ -338,7 +333,7 @@ function derivedCardHtml(pr, chip) {
       ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
   } else if (chip.kind === "resolve_conflicts") {
     body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;
-    actionsHtml = `<button type="button" data-run-pass="conflicts">Resolve with ${esc(agentName())}</button>` + promptButton(pr, "resolve_conflicts", "Resolve")
+    actionsHtml = `<button type="button" class="nc-run primary" data-run-pass="conflicts">Fix conflicts</button>` + promptButton(pr, "resolve_conflicts", "Resolve")
       + `<a class="btn-link" href="${esc(pr.url)}/conflicts" target="_blank" rel="noopener">View on GitHub</a>`;
   } else if (chip.kind === "update_branch") {
     body = `#${chip.parent}, which this is stacked on, has ${chip.behind} commit${chip.behind === 1 ? "" : "s"} ${pr.headRefName || "this branch"} doesn't. Bring them in on GitHub:`;
