@@ -304,6 +304,11 @@ def push_merge(gh, snap, payload, ctx):
         raise ActionError("There is no merge commit to push.")
     if worktrees.try_git(clone, "rev-parse", f"{sha}^1").strip() != snap.get("head"):
         raise ActionError("The PR has new commits since the merge was made; resolve the conflicts again.")
+    base = snap.get("base") or ""
+    error = worktrees.mutate_git(clone, "fetch", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}", timeout=120)
+    if error or worktrees.try_git(clone, "rev-parse", f"{sha}^2").strip() != \
+            worktrees.try_git(clone, "rev-parse", f"origin/{base}").strip():
+        raise ActionError(f"{base} has moved since the merge was made; resolve the conflicts again.")
     error = worktrees.mutate_git(clone, "push", "origin", f"{sha}:refs/heads/{snap['branch']}", timeout=120)
     if error:
         raise ActionError(error)

@@ -172,6 +172,11 @@ class ResolveConflicts(GitCase):
         sha = worktrees.commit_merge(out["path"], "main", "me/clash", {"app.py": ["print('both')"]})
         self.assertEqual(git(out["path"], "show", f"{sha}:app.py"), "print('both')")
         snap = {"repo": self.repo, "number": 7, "head": head, "branch": "me/clash", "base": "main"}
+        git(self.clone, "commit", "-q", "--allow-empty", "-m", "more base")
+        git(self.clone, "push", "-q", "origin", "main")
+        with self.assertRaisesRegex(actions.ActionError, "main has moved"):
+            actions.push_merge(None, snap, {"sha": sha}, {"roots": self.roots})
+        git(self.clone, "push", "-q", "-f", "origin", "HEAD~1:main")
         actions.push_merge(None, snap, {"sha": sha}, {"roots": self.roots})
         self.assertEqual(git(self.clone, "ls-remote", "origin", "me/clash").split()[0], sha)
         self.assertFalse(os.path.isdir(out["path"]))
