@@ -46,6 +46,7 @@ MERGED_EVERY_SECONDS = 15 * 60
 PASS_ACTIVITY = {
     "feedback": "asked for a plan",
     "ci_failed": "asked why CI failed",
+    "conflicts": "asked for a conflict resolution",
     "pre_review": "ran a pre-review",
     "re_review": "asked for a re-check of the review threads",
 }
@@ -531,7 +532,16 @@ class Orchestrator:
             pin = self.db.pin(snap["key"])
             self.db.set_pin(snap["key"], review_path, pin["session_id"] if pin else None,
                             pin["how"] if pin else "review")
-        if name == "pre_review":
+        merge = None
+        if name == "conflicts":
+            merge = worktrees.merge_worktree(snap["repo"], snap["number"], snap["head"], snap.get("base"), self.roots)
+            if not merge["ok"]:
+                return self.fail_pass(row, merge["error"], raw=passes.raw_event_text(name, snap))
+            if merge["other"]:
+                return self.fail_pass(row, "Some conflicts aren't text Shipyard can resolve: "
+                                      f"{', '.join(merge['other'])}.", raw=passes.raw_event_text(name, snap))
+            cwd, session = merge["path"], None
+        elif name == "pre_review":
             if not review_path:
                 return self.fail_pass(row, "A pre-review reads someone else's PR, and this one is yours.")
             cwd, session = review_path, None
@@ -561,13 +571,17 @@ class Orchestrator:
         if mode == "fresh" and adapter.key == "claude-code":
             new_session = str(uuid.uuid4())
 
-        prompt = passes.render(name, passes.inputs(name, snap, self.github, question),
-                               self.config["rules"]["instructions"].get(name, ""))
+        values = passes.inputs(name, snap, self.github, question)
+        if merge:
+            values["conflicts"] = passes.conflicts_text(merge["files"])
+        prompt = passes.render(name, values, self.config["rules"]["instructions"].get(name, ""))
         try:
             # The PR's own code may carry agent settings (hooks, permissions); on someone
             # else's PR, only yours apply.
             # A session Shipyard keeps gets a title, so it reads the same here and in the agent's app.
-            result = adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
+            result = {"answer": {"summary": f"{snap.get('base')} merges in without conflicts here.", "proposals": [
+                {"action": "push_merge", "confidence": "high", "reason": "Git merged it cleanly.",
+                 "payload": {"files": []}}]}} if merge and not merge["files"] else adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
                                  untrusted=not snap["mine"],
                                  name=f'{snap["title"]} (#{snap["number"]})' if pin_after else
                                  f'{passes.TITLES[name]}: {snap["title"]} (#{snap["number"]})' if kept else None)
@@ -593,6 +607,8 @@ class Orchestrator:
                 self.db.set_auto_approve(snap["key"], auto["on"], "review", auto["why"])
         if name in ("pre_review", "re_review"):
             answer["proposals"] = self.draft_on_github(snap, answer["proposals"])
+        if merge:
+            answer["proposals"] = self.stage_merge(snap, merge, answer["proposals"])
         kind = "answer" if name == "ask" else "pass"
         for proposal in answer["proposals"]:
             context = reply_context(snap, (proposal.get("payload") or {}).get("comment_id"))
@@ -614,6 +630,34 @@ class Orchestrator:
                     break
             if name == "re_review" and not acted:
                 self.note_unapproved(card["id"], snap, answer["proposals"])
+
+    def stage_merge(self, snap, merge, proposals):
+        """Write the first push_merge's resolutions into the scratch merge and commit it,
+        so its button pushes exactly what the card shows."""
+        out, staged = [], False
+        for p in proposals:
+            if p["action"] != "push_merge":
+                out.append(p)
+                continue
+            if staged:
+                continue
+            files = {f.get("path"): f.get("resolutions") for f in p["payload"].get("files") or []
+                     if isinstance(f, dict)}
+            try:
+                if set(files) != set(merge["files"]) or any(
+                        not isinstance(files[f], list) or len(files[f]) != len(b) for f, b in merge["files"].items()):
+                    raise worktrees.GitError("The answer didn't resolve every conflict block.")
+                files = {f: [str(t) for t in texts] for f, texts in files.items()}
+                sha = worktrees.commit_merge(merge["path"], snap.get("base"), snap["branch"], files)
+            except (worktrees.GitError, OSError) as e:
+                out.append({"action": "continue", "confidence": "high", "reason": f"Couldn't stage the merge: {e}",
+                            "payload": {}})
+                continue
+            hunks = [{"path": f, "ours": b[2][:4000], "theirs": b[3][:4000], "resolved": t[:4000]}
+                     for f, blocks in merge["files"].items() for b, t in zip(blocks, files[f])]
+            out.append({**p, "payload": {"sha": sha, "hunks": hunks}})
+            staged = True
+        return out
 
     def draft_on_github(self, snap, proposals):
         """An approval with no comments stays a button, whatever its confidence; any other

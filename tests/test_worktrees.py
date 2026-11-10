@@ -151,3 +151,34 @@ class ApplyFix(GitCase):
         with self.assertRaisesRegex(actions.ActionError, "doesn't apply"):
             actions.apply_fix(None, {"head": head, "branch": "me/fix2"},
                               {"diff": "--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-nope\n+x\n"}, {"worktree": {"path": path}})
+
+
+class ResolveConflicts(GitCase):
+    def test_merges_base_resolves_blocks_and_pushes_the_merge(self):
+        from shipyard import actions
+        path = worktrees.new_task_worktree(self.repo, "me/clash", self.roots)["path"]
+        Path(path, "app.py").write_text("print('mine')\n")
+        git(path, "commit", "-qam", "mine")
+        git(path, "push", "-q", "origin", "HEAD:me/clash", "HEAD:refs/pull/7/head")
+        head = git(path, "rev-parse", "HEAD")
+        (self.clone / "app.py").write_text("print('base')\n")
+        git(self.clone, "commit", "-qam", "base")
+        git(self.clone, "push", "-q", "origin", "main")
+        out = worktrees.merge_worktree(self.repo, 7, head, "main", self.roots)
+        self.assertTrue(out["ok"], out)
+        self.assertEqual([(b[2], b[3]) for b in out["files"]["app.py"]], [("print('mine')\n", "print('base')\n")])
+        with self.assertRaises(worktrees.GitError):
+            worktrees.commit_merge(out["path"], "main", "me/clash", {"app.py": []})
+        sha = worktrees.commit_merge(out["path"], "main", "me/clash", {"app.py": ["print('both')"]})
+        self.assertEqual(git(out["path"], "show", f"{sha}:app.py"), "print('both')")
+        snap = {"repo": self.repo, "number": 7, "head": head, "branch": "me/clash", "base": "main"}
+        git(self.clone, "commit", "-q", "--allow-empty", "-m", "more base")
+        git(self.clone, "push", "-q", "origin", "main")
+        with self.assertRaisesRegex(actions.ActionError, "main has moved"):
+            actions.push_merge(None, snap, {"sha": sha}, {"roots": self.roots})
+        git(self.clone, "push", "-q", "-f", "origin", "HEAD~1:main")
+        actions.push_merge(None, snap, {"sha": sha}, {"roots": self.roots})
+        self.assertEqual(git(self.clone, "ls-remote", "origin", "me/clash").split()[0], sha)
+        self.assertFalse(os.path.isdir(out["path"]))
+        with self.assertRaisesRegex(actions.ActionError, "new commits"):
+            actions.push_merge(None, {**snap, "head": sha}, {"sha": sha}, {"roots": self.roots})

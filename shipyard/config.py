@@ -98,6 +98,7 @@ RULE_DEFAULTS = {
         "ci_failed": "auto",
         "pre_review": "auto",
         "re_review": "auto",
+        "conflicts": "ask",
     },
     "instructions": {},  # per pass, added to its prompt
 }

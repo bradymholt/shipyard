@@ -25,12 +25,13 @@ TEMPLATE_FILES = {
     "re_review": "re-review.md",
     "ask": "ask.md",
     "new_session": "new-session.md",
+    "conflicts": "conflicts.md",
 }
 # fork: question; resume: plan to continue; fresh: new pinned session.
 PASS_MODES = {"feedback": "resume", "ci_failed": "fork", "pre_review": "fresh",
-              "re_review": "resume", "ask": "fork", "new_session": "fresh"}
+              "re_review": "resume", "ask": "fork", "new_session": "fresh", "conflicts": "fresh"}
 ACTIONS = ["continue", "post_reply", "apply_fix", "rerun_checks", "rerequest_review", "approve",
-           "comment_unresolved", "submit_review", "enable_auto_merge", "merge", "mark_ready", "nudge"]
+           "comment_unresolved", "submit_review", "enable_auto_merge", "merge", "mark_ready", "nudge", "push_merge"]
 
 ANSWER_SCHEMA = {
     "type": "object",
@@ -60,7 +61,8 @@ ANSWER_SCHEMA = {
     },
 }
 TITLES = {"feedback": "Address feedback", "ci_failed": "Fix CI",
-          "pre_review": "Pre-review", "re_review": "Re-review", "ask": "Answer", "new_session": "New session"}
+          "pre_review": "Pre-review", "re_review": "Re-review", "ask": "Answer", "new_session": "New session",
+          "conflicts": "Resolve conflicts"}
 
 
 class SafeDict(dict):
@@ -115,6 +117,10 @@ def my_threads_text(snap):
     return "\n".join(lines) or "(no line comments; only the review summary)"
 
 
+def conflicts_text(files):
+    return "\n".join(f"- {path} ({len(blocks)} block{'s' if len(blocks) != 1 else ''})" for path, blocks in files.items())
+
+
 def inputs(name, snap, github=None, question=None):
     """Template values for a pass: summarized, so a few hundred tokens land per event."""
     values = {k: snap.get(k) for k in ("repo", "number", "title", "url", "branch", "head", "base",
@@ -153,6 +159,8 @@ def raw_event_text(name, snap):
     if name == "ci_failed":
         checks = ", ".join(c["name"] for c in snap.get("failing") or []) or "checks"
         return f"CI failed on {head}: {checks}. Find the cause and fix it."
+    if name == "conflicts":
+        return f"{head} conflicts with {snap.get('base')}. Merge it in and resolve the conflicts."
     if name == "re_review":
         return f"Re-review {head}: check my earlier threads against the new commits.\n{my_threads_text(snap)}"
     return f"Shipyard event {name} on {head}."
