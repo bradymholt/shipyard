@@ -46,6 +46,7 @@ MERGED_EVERY_SECONDS = 15 * 60
 PASS_ACTIVITY = {
     "feedback": "asked for a plan",
     "ci_failed": "asked why CI failed",
+    "conflicts": "asked for a conflict resolution",
     "pre_review": "ran a pre-review",
     "re_review": "asked for a re-check of the review threads",
 }

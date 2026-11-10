@@ -31,7 +31,7 @@ const ACTION_LABELS = {
   rerun_checks: "Re-run failed jobs", apply_fix: "Apply fix and push", post_reply: "Post reply",
   approve: "Approve", comment_unresolved: "Comment on unresolved", submit_review: "Submit as review",
   enable_auto_merge: "Enable auto-merge", merge: "Merge", mark_ready: "Mark ready", nudge: "Post nudge",
-  rerequest_review: "Re-request review",
+  rerequest_review: "Re-request review", push_merge: "Push merge",
 };
 
 // Actions that put words in front of someone show the full text, editable, before they post.
@@ -42,7 +42,7 @@ const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "r
 const MERGE_ON_APPROVE_KEY = "ghpr.mergeOnApprove";
 const mergeOnApprove = () => localStorage.getItem(MERGE_ON_APPROVE_KEY) === "1";
 
-export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
+export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session", conflicts: "Conflict resolution" };
 
 const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
   latest: "latest in the checkout", manual: "picked by you", shipyard: "started by Shipyard", review: "review worktree",
@@ -225,6 +225,12 @@ function proposalHtml(pr, card, p, i, bare = false) {
       ? `<div class="nc-reason">Commit: ${esc(p.payload?.message || "")}</div><pre>${esc(p.payload?.diff || "(no diff)")}</pre>${button}`
       : `<button type="button" data-show-diff="${field}">Show diff</button>`;
   }
+  if (p.action === "push_merge") {
+    const hunks = p.payload?.hunks || [];
+    body += hunks.length ? hunks.map((h) => `<div class="nc-snippet-where">${esc(h.path)}</div><pre class="nc-snippet">${esc(h.resolved || "(removed)")}</pre>
+      <details class="nc-sides"><summary>Both sides</summary><pre class="nc-snippet">${esc(h.ours)}</pre><pre class="nc-snippet">${esc(h.theirs)}</pre></details>`).join("")
+      : `<p class="nc-reason">Merges without conflicts.</p>`;
+  }
   if (p.action === "rerun_checks" && card.auto_wait?.manual) button = cancelWaitButton(card);
   if (p.action === "approve") button += `<a class="btn-link" href="${esc(`${pr.url}/files`)}" target="_blank" rel="noopener">Finish review on GitHub</a>`;
   const where = p.action === "post_reply" && p.payload?.comment_id
@@ -260,7 +266,7 @@ function serverCardHtml(pr, card, first) {
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
-      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div></div>`;
+      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">${card.pass === "conflicts" ? "Resolve with" : "Ask"} ${esc(agentName())}</button>${continueButton(pr)}</div></div>`;
   }
   if (card.kind === "error" || card.kind === "raw") {
     const raw = card.raw ? `<pre>${esc(card.raw)}</pre><div class="nc-actions"><button type="button" data-copy="${card.id}">Copy</button>${continueButton(pr)}</div>` : "";
@@ -332,7 +338,7 @@ function derivedCardHtml(pr, chip) {
       ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
   } else if (chip.kind === "resolve_conflicts") {
     body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;
-    actionsHtml = promptButton(pr, "resolve_conflicts", "Resolve")
+    actionsHtml = `<button type="button" data-run-pass="conflicts">Resolve with ${esc(agentName())}</button>` + promptButton(pr, "resolve_conflicts", "Resolve")
       + `<a class="btn-link" href="${esc(pr.url)}/conflicts" target="_blank" rel="noopener">View on GitHub</a>`;
   } else if (chip.kind === "update_branch") {
     body = `#${chip.parent}, which this is stacked on, has ${chip.behind} commit${chip.behind === 1 ? "" : "s"} ${pr.headRefName || "this branch"} doesn't. Bring them in on GitHub:`;

@@ -186,6 +186,11 @@ def main():
                                        "comments": [{"path": "search/tokenize.py", "line": 12,
                                                      "body": "This strips accents before matching exact names."}]}}],
             "auto_approve": {"on": True, "why": "the one fix is small and checkable from the diff"}},
+        "merging in main": {
+            "summary": "Both sides renamed the migration's column; kept main's name and the PR's default.",
+            "proposals": [{"action": "push_merge", "confidence": "high", "reason": "both changes survive",
+                           "payload": {"files": [{"path": "db/schema.sql",
+                                                  "resolutions": ["owner_id INTEGER NOT NULL DEFAULT 0"]}]}}]},
         "re-review": {
             "summary": "2 of 3 threads addressed; empty exports still crash.", "addressed": 2, "total": 3,
             "proposals": [{"action": "comment_unresolved", "confidence": "high", "reason": "one thread is open",
@@ -204,6 +209,10 @@ def main():
                  "shipyard.orchestrator.worktrees.review_worktree": {"ok": True, "path": str(checkout)},
                  "shipyard.orchestrator.worktrees.ensure_clone": {"ok": False, "error": "No local clone of o/r."}}.get(target, wts)
         mock.patch(target, return_value=value).start()
+    mock.patch("shipyard.orchestrator.worktrees.merge_worktree", return_value={
+        "ok": True, "path": str(checkout), "head": "h110", "other": [],
+        "files": {"db/schema.sql": [(0, 5, "user_id INTEGER DEFAULT 0\n", "owner_id INTEGER NOT NULL\n")]}}).start()
+    mock.patch("shipyard.orchestrator.worktrees.commit_merge", return_value="c" * 40).start()
 
     comp = Orchestrator(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
                      config_path=tmp / "shipyard.config.json")

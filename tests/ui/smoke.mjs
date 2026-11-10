@@ -117,11 +117,11 @@ try {
     "an approval with comments on a mergeable PR offers Merge on its card");
   await page.keyboard.press("Escape");
   await page.locator('.card[data-key="o/r#110"] .next-row').click();
-  await page.locator('#sidebar a[data-make-worktree]:has-text("Resolve in")').click();
-  await page.waitForSelector("#error-dialog[open]");
-  check((await page.locator("#error-message").textContent()).includes("No local clone of o/r"),
-    "Resolve on a branch with no checkout makes a worktree for it first");
-  await page.locator("#error-close").click();
+  await page.locator('#sidebar button[data-run-pass="conflicts"]').click();
+  await page.waitForSelector('#sidebar button[data-action="push_merge"]');
+  check((await page.locator("#sidebar .next-card").first().textContent()).includes("owner_id INTEGER NOT NULL DEFAULT 0"),
+    "a conflicts pass shows the resolved merge with a Push merge button");
+  if (shots) await page.screenshot({ path: `${shots}/sidebar-conflicts.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
