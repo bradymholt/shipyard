@@ -5,6 +5,7 @@ Each runs only when you press its button, or, for an action type you trusted in
 name shows that text on the card first; post_reply is never automatic.
 """
 import os
+import re
 import tempfile
 
 from . import worktrees
@@ -294,13 +295,30 @@ def draft_review(gh, snap, payload, ctx):
     return "drafted a pending review on GitHub"
 
 
+def push_merge(gh, snap, payload, ctx):
+    """Push the merge commit a conflicts pass made, once the PR's head is still the one
+    it merged into. A plain push, so a branch that moved since is refused."""
+    sha = payload.get("sha") or ""
+    clone = worktrees.find_clone(snap["repo"], ctx.get("roots") or [])
+    if not clone or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise ActionError("There is no merge commit to push.")
+    if worktrees.try_git(clone, "rev-parse", f"{sha}^1").strip() != snap.get("head"):
+        raise ActionError("The PR has new commits since the merge was made; resolve the conflicts again.")
+    error = worktrees.mutate_git(clone, "push", "origin", f"{sha}:refs/heads/{snap['branch']}", timeout=120)
+    if error:
+        raise ActionError(error)
+    worktrees.mutate_git(clone, "worktree", "remove", "--force",
+                         os.path.join(worktrees.managed_worktree_dir(clone), f"merge-{int(snap['number'])}"), timeout=60)
+    return f"pushed the merge of {snap.get('base')}"
+
+
 RUN = {
     "rerun_checks": rerun_checks, "rerequest_review": rerequest_review,
     "enable_auto_merge": enable_auto_merge, "disable_auto_merge": undo_enable_auto_merge,
     "merge": merge, "mark_ready": mark_ready, "update_branch": update_branch,
     "post_reply": post_reply, "nudge": nudge, "approve": approve,
     "comment_unresolved": comment_unresolved, "submit_review": submit_review, "apply_fix": apply_fix,
-    "draft_review": draft_review,
+    "draft_review": draft_review, "push_merge": push_merge,
 }
 UNDO = {"enable_auto_merge": undo_enable_auto_merge}
 

@@ -603,3 +603,94 @@ def review_worktree(repo, number, head, roots, clone_missing=False):
     if error:
         return {"ok": False, "error": error}
     return {"ok": True, "path": path}
+
+
+def merge_ref(number):
+    return f"refs/shipyard/merge/{int(number)}"
+
+
+def conflict_blocks(text):
+    """The conflict blocks in a file merged with conflictStyle=merge, in order, each as
+    (first line, line after it, ours, theirs)."""
+    blocks, lines, start, mid = [], text.splitlines(keepends=True), None, None
+    for i, line in enumerate(lines):
+        if line.startswith("<<<<<<< ") and start is None:
+            start = i
+        elif line.rstrip("\r\n") == "=======" and start is not None and mid is None:
+            mid = i
+        elif line.startswith(">>>>>>> ") and mid is not None:
+            blocks.append((start, i + 1, "".join(lines[start + 1:mid]), "".join(lines[mid + 1:i])))
+            start = mid = None
+    return blocks
+
+
+def merge_worktree(repo, number, head, base, roots):
+    """Merge the PR's base into its head in a scratch worktree, <clone>/.claude/worktrees/
+    merge-<number>, without committing. Returns the path and each conflicted file's
+    blocks; a conflict with no text blocks (a delete, a binary file) is listed apart."""
+    clone = find_clone(repo, roots)
+    if not clone:
+        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+    base, error = validate_branch(base or "")
+    if error:
+        return {"ok": False, "error": error}
+    error = mutate_git(clone, "fetch", "origin", f"+refs/pull/{int(number)}/head:{merge_ref(number)}",
+                       f"+refs/heads/{base}:refs/remotes/origin/{base}", timeout=120)
+    if error:
+        return {"ok": False, "error": f"Couldn't fetch the PR and {base}: {error}"}
+    target = head or try_git(clone, "rev-parse", merge_ref(number)).strip()
+    path = os.path.join(managed_worktree_dir(clone), f"merge-{int(number)}")
+    if os.path.isdir(path):
+        run_git(path, "merge", "--abort")
+        error = (mutate_git(path, "reset", "--hard", "--quiet", target, timeout=60)
+                 or mutate_git(path, "clean", "-fdq", timeout=60))
+    else:
+        error = mutate_git(clone, "worktree", "add", "--detach", path, target, timeout=120)
+    if error:
+        return {"ok": False, "error": error}
+    r = run_git(path, "-c", "merge.conflictStyle=merge", "merge", "--no-commit", "--no-ff",
+                f"origin/{base}", timeout=120)
+    conflicted = [f for f in try_git(path, "diff", "--name-only", "--diff-filter=U").splitlines() if f]
+    if r.returncode != 0 and not conflicted:
+        return {"ok": False, "error": command_error(r)}
+    files, other = {}, []
+    for name in conflicted:
+        try:
+            with open(os.path.join(path, name), encoding="utf-8") as fh:
+                blocks = conflict_blocks(fh.read())
+        except (OSError, UnicodeDecodeError):
+            blocks = []
+        if blocks:
+            files[name] = blocks
+        else:
+            other.append(name)
+    return {"ok": True, "path": path, "head": target, "files": files, "other": other}
+
+
+def commit_merge(path, base, branch, resolutions):
+    """Replace each conflict block with its resolution, in order, and commit the merge.
+    `resolutions` maps a file to its blocks' texts; every block of every conflicted
+    file must have one. Returns the merge commit's SHA."""
+    for name, texts in resolutions.items():
+        full = os.path.join(path, name)
+        with open(full, encoding="utf-8") as fh:
+            text = fh.read()
+        blocks = conflict_blocks(text)
+        if len(blocks) != len(texts):
+            raise GitError(f"{name} has {len(blocks)} conflicts but {len(texts)} resolutions.")
+        lines = text.splitlines(keepends=True)
+        for (start, end, _, _), resolved in reversed(list(zip(blocks, texts))):
+            if resolved and not resolved.endswith("\n"):
+                resolved += "\n"
+            lines[start:end] = [resolved]
+        with open(full, "w", encoding="utf-8") as fh:
+            fh.write("".join(lines))
+    left = [f for f in try_git(path, "diff", "--name-only", "--diff-filter=U").splitlines()
+            if f and f not in resolutions]
+    if left:
+        raise GitError(f"Not every conflict has a resolution: {', '.join(left)}")
+    if resolutions:
+        git(path, "add", "--", *resolutions)
+    # The merged-in lines are the base branch's, already past its checks.
+    git(path, "commit", "--no-verify", "--quiet", "-m", f"Merge {base} into {branch}", timeout=120)
+    return git(path, "rev-parse", "HEAD").strip()
