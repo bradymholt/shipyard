@@ -128,9 +128,13 @@ function promptButton(pr, rule, verb) {
   if (!url || !template) return continueButton(pr);
   const prompt = template.replaceAll("{url}", pr.url).replaceAll("{repo}", pr.repository?.nameWithOwner || "")
     .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "").replaceAll("{base}", pr.baseRefName || "");
-  const path = continueTarget(pr)?.path || worktreeFor(pr)?.path || serverPr(pr)?.path || "";
-  const href = url.replaceAll("{prompt}", encodeURIComponent(prompt)).replaceAll("{path}", encodeURIComponent(path));
-  return `<a class="btn-link" data-continue="${esc(prKey(pr))}" href="${esc(href)}" title="${esc(prompt)}">${esc(verb)} in ${esc(agentName())}</a>`;
+  // A pin can sit in a clone that has since switched off your branch.
+  const review = isReviewPr(pr);
+  const path = (review ? continueTarget(pr)?.path || worktreeFor(pr)?.path || serverPr(pr)?.path : worktreeFor(pr)?.path) || "";
+  const link = url.replaceAll("{prompt}", encodeURIComponent(prompt));
+  const make = path || review ? "" : ` data-make-worktree="${esc(link)}"`;
+  const href = link.replaceAll("{path}", encodeURIComponent(path));
+  return `<a class="btn-link" data-continue="${esc(prKey(pr))}"${make} href="${esc(href)}" title="${esc(prompt)}">${esc(verb)} in ${esc(agentName())}</a>`;
 }
 
 function sidebarHeader(pr) {
@@ -562,7 +566,15 @@ $("#sidebar").addEventListener("click", async (e) => {
   if ((btn = t("[data-continue]"))) {
     // Log it; the link itself opens the session (or the server runs the command).
     apiCall(`api/pr-action?key=${encodeURIComponent(key)}&action=continue`, {}).catch(() => {});
-    if (btn.dataset.agentSession) {
+    if (btn.dataset.makeWorktree && pr) {
+      e.preventDefault();
+      await busy(btn, async () => {
+        const res = await apiPost(`branch-worktree?repo=${encodeURIComponent(pr.repository?.nameWithOwner || "")}&branch=${encodeURIComponent(pr.headRefName || "")}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || `Creating a worktree failed (${res.status}).`);
+        window.location.href = btn.dataset.makeWorktree.replaceAll("{path}", encodeURIComponent(data.path));
+      });
+    } else if (btn.dataset.agentSession) {
       e.preventDefault();
       await busy(btn, async () => {
         const res = await apiPost(`open-agent?path=${encodeURIComponent(btn.dataset.agentPath)}&session=${encodeURIComponent(btn.dataset.agentSession)}`);

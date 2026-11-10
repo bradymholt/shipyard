@@ -45,8 +45,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       ".webmanifest": "application/manifest+json",
                       ".js": "text/javascript", ".css": "text/css"}
     BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main",
-                      "/open-default-main", "/open-app", "/open-agent"}
-    CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main"}
+                      "/open-default-main", "/branch-worktree", "/open-app", "/open-agent"}
+    CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main", "/branch-worktree"}
     API_ACTIONS = {"/api/snooze", "/api/pin", "/api/unpin", "/api/ask", "/api/run-pass",
                          "/api/card-action", "/api/dismiss", "/api/undo", "/api/cancel-wait",
                          "/api/pr-action", "/api/auto-approve",
@@ -233,6 +233,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             result = worktrees.open_in_main(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/open-default-main":
             result = worktrees.open_default_in_main(arg("repo"), self.orchestrator.roots)
+        elif parsed.path == "/branch-worktree":
+            result = worktrees.branch_worktree(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/open-app":
             result = worktrees.launch_app(arg("path"), self.orchestrator.roots, self.config)
         else:

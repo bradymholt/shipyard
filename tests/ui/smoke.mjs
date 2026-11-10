@@ -116,6 +116,13 @@ try {
   check(await page.locator('#sidebar .next-card [data-pr-action="merge"]').count() === 1,
     "an approval with comments on a mergeable PR offers Merge on its card");
   await page.keyboard.press("Escape");
+  await page.locator('.card[data-key="o/r#110"] .next-row').click();
+  await page.locator('#sidebar a[data-make-worktree]:has-text("Resolve in")').click();
+  await page.waitForSelector("#error-dialog[open]");
+  check((await page.locator("#error-message").textContent()).includes("No local clone of o/r"),
+    "Resolve on a branch with no checkout makes a worktree for it first");
+  await page.locator("#error-close").click();
+  await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
