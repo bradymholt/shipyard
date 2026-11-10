@@ -181,7 +181,8 @@ function proposalHtml(pr, card, p, i, bare = false) {
   if (p.action === "finish_on_github") {
     const n = p.payload?.comments || 0;
     const drafted = p.payload?.error ? esc(p.payload.error)
-      : `Drafted on GitHub as a pending review${n ? ` with ${n} comment${n === 1 ? "" : "s"}` : ""}, visible only to you. Edit it there, then submit.`;
+      : n ? `Drafted on GitHub as a pending review with ${n} comment${n === 1 ? "" : "s"}, visible only to you. Edit it there, then submit.`
+      : "Drafted on GitHub as a pending review with only a summary, visible only to you. It has no line comments, so it shows only in Review changes on the Files changed tab. Edit it there, then submit.";
     return `
     <div class="nc-proposal">
       <p class="nc-reason">${drafted}</p>
