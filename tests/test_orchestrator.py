@@ -887,6 +887,18 @@ class PageRequests(OrchestratorCase):
         self.poll()
         self.assertEqual(self.comp.db.pin("o/r#1")["session_id"], "s-open")
 
+    def test_stacked_pr_off_its_branch_takes_the_stack_session_that_links_it(self):
+        transcript = Path(self.checkout) / "s-open.jsonl"
+        transcript.write_text("opened https://github.com/o/r/pull/1 and https://github.com/o/r/pull/2")
+        self.agent.session_file = lambda path, sid: transcript if sid == "s-open" else None
+        self.agent.title = lambda text: ""
+        self.gh.put(pr_node(), "author:@me")
+        self.gh.put(pr_node(number=2, branch="feature-2", base="feature"), "author:@me")
+        self.gh.put(pr_node(number=10, branch="feature-10", base="feature-2"), "author:@me")
+        self.poll()
+        self.assertEqual(self.comp.db.pin("o/r#2")["session_id"], "s-open")
+        self.assertIsNone(self.comp.db.pin("o/r#10"))
+
     def test_ask_runs_a_fork_with_the_question(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()
