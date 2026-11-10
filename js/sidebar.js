@@ -333,8 +333,7 @@ function derivedCardHtml(pr, chip) {
       ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
   } else if (chip.kind === "resolve_conflicts") {
     body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;
-    actionsHtml = `<button type="button" class="nc-run primary" data-run-pass="conflicts">Fix conflicts</button>` + promptButton(pr, "resolve_conflicts", "Resolve")
-      + `<a class="btn-link" href="${esc(pr.url)}/conflicts" target="_blank" rel="noopener">View on GitHub</a>`;
+    actionsHtml = `<button type="button" class="nc-run primary" data-run-pass="conflicts">Fix conflicts</button>` + promptButton(pr, "resolve_conflicts", "Resolve");
   } else if (chip.kind === "update_branch") {
     body = `#${chip.parent}, which this is stacked on, has ${chip.behind} commit${chip.behind === 1 ? "" : "s"} ${pr.headRefName || "this branch"} doesn't. Bring them in on GitHub:`;
     actionsHtml = `<button type="button" class="nc-run" data-pr-action="update_branch" data-method="merge">Merge ${esc(pr.baseRefName || "base")} in</button>`
