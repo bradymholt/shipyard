@@ -199,7 +199,7 @@ export function nextChip(pr) {
 
 export const needsYou = (pr) => {
   const chip = nextChip(pr);
-  return !!chip && chip.tone !== "muted" && !chip.optional;
+  return !!chip && chip.tone !== "muted" && !chip.optional && !serverPr(pr)?.running;
 };
 
 const allPrs = () => [...state.prs, ...state.reviewedPrs, ...state.merged, ...state.reviewedMerged];

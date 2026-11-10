@@ -125,7 +125,7 @@ try {
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
-    document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional)").length,
+    document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional):not(:has(.next-status))").length,
     [...document.querySelectorAll(".lane-needs")].reduce((n, el) => n + parseInt(el.textContent, 10), 0),
   ]);
   check(steps > 0 && badge === String(steps) && lanes === steps, "the My PRs badge and lane headers count the Next steps on the board");
