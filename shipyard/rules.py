@@ -20,6 +20,7 @@ EVENT_PASSES = {
     "review_requested_of_me": ("pre_review", "review"),
     "review_rerequested": ("re_review", "re_review"),
     "review_dismissed": ("re_review", "re_review"),
+    "conflicted": ("conflicts", "resolve_conflicts"),
 }
 
 
@@ -29,6 +30,7 @@ STEPS_FOR_PASS = {
     "ci_failed": ("fix_ci",),
     "pre_review": ("review",),
     "re_review": ("re_review",),
+    "conflicts": ("resolve_conflicts",),
 }
 
 
@@ -230,7 +232,7 @@ def card_is_stale(card, snap, rules):
     """A Next card stops applying once no next step calls for it."""
     kinds = STEPS_FOR_PASS.get(card.get("pass"))
     if kinds:
-        if card.get("pass") == "ci_failed" and card.get("head") != snap.get("head"):
+        if card.get("pass") in ("ci_failed", "conflicts") and card.get("head") != snap.get("head"):
             return True
         return not any(s["kind"] in kinds for s in next_steps(snap, rules))
     if snap.get("state") != "OPEN":
