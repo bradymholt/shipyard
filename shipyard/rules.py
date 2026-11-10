@@ -167,7 +167,11 @@ def next_steps(snap, rules, cards=()):
         out.append({"kind": "update_branch", "label": f"Update from #{snap['stack_parent']}", "tone": "gold",
                     "behind": behind, "parent": snap["stack_parent"],
                     "title": f"#{snap['stack_parent']} has {behind} commit{'s' if behind != 1 else ''} this branch doesn't"})
-    if snap.get("ci") in events.FAILING and rules.get("fix_ci"):
+    queued = any((c.get("auto_wait") or {}).get("action") == "rerun_checks" for c in cards)
+    if snap.get("ci") in events.FAILING and queued:
+        out.append({"kind": "rerun_queued", "label": "Re-run queued", "tone": "muted",
+                    "title": "Re-runs the failed jobs once the running checks finish"})
+    elif snap.get("ci") in events.FAILING and rules.get("fix_ci"):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
         out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
