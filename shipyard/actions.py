@@ -314,7 +314,7 @@ def push_merge(gh, snap, payload, ctx):
         raise ActionError(error)
     worktrees.mutate_git(clone, "worktree", "remove", "--force",
                          os.path.join(worktrees.managed_worktree_dir(clone), f"merge-{int(snap['number'])}"), timeout=60)
-    return f"pushed the merge of {snap.get('base')}"
+    return f"resolved the conflicts with {snap.get('base')} and pushed the merge"
 
 
 RUN = {

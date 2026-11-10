@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from shipyard import actions
 from shipyard.agents import AgentError
 from shipyard.github import GitHubError
 from shipyard.orchestrator import Orchestrator
@@ -899,25 +900,26 @@ class PageRequests(OrchestratorCase):
         self.assertEqual(self.comp.db.pin("o/r#2")["session_id"], "s-open")
         self.assertIsNone(self.comp.db.pin("o/r#10"))
 
-    def test_conflicts_pass_stages_the_merge_for_push_merge(self):
-        self.raw = {"rules": {"passes": {"conflicts": "auto"}}}
-        self.comp.config = validate_config(self.raw)
+    def test_fix_conflicts_resolves_and_pushes_the_merge(self):
         blocks = [(0, 5, "mine\n", "base\n")]
         merge = {"ok": True, "path": self.checkout, "head": "aaa", "files": {"app.py": blocks}, "other": []}
         self.agent.answers["merging in main"] = {"summary": "Kept both.", "proposals": [
             {"action": "push_merge", "confidence": "high", "reason": "both", "payload": {"files": [
                 {"path": "app.py", "resolutions": ["mine\nbase"]}]}}]}
+        self.gh.put(pr_node(mergeable="CONFLICTING"), "author:@me")
+        self.poll()
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#1"]["cards"], [])
         with mock.patch("shipyard.orchestrator.worktrees.merge_worktree", return_value=merge), \
-                mock.patch("shipyard.orchestrator.worktrees.commit_merge", return_value="b" * 40) as commit:
-            self.gh.put(pr_node(mergeable="CONFLICTING"), "author:@me")
-            self.poll()
+                mock.patch("shipyard.orchestrator.worktrees.commit_merge", return_value="b" * 40) as commit, \
+                mock.patch.dict("shipyard.actions.RUN", push_merge=mock.Mock(return_value="pushed it")):
+            push = actions.RUN["push_merge"]
+            self.comp.run_pass_now("o/r#1", "conflicts")
             self.idle()
         commit.assert_called_once_with(self.checkout, "main", "feature", {"app.py": ["mine\nbase"]})
-        self.assertEqual(self.agent.runs[-1]["cwd"], self.checkout)
         self.assertIn("- app.py (1 block)", self.agent.runs[-1]["prompt"])
-        card = self.comp.page_state()["prs"]["o/r#1"]["cards"][0]
-        self.assertEqual(card["proposals"][0]["payload"], {"sha": "b" * 40, "hunks": [
-            {"path": "app.py", "ours": "mine\n", "theirs": "base\n", "resolved": "mine\nbase"}]})
+        self.assertEqual(push.call_args[0][2], {"sha": "b" * 40})
+        pr = self.comp.page_state()["prs"]["o/r#1"]
+        self.assertEqual((pr["cards"], pr["handled"][0]["handled"]["result"]), ([], "pushed it"))
 
     def test_ask_runs_a_fork_with_the_question(self):
         self.gh.put(pr_node(), "author:@me")

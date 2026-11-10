@@ -619,6 +619,8 @@ class Orchestrator:
                                    total=answer.get("total"), mode=mode, session_id=produced,
                                    kept_path=cwd if kept else None,
                                    status="done" if name == "new_session" else None)
+        if merge and card:
+            self.push_staged_merge(card["id"], snap, answer)
         if kind == "answer" and card:
             self.post_spelled_out(card["id"], snap, question, answer["proposals"])
         if kind == "pass" and card:
@@ -632,8 +634,7 @@ class Orchestrator:
                 self.note_unapproved(card["id"], snap, answer["proposals"])
 
     def stage_merge(self, snap, merge, proposals):
-        """Write the first push_merge's resolutions into the scratch merge and commit it,
-        so its button pushes exactly what the card shows."""
+        """Write the first push_merge's resolutions into the scratch merge and commit it."""
         out, staged = [], False
         for p in proposals:
             if p["action"] != "push_merge":
@@ -653,11 +654,26 @@ class Orchestrator:
                 out.append({"action": "continue", "confidence": "high", "reason": f"Couldn't stage the merge: {e}",
                             "payload": {}})
                 continue
-            hunks = [{"path": f, "ours": b[2][:4000], "theirs": b[3][:4000], "resolved": t[:4000]}
-                     for f, blocks in merge["files"].items() for b, t in zip(blocks, files[f])]
-            out.append({**p, "payload": {"sha": sha, "hunks": hunks}})
+            out.append({**p, "payload": {"sha": sha}})
             staged = True
         return out
+
+    def push_staged_merge(self, card_id, snap, answer):
+        """Pressing Fix conflicts is the go-ahead, so a merge that stages cleanly is pushed."""
+        p = next((p for p in answer["proposals"] if p["action"] == "push_merge"), None)
+        if not p or not self.db.claim_card(card_id):
+            return
+        try:
+            result = actions.run(self.github, "push_merge", snap, p["payload"], self.action_context(snap))
+        except Exception as e:
+            self.db.update_card(card_id, status="open", proposals=[
+                {"action": "continue", "confidence": "high", "reason": f"Couldn't push the merge: {e}", "payload": {}}])
+            return
+        self.db.log(snap["key"], result)
+        self.db.update_card(card_id, status="handled", handled={
+            "action": "push_merge", "result": result, "reason": answer["summary"], "payload": p["payload"],
+            "undoable": False, "flag": None})
+        self.poke()
 
     def draft_on_github(self, snap, proposals):
         """An approval with no comments stays a button, whatever its confidence; any other

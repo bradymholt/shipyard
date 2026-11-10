@@ -40,7 +40,6 @@ PASS_GROUPS = [
     ("feedback", "address_feedback", "", ("post_reply",)),
     ("pre_review", "review", "Pre-reviews stay drafts only you can see; submitting is yours.", ()),
     ("re_review", "re_review", "", ("approve_rereview",)),
-    ("conflicts", "resolve_conflicts", "The merge is made in a scratch worktree and pushed only when you press Push merge.", ()),
 ]
 
 

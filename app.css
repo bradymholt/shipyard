@@ -658,7 +658,6 @@ body.sidebar-open #sidebar { transform: none; visibility: visible; }
 .next-card .nc-thread { color: var(--teal); text-decoration: underline; text-underline-offset: 2px; }
 .next-card .nc-snippet-where { font: 500 0.6875rem var(--mono); color: var(--fg-muted); margin-top: 0.375rem; overflow-wrap: anywhere; }
 .next-card pre.nc-snippet { margin-top: 0.25rem; }
-.next-card .nc-sides summary { font: 500 0.6875rem var(--sans); color: var(--fg-muted); cursor: pointer; margin-top: 0.25rem; }
 .next-card textarea, .sb-ask input { width: 100%; font: 400 0.75rem/1.45 var(--sans); color: var(--fg); background: var(--surface); border: 1px solid var(--border); border-radius: 0.375rem; padding: 0.375rem 0.5rem; resize: vertical; }
 .next-card textarea:focus, .sb-ask input:focus { outline: none; border-color: var(--teal); }
 .nc-proposal { border-top: 1px dashed var(--border); padding-top: 0.375rem; margin-top: 0.375rem; }

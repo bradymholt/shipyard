@@ -122,9 +122,6 @@ def derive(prev, cur, image_sign_off=True):
             add("ci_failed", checks=[c["name"] for c in cur.get("failing") or []])
         if not first and prev.get("ci") in FAILING and cur.get("ci") == "SUCCESS":
             add("ci_recovered")
-        if cur.get("mergeable") == "CONFLICTING" and (first or prev.get("mergeable") != "CONFLICTING"
-                                                      or prev.get("head") != cur.get("head")):
-            add("conflicted")
         if cur.get("decision") == "APPROVED" and (first or prev.get("decision") != "APPROVED"):
             add("approved")
         return events
