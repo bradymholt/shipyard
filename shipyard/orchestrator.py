@@ -5,6 +5,7 @@ POSTs (snooze, pin, card buttons)."""
 import concurrent.futures
 import functools
 import os
+import re
 import threading
 import time
 import traceback
@@ -377,11 +378,13 @@ class Orchestrator:
         key = snap["key"]
         adapter = self.adapter
         wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
-        if not adapter or not wt:
+        if not adapter:
             return None
         current = self.db.pin(key)
         if current and (current.get("session_id") or current.get("how") == "unpinned") and not force:
             return current
+        if not wt:
+            return self.pin_from_stack(snap)
         # A lookup reads every transcript in the checkout, so a miss stands until they change.
         stamp = transcripts_stamp(adapter, wt["path"])
         if not force and self.pin_misses.get(key) == stamp:
@@ -395,6 +398,39 @@ class Orchestrator:
                         + (" (latest in the checkout)" if found["how"] == "latest" else ""))
             return self.db.pin(key)
         self.pin_misses[key] = stamp
+        return None
+
+    def pin_from_stack(self, snap):
+        """A session that builds a stack in one worktree leaves only the branch it ends on
+        checked out, so a PR off-branch takes a stack-mate's session that links to it."""
+        open_prs = [s for s in self.db.prs() if s.get("state") == "OPEN" and s["mine"] and s["repo"] == snap["repo"]]
+        stack, todo = {snap["key"]}, [snap]
+        while todo:
+            cur = todo.pop()
+            for s in open_prs:
+                if s["key"] not in stack and (s.get("branch") == cur.get("base") or s.get("base") == cur.get("branch")):
+                    stack.add(s["key"])
+                    todo.append(s)
+        candidates = {}
+        for k in stack - {snap["key"]}:
+            pin = self.db.pin(k)
+            f = pin and pin.get("session_id") and self.adapter.session_file(pin["path"], pin["session_id"])
+            if f:
+                candidates[(pin["path"], pin["session_id"])] = f
+        try:
+            stamp = tuple(sorted((c, os.path.getmtime(f)) for c, f in candidates.items()))
+        except OSError:
+            return None
+        if not stamp or self.pin_misses.get(snap["key"]) == stamp:
+            return None
+        link = re.compile(re.escape(snap["url"]) + r"(?!\d)")
+        for (path, session_id), f in candidates.items():
+            if link.search(read_text(f)):
+                self.pin_misses.pop(snap["key"], None)
+                self.db.set_pin(snap["key"], path, session_id, "stack")
+                self.db.log(snap["key"], f"pinned {self.config['agent']['name']} session (from its stack)")
+                return self.db.pin(snap["key"])
+        self.pin_misses[snap["key"]] = stamp
         return None
 
     def resolve_stale_cards(self, snap):

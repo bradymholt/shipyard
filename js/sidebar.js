@@ -45,7 +45,8 @@ const mergeOnApprove = () => localStorage.getItem(MERGE_ON_APPROVE_KEY) === "1";
 export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session" };
 
 const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
-  latest: "latest in the checkout", manual: "picked by you", shipyard: "started by Shipyard", review: "review worktree" };
+  latest: "latest in the checkout", manual: "picked by you", shipyard: "started by Shipyard", review: "review worktree",
+  stack: "opened another PR in this stack" };
 
 export function openSidebar(key) {
   sidebarKey = key;
