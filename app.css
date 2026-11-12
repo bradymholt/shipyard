@@ -165,17 +165,15 @@ button.icon-btn svg { fill: var(--fg-muted); }
 .hint code { font-family: var(--mono); font-size: 0.6875rem; background: var(--bg-inset); padding: 0 0.3125rem; border-radius: 0.25rem; }
 .hidden { display: none !important; }
 
-dialog#new-task-dialog, dialog#error-dialog {
+dialog#error-dialog {
   background: var(--surface); color: var(--fg);
   border: 1px solid var(--border); border-radius: 0.625rem;
   box-shadow: 0 8px 30px rgba(18,38,58,.18); padding: 1.25rem; width: min(27.5rem, 92vw);
 }
-dialog#new-task-dialog::backdrop, dialog#error-dialog::backdrop { background: rgba(18,38,58,.45); }
+dialog#error-dialog::backdrop { background: rgba(18,38,58,.45); }
 #error-dialog h2 { margin: 0 0 0.375rem; font: 700 1rem var(--sans); }
 #error-dialog p { margin: 0 0 1rem; color: var(--fg-muted); font-size: 0.875rem; white-space: pre-wrap; }
 .modal-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
-#new-task-form h2 { margin: 0 0 0.25rem; font: 700 1.0625rem var(--sans); }
-#new-task-form .hint { display: block; margin-bottom: 0.875rem; }
 .views-list { list-style: none; margin: 0.375rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .view-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem 0.375rem 0.625rem; border: 1px solid var(--border); border-radius: 0.375rem; }
 .view-name { flex: 1; font: 400 0.75rem var(--mono); color: var(--fg); }
@@ -303,14 +301,6 @@ dialog#welcome-dialog::backdrop { background: rgba(18,38,58,.5); }
 .set-prompt pre { margin: 0.375rem 0 0; max-height: 18rem; overflow: auto; padding: 0.625rem 0.75rem; border: 1px solid var(--border-soft); border-radius: 0.375rem; background: var(--bg-inset); font: 0.6875rem/1.5 var(--mono); color: var(--fg-muted); white-space: pre-wrap; }
 .set-prompt mark { display: block; margin: 0.25rem 0; padding: 0.125rem 0.375rem; border-radius: 0.25rem; background: color-mix(in srgb, var(--gold) 18%, var(--surface)); color: var(--gold-text); font-weight: 600; }
 .add-view-row input { flex: 1; }
-.nt-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--fg-muted); }
-.nt-field select, .nt-field input { font-size: 0.875rem; color: var(--fg); }
-.nt-optional { font-weight: 400; font-size: 0.6875rem; color: var(--fg-faint); text-transform: none; }
-.nt-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
-.nt-actions .spacer { flex: 1; margin: 0; }
-.nt-status { margin: 0.75rem 0 0; }
-.nt-status:empty { display: none; }
-.nt-status.error { color: var(--red-text); }
 
 /* ---------- list ---------- */
 .stale-banner {
@@ -483,14 +473,6 @@ button.wt-link:disabled { opacity: .5; cursor: default; }
 .lane-needs { color: var(--gold-text); font-weight: 600; text-transform: none; letter-spacing: normal; }
 .lane-empty { display: flex; flex-direction: column; align-items: center; gap: 0.375rem; color: var(--fg-faint); font-size: 0.75rem; text-align: center; padding: 1.75rem 0.75rem; }
 .lane-empty svg { fill: var(--muted-bar); }
-.lane-new-task {
-  display: flex; align-items: center; justify-content: center; gap: 0.375rem;
-  width: 100%; padding: 0.4375rem; background: none;
-  border: 1px dashed var(--border-dashed); border-radius: 0.375rem;
-  color: var(--fg-faint); font: 500 0.75rem var(--sans); cursor: pointer;
-}
-.lane-new-task:hover { border-color: var(--teal); color: var(--teal); }
-.lane-new-task svg { fill: currentColor; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

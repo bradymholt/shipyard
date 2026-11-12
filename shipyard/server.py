@@ -44,9 +44,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".webmanifest": "application/manifest+json",
                       ".js": "text/javascript", ".css": "text/css"}
-    BRANCH_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main",
-                      "/open-default-main", "/branch-worktree", "/open-app", "/open-agent"}
-    CHECKOUT_ACTIONS = {"/new-task", "/new-branch-main", "/open-in-main", "/open-default-main", "/branch-worktree"}
+    BRANCH_ACTIONS = {"/open-in-main", "/branch-worktree", "/open-app", "/open-agent"}
+    CHECKOUT_ACTIONS = {"/open-in-main", "/branch-worktree"}
     API_ACTIONS = {"/api/snooze", "/api/pin", "/api/unpin", "/api/ask", "/api/run-pass",
                          "/api/card-action", "/api/dismiss", "/api/undo", "/api/cancel-wait",
                          "/api/pr-action", "/api/auto-approve",
@@ -225,14 +224,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except ValueError as e:
                 return self._json({"ok": False, "error": str(e)}, 400)
             return self._api(parsed.path.rsplit("/", 1)[1], arg, body)
-        if parsed.path == "/new-task":
-            result = worktrees.new_task_worktree(arg("repo"), arg("branch"), self.orchestrator.roots)
-        elif parsed.path == "/new-branch-main":
-            result = worktrees.new_branch_in_main(arg("repo"), arg("branch"), self.orchestrator.roots)
-        elif parsed.path == "/open-in-main":
+        if parsed.path == "/open-in-main":
             result = worktrees.open_in_main(arg("repo"), arg("branch"), self.orchestrator.roots)
-        elif parsed.path == "/open-default-main":
-            result = worktrees.open_default_in_main(arg("repo"), self.orchestrator.roots)
         elif parsed.path == "/branch-worktree":
             result = worktrees.branch_worktree(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/open-app":

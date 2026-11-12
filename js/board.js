@@ -1,11 +1,10 @@
 // The board: lanes, cards, and Recently merged.
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, BRANCH_ICON, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
+import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
-import { openNewTaskDialog } from "./settings.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
 
@@ -502,9 +501,6 @@ function renderBoard() {
     if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
       laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
     }
-    const laneAction = (!reviewBoard && i === 0)
-      ? `<button type="button" class="lane-new-task">${BRANCH_ICON}Start work</button>`
-      : "";
     const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
     const needs = needsLabel(state.serverState ? stepsFor(inLane) : 0);
     const laneCount = `<span class="lane-count">${needs && `${needs} · `}${inLane.length}</span>`;
@@ -517,7 +513,6 @@ function renderBoard() {
     <div class="lane${collapsed ? " collapsed" : ""}">
       ${header}
       ${laneHtml || `<div class="lane-empty">${EMPTY_ICON}<span>${laneEmptyText(name, reviewBoard)}</span></div>`}
-      ${laneAction}
     </div>`;
   }).join("") + "</div>";
   if (!count && !recentMerged.length) html = "";
@@ -563,7 +558,6 @@ function handleMergedClick(e) {
 }
 
 listBody.addEventListener("click", async (e) => {
-  if (e.target.closest("button.lane-new-task")) { openNewTaskDialog(); return; }
   const chip = e.target.closest("button.next-row");
   if (chip) { openSidebar(chip.dataset.open); return; }
   // A click anywhere on a card that isn't a link or control opens its sidebar.

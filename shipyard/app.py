@@ -51,7 +51,7 @@ def main(argv=None):
     httpd.daemon_threads = True
     print(f"Shipyard → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}" if roots else
-          "Not scanning any folders yet: add one in Settings (Folders to scan) to open checkouts and start work.")
+          "Not scanning any folders yet: add one in Settings (Folders to scan) to open checkouts.")
     launcher = config["launcher"]
     print(f"Opens in: {launcher['name']} via {launcher['mode']}")
     agent = config["agent"]
