@@ -38,10 +38,24 @@ class DemoGitHub(FakeGitHub):
 
     def graphql(self, query, variables=None):
         q = (variables or {}).get("q", "")
-        if "merged:>=" in q:
+        if "merged:" in q and ".." in q:
             mine = "reviewed-by:@me" not in q
-            rows = [{"createdAt": ago(days=d + 1 + (d * 7) % (5 if mine else 3), hours=3), "mergedAt": ago(days=d)}
-                    for d in range(0, 84, 3 if mine else 4)]
+            rows = []
+            for d in range(0, 84, 3 if mine else 4):
+                age = 1 + (d * 7) % (5 if mine else 3)
+                n = d // (3 if mine else 4)
+                size = [18, 64, 140, 320, 760, 1400][n % 6]
+                author = "me" if mine else ["ana", "raj", "ana", "lee", "dependabot"][n % 5]
+                reviewers = [["ana", "raj", "lee", "kim", "ana"][n % 5]] + (["lee"] if n % 3 == 0 else []) if mine else ["me"]
+                rows.append({"createdAt": ago(days=d + age, hours=3), "mergedAt": ago(days=d),
+                             "additions": size * 3 // 4, "deletions": size // 4,
+                             "repository": {"nameWithOwner": "o/r" if n % 3 else "o/web"},
+                             "author": {"__typename": "Bot" if author == "dependabot" else "User", "login": author},
+                             "reviews": {"nodes": [{"state": "APPROVED", "author": {"login": r},
+                                                    "submittedAt": ago(days=d + age, hours=3 - (2 + (n * 5 + i * 7) % 20))}
+                                                   for i, r in enumerate(reviewers)]}})
+            lo, hi = q.split("merged:")[1].split()[0].split("..")
+            rows = [r for r in rows if lo <= r["mergedAt"][:10] <= hi]
             return {"search": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": rows}}
         if "is:merged" in q:
             nodes = self.merged["reviewed-by:@me" if "reviewed-by:@me" in q else "author:@me"]

@@ -4,6 +4,7 @@ bump a PR's updatedAt, which is why the signature carries them too.
 
 Each PR becomes a plain snapshot dict; events.py diffs two of them."""
 import concurrent.futures
+from datetime import datetime, timedelta, timezone
 import hashlib
 from pathlib import Path
 
@@ -120,7 +121,8 @@ query($q: String!, $after: String, $first: Int!) {
 
 # Merges for the Insights charts: only the dates, so a few pages cover months.
 INSIGHTS_WEEKS = 12
-INSIGHTS_MAX_PAGES = 5
+INSIGHTS_MAX_PAGES = 3
+INSIGHTS_WINDOW_DAYS = 14
 INSIGHTS_QUERY = """
 query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
@@ -457,11 +459,17 @@ class Poller:
                 "after": page["endCursor"] if page["hasNextPage"] else None}
 
     def insights(self, view, since):
-        """Your merges and the merges you reviewed since a date, as (created, merged) pairs."""
+        """Your merges and the merges you reviewed since a date. Reading reviews makes each
+        page slow, so two-week windows are searched side by side."""
         scope = f"{self.scope(view)} " if view else ""
-        out = {}
-        for kind, search in MERGED_SEARCHES.items():
-            q = f"is:pr archived:false {scope}{search} merged:>={since}"
+        start = datetime.strptime(since, "%Y-%m-%d").date()
+        days = (datetime.now(timezone.utc).date() - start).days + 1
+        windows = [(start + timedelta(days=d), start + timedelta(days=min(d + INSIGHTS_WINDOW_DAYS, days) - 1))
+                   for d in range(0, days, INSIGHTS_WINDOW_DAYS)]
+
+        def window(job):
+            kind, (lo, hi) = job
+            q = f"is:pr archived:false {scope}{MERGED_SEARCHES[kind]} merged:{lo}..{hi}"
             rows, after = [], None
             for _ in range(INSIGHTS_MAX_PAGES):
                 found = self.github.graphql(INSIGHTS_QUERY, {"q": q, "after": after})["search"]
@@ -469,7 +477,13 @@ class Poller:
                 if not found["pageInfo"]["hasNextPage"]:
                     break
                 after = found["pageInfo"]["endCursor"]
-            out[kind] = rows
+            return kind, rows
+
+        jobs = [(kind, w) for kind in MERGED_SEARCHES for w in windows]
+        out = {kind: [] for kind in MERGED_SEARCHES}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            for kind, rows in pool.map(window, jobs):
+                out[kind] += rows
         return out
 
     def timeline(self, node_id):

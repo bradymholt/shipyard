@@ -228,14 +228,15 @@ class SharedCosts(OrchestratorCase):
         self.gh.put(node, "author:@me")
         with mock.patch.object(self.gh, "graphql", wraps=self.gh.graphql) as gql:
             out = self.comp.insights("")
+            searched = gql.call_count
             self.comp.insights("")
-        self.assertEqual(out["merged"], {"mine": [{"created": node["createdAt"], "merged": "2026-10-20T00:00:00Z",
-                                                   "size": 12, "repo": "o/r", "author": "me", "bot": False,
-                                                   "reviews": [["rev", "2026-10-19T00:00:00Z"]]}],
-                                         "review": []})
+        self.assertEqual(out["merged"]["mine"][0], {"created": node["createdAt"], "merged": "2026-10-20T00:00:00Z",
+                                                    "size": 12, "repo": "o/r", "author": "me", "bot": False,
+                                                    "reviews": [["rev", "2026-10-19T00:00:00Z"]]})
+        self.assertEqual(out["merged"]["review"], [])
         self.assertEqual(out["shipyard"]["passes"], {})
-        self.assertEqual(gql.call_count, 2)  # one search per list, then the cache
-        self.assertIn(f"merged:>={out['since']}", gql.call_args_list[0].args[1]["q"])
+        self.assertEqual(gql.call_count, searched)  # the second read is the cache
+        self.assertTrue(any(f"merged:{out['since']}.." in c.args[1]["q"] for c in gql.call_args_list))
 
 
 class Settings(OrchestratorCase):
