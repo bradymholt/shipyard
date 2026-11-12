@@ -94,6 +94,12 @@ class DeriveMine(unittest.TestCase):
         captioned = snap(decision="APPROVED", reviews=[review("APPROVED", id=1, body="![x](https://x/y) rename this")])
         self.assertEqual(names(derive(snap(), captioned)), ["feedback", "approved"])
 
+    def test_a_comment_sign_off_without_an_approval_asks_for_one(self):
+        gif = [review("COMMENTED", id=1, body="![](https://x/y.gif)")]
+        steps = rules.next_steps(snap(decision="REVIEW_REQUIRED", reviews=gif), RULES)
+        self.assertEqual([(s["kind"], s["reviewers"]) for s in steps], [("ask_approval", ["rev"])])
+        self.assertEqual(rules.next_steps(snap(decision="REVIEW_REQUIRED", reviews=gif, requested=["rev"]), RULES), [])
+
     def test_push_after_changes_requested_proposes_re_request(self):
         prev = snap(decision="CHANGES_REQUESTED", reviews=[review("CHANGES_REQUESTED", commit="aaa")])
         cur = snap(head="bbb", decision="CHANGES_REQUESTED",
