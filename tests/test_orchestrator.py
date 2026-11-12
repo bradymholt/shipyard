@@ -245,6 +245,7 @@ class Settings(OrchestratorCase):
             with self.assertRaises(ValueError):
                 self.comp.save_setting(path, value, expect=expect)
 
+    @mock.patch.dict("shipyard.config.AUTO_DEFAULTS", rerun_checks=True)
     def test_a_setting_saves_in_the_files_own_form_and_resets_away(self):
         self.config_path.write_text("{}")
         out = self.comp.save_setting(["auto", "rerun_checks", "when"], "medium", expect="high")
@@ -497,6 +498,7 @@ class CiFailed(OrchestratorCase):
             self.comp.do_action("o/r#1", "rerun_checks", {}, card["id"])
 
     def test_trusted_rerun_fires_itself_and_lands_in_handled(self):
+        self.trust("rerun_checks")
         self.gh.put(self.red(), "author:@me")
         pr = self.poll()["o/r#1"]
         self.assertIn(("POST", "/repos/o/r/actions/runs/22/rerun-failed-jobs", None), self.gh.calls)

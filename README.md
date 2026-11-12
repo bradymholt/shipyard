@@ -219,7 +219,7 @@ On your PRs, a pass asks the session that opened the PR, so earlier decisions ar
 
 | Action | Default | Limits |
 |---|---|---|
-| `rerun_checks` | on | Waits while other checks on the PR are still running, then re-runs the failed jobs, unless more failed in the meantime |
+| `rerun_checks` | off | Waits while other checks on the PR are still running, then re-runs the failed jobs, unless more failed in the meantime |
 | `approve_rereview` | off | `max_lines` (30): the change since your last review touches at most that many lines and adds no files, per GitHub's compare API. `min_wait_minutes` (3): the approval waits that long after the server first saw the push, so it never lands seconds after the author's commit |
 | `apply_fix` | off | `max_lines` (20): the diff changes at most that many lines, adds no files, and edits only files the PR already changes |
 | `post_reply` | locked | Never automatic, and neither is submitting a review: both put words in front of a colleague under your name |
