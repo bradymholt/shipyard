@@ -96,7 +96,7 @@ RULE_DEFAULTS = {
     "passes": {
         "feedback": False,
         "ci_failed": "auto",
-        "pre_review": "auto",
+        "pre_review": "ask",
         "re_review": "auto",
     },
     "instructions": {},  # per pass, added to its prompt

@@ -23,6 +23,7 @@ from test_orchestrator import FakeAgent, FakeGitHub  # noqa: E402
 
 from shipyard.agents.claude_code import ClaudeCode  # noqa: E402
 from shipyard.orchestrator import Orchestrator  # noqa: E402
+from shipyard import config  # noqa: E402
 from shipyard.config import REPO_DIR, validate_config  # noqa: E402
 from shipyard.server import Handler  # noqa: E402
 
@@ -216,6 +217,7 @@ def main():
     mock.patch.dict("shipyard.actions.RUN", push_merge=lambda *a: "resolved the conflicts with main and pushed the merge").start()
 
     mock.patch.dict("shipyard.config.AUTO_DEFAULTS", approve_rereview=True).start()
+    mock.patch.dict(config.RULE_DEFAULTS["passes"], pre_review="auto").start()
     comp = Orchestrator(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
                      config_path=tmp / "shipyard.config.json")
     comp.poll_once()
