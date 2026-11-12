@@ -310,6 +310,7 @@ function serverCardHtml(pr, card, first) {
   const openKept = card.kept
     ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
   const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
+  const review = card.pass === "pre_review" || card.pass === "re_review";
   const vi = verdictProposal(card);
   const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
   const held = card.auto_held ? `<p class="nc-held">${AUTO_HELD_LABELS[card.auto_action] || AUTO_HELD_LABELS.approve} is on, but this one waits for you: ${esc(card.auto_held)}.</p>`
@@ -319,7 +320,7 @@ function serverCardHtml(pr, card, first) {
   const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
     ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
-    ${card.pass === "ask" ? "" : `<div class="nc-actions">${openKept}${continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
+    ${card.pass === "ask" || (review && !openKept) ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
 }
 
 function rerequestButton(reviewers, cardId) {
