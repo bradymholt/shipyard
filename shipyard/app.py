@@ -1,12 +1,11 @@
 import argparse
 import functools
-import http.server
 import sys
 
 from .orchestrator import Orchestrator
 from .config import CONFIG_FILE, REPO_DIR, load_config
 from .github import GitHub
-from .server import Handler
+from .server import Handler, Server
 from .worktrees import normalize_roots, warn_unavailable_roots
 
 DEFAULT_PORT = 4321
@@ -45,10 +44,7 @@ def main(argv=None):
     warn_unavailable_roots(roots)
     Handler.orchestrator.move_old_views()
     Handler.session_token = Handler.orchestrator.db.session_token()
-    # Threaded: the Server-Sent Events stream holds a connection open per tab.
-    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
-                                            functools.partial(Handler, directory=str(REPO_DIR)))
-    httpd.daemon_threads = True
+    httpd = Server(("127.0.0.1", port), functools.partial(Handler, directory=str(REPO_DIR)))
     print(f"Shipyard → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}" if roots else
           "Not scanning any folders yet: add one in Settings (Folders to scan) to open checkouts and start work.")
