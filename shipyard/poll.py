@@ -125,7 +125,12 @@ INSIGHTS_QUERY = """
 query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
     pageInfo { hasNextPage endCursor }
-    nodes { ... on PullRequest { createdAt mergedAt } }
+    nodes { ... on PullRequest {
+      createdAt mergedAt additions deletions
+      repository { nameWithOwner }
+      author { __typename login }
+      reviews(first: 20) { nodes { state submittedAt author { login } } }
+    } }
   }
 }"""
 
@@ -380,6 +385,20 @@ def snapshot(node, viewer):
     }
 
 
+
+def insight_row(n):
+    """A merged PR, cut to what the Insights charts read: size, who wrote it, and who
+    reviewed it when."""
+    author = n.get("author") or {}
+    reviews = [[(r.get("author") or {}).get("login"), r["submittedAt"]]
+               for r in (n.get("reviews") or {}).get("nodes") or []
+               if r and r.get("submittedAt") and r.get("state") != "PENDING"]
+    return {"created": n["createdAt"], "merged": n["mergedAt"],
+            "size": (n.get("additions") or 0) + (n.get("deletions") or 0),
+            "repo": (n.get("repository") or {}).get("nameWithOwner"),
+            "author": author.get("login"), "bot": author.get("__typename") == "Bot",
+            "reviews": reviews}
+
 class Poller:
     def __init__(self, github):
         self.github = github
@@ -446,8 +465,7 @@ class Poller:
             rows, after = [], None
             for _ in range(INSIGHTS_MAX_PAGES):
                 found = self.github.graphql(INSIGHTS_QUERY, {"q": q, "after": after})["search"]
-                rows += [{"created": n["createdAt"], "merged": n["mergedAt"]}
-                         for n in found["nodes"] if n and n.get("mergedAt")]
+                rows += [insight_row(n) for n in found["nodes"] if n and n.get("mergedAt")]
                 if not found["pageInfo"]["hasNextPage"]:
                     break
                 after = found["pageInfo"]["endCursor"]

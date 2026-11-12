@@ -223,12 +223,17 @@ class SharedCosts(OrchestratorCase):
 
     def test_insights_search_recent_merges_once_per_view(self):
         node = pr_node(state="MERGED", merged_at="2026-10-20T00:00:00Z")
+        node["reviews"] = {"nodes": [{"state": "APPROVED", "submittedAt": "2026-10-19T00:00:00Z", "author": {"login": "rev"}},
+                                     {"state": "PENDING", "submittedAt": None, "author": {"login": "me"}}]}
         self.gh.put(node, "author:@me")
         with mock.patch.object(self.gh, "graphql", wraps=self.gh.graphql) as gql:
             out = self.comp.insights("")
             self.comp.insights("")
-        self.assertEqual(out["merged"], {"mine": [{"created": node["createdAt"], "merged": "2026-10-20T00:00:00Z"}],
+        self.assertEqual(out["merged"], {"mine": [{"created": node["createdAt"], "merged": "2026-10-20T00:00:00Z",
+                                                   "size": 12, "repo": "o/r", "author": "me", "bot": False,
+                                                   "reviews": [["rev", "2026-10-19T00:00:00Z"]]}],
                                          "review": []})
+        self.assertEqual(out["shipyard"]["passes"], {})
         self.assertEqual(gql.call_count, 2)  # one search per list, then the cache
         self.assertIn(f"merged:>={out['since']}", gql.call_args_list[0].args[1]["q"])
 

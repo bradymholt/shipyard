@@ -41,6 +41,7 @@ SOURCE_NAMES = {"re_review": "re-review", "ci_failed": "CI assessment", "feedbac
 LIVE_CACHE_SECONDS = 15
 MERGED_CACHE_SECONDS = 300
 INSIGHTS_CACHE_SECONDS = 900
+SHIPYARD_WORK_DAYS = 28
 MERGED_EVERY_SECONDS = 15 * 60
 
 PASS_ACTIVITY = {
@@ -1072,7 +1073,8 @@ class Orchestrator:
             hit = (now, {"since": since, "merged": self.poller.insights(view, since)})
             self.insights_cache = {k: v for k, v in self.insights_cache.items() if now - v[0] < INSIGHTS_CACHE_SECONDS}
             self.insights_cache[key] = hit
-        return {"ok": True, **hit[1]}
+        work = self.db.work_since((datetime.now(timezone.utc) - timedelta(days=SHIPYARD_WORK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        return {"ok": True, **hit[1], "shipyard": work}
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""
