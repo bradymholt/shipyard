@@ -824,6 +824,15 @@ class Orchestrator:
                 else "the re-review didn't recommend approving")
         self.db.update_card(card_id, auto_held=held)
 
+    @staticmethod
+    def lists_from_snapshot(snap):
+        """Search lags a review you just submitted: it leaves the review-requested results
+        before reviewed-by finds it."""
+        if snap.get("state") != "OPEN" or snap.get("dropped"):
+            return []
+        return [name for name, on in (("mine", snap["mine"]), ("requested", snap.get("requested_me")),
+                                      ("reviewed", snap.get("my_review"))) if on]
+
     def auto_approve_setting(self, snap):
         """Whether a re-review may approve this PR on its own: your choice, else the
         pre-review's, else on only when your last review approved it."""
@@ -1286,7 +1295,7 @@ class Orchestrator:
                 "activity": self.db.activity(key),
                 "autoApprove": auto if auto and (auto["by"] != "default" or snap.get("my_review")) else None,
                 "pr": snap.get("page"),
-                "lists": self.poller.lists.get(snap["id"], []),
+                "lists": self.poller.lists.get(snap["id"]) or self.lists_from_snapshot(snap),
             }
         adapter = self.adapter
         return {
