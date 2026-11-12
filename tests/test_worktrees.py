@@ -15,6 +15,11 @@ def git(cwd, *args):
 class GitCase(unittest.TestCase):
     """A bare "origin" on github.com/o/r's URL shape, and a clone under a scan root."""
 
+    def new_worktree(self, branch):
+        path = worktrees.worktree_path(str(self.clone), branch)
+        git(self.clone, "worktree", "add", "-q", "-b", branch, path, "origin/main")
+        return path
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -50,7 +55,7 @@ class GitCase(unittest.TestCase):
 
 class Discover(GitCase):
     def test_checks_only_main_clones_for_edits(self):
-        path = worktrees.new_task_worktree(self.repo, "me/task", self.roots)["path"]
+        path = self.new_worktree("me/task")
         (self.clone / "app.py").write_text("print(3)\n")
         found = {w["path"]: w for w in worktrees.discover(self.roots)}
         self.assertTrue(found[str(self.clone)]["dirty"])
@@ -111,7 +116,7 @@ if __name__ == "__main__":
 class ApplyFix(GitCase):
     def test_applies_new_and_changed_files_commits_and_pushes(self):
         from shipyard import actions
-        path = worktrees.new_task_worktree(self.repo, "me/fix", self.roots)["path"]
+        path = self.new_worktree("me/fix")
         git(path, "push", "-q", "-u", "origin", "me/fix")
         head = git(path, "rev-parse", "HEAD")
         diff = ("--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-print(1)\n+print(10)\n"
@@ -136,7 +141,7 @@ class ApplyFix(GitCase):
 
     def test_refuses_a_checkout_on_another_branch(self):
         from shipyard import actions
-        path = worktrees.new_task_worktree(self.repo, "me/fix3", self.roots)["path"]
+        path = self.new_worktree("me/fix3")
         head = git(path, "rev-parse", "HEAD")
         git(path, "switch", "-qc", "other")
         with self.assertRaisesRegex(actions.ActionError, "isn't on me/fix3"):
@@ -144,7 +149,7 @@ class ApplyFix(GitCase):
 
     def test_refuses_when_checkout_moved_or_diff_does_not_apply(self):
         from shipyard import actions
-        path = worktrees.new_task_worktree(self.repo, "me/fix2", self.roots)["path"]
+        path = self.new_worktree("me/fix2")
         with self.assertRaises(actions.ActionError):
             actions.apply_fix(None, {"head": "0" * 40, "branch": "me/fix2"}, {"diff": "x"}, {"worktree": {"path": path}})
         head = git(path, "rev-parse", "HEAD")
@@ -156,7 +161,7 @@ class ApplyFix(GitCase):
 class ResolveConflicts(GitCase):
     def test_merges_base_resolves_blocks_and_pushes_the_merge(self):
         from shipyard import actions
-        path = worktrees.new_task_worktree(self.repo, "me/clash", self.roots)["path"]
+        path = self.new_worktree("me/clash")
         Path(path, "app.py").write_text("print('mine')\n")
         git(path, "commit", "-qam", "mine")
         git(path, "push", "-q", "origin", "HEAD:me/clash", "HEAD:refs/pull/7/head")

@@ -68,26 +68,6 @@
 </main>
 
 <div class="container">
-  <dialog id="new-task-dialog">
-    <form id="new-task-form" method="dialog">
-      <h2>Start work</h2>
-      <p class="hint">Opens your configured app on a fresh branch off the default branch — in your main clone, or in an isolated worktree. Leave the name blank to just open the default branch for a blank slate.</p>
-      <label class="nt-field">Repository
-        <select id="nt-repo"></select>
-      </label>
-      <label class="nt-field">Branch name <span class="nt-optional">optional</span>
-        <input type="text" id="nt-branch" placeholder="you/short-description" autocomplete="off">
-      </label>
-      <p id="nt-status" class="hint nt-status"></p>
-      <div class="nt-actions">
-        <span class="spacer"></span>
-        <button type="button" id="nt-cancel">Cancel</button>
-        <button type="submit" id="nt-worktree" data-dest="worktree" class="hidden">Create worktree</button>
-        <button type="submit" id="nt-main" class="primary">Create branch</button>
-      </div>
-    </form>
-  </dialog>
-
   <dialog id="welcome-dialog" aria-labelledby="welcome-title"><div id="welcome-body"></div></dialog>
 
   <dialog id="error-dialog">
