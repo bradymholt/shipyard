@@ -105,11 +105,11 @@ RULE_THRESHOLDS = {"nudge": "after_hours", "ask_rereview": "after_hours"}
 RULE_PROMPTS = {"address_feedback", "resolve_conflicts"}
 PASS_MODES = ("auto", "ask", False)
 
-# Trust flags: every action type but re-review approval and re-running flaky checks starts manual. "when" sets the confidence an
+# Trust flags: every action type but re-running flaky checks starts manual. "when" sets the confidence an
 # agent's proposal needs before the server presses the button itself.
 AUTO_DEFAULTS = {
     "rerun_checks": True,
-    "approve_rereview": True,
+    "approve_rereview": False,
     "post_reply": False,
     "apply_fix": False,
 }
