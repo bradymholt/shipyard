@@ -349,6 +349,9 @@ function derivedCardHtml(pr, chip) {
     const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
     body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
     actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
+  } else if (chip.kind === "ask_approval") {
+    body = `${chip.reviewers.join(", ")} signed off in a comment, but GitHub still needs an approval to merge. Ask again so it lands in their review queue:`;
+    actionsHtml = rerequest;
   } else if (chip.kind === "rerequest_review") {
     body = `${chip.title}. Ask ${chip.reviewers.join(", ")} to look again:`;
     actionsHtml = rerequest + continueButton(pr);
