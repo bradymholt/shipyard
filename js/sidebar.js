@@ -1,7 +1,7 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
 import { $, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
-import { apiCall, apiGet, apiPost, automationHeld, worktreeFor } from "./server.js";
+import { apiCall, apiGet, apiPost, automationHeld, saveSetting, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
 import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markSeen, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
 import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
@@ -38,6 +38,31 @@ const ACTION_LABELS = {
 const TEXT_ACTIONS = new Set(["post_reply", "comment_unresolved", "submit_review", "nudge", "approve"]);
 
 const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "re_review" };
+
+// Automation that starts off but most people want: offered once, where it would have helped.
+const SUGGESTIONS = {
+  rerun_checks: { path: ["auto", "rerun_checks"], value: true,
+    text: () => `Re-run checks on its own when ${agentName()} is confident they're flaky?` },
+  approve_rereview: { path: ["auto", "approve_rereview"], value: true,
+    text: () => "Approve re-reviews on their own when the change since your review is small?" },
+  pre_review: { path: ["rules", "passes", "pre_review"], value: "auto",
+    text: () => "Pre-review on its own whenever your review is requested?" },
+};
+const SUGGEST_DISMISSED_KEY = "ghpr.dismissedSuggestions";
+const dismissedSuggestions = () => {
+  try { return new Set(JSON.parse(localStorage.getItem(SUGGEST_DISMISSED_KEY) || "[]")); } catch { return new Set(); }
+};
+const suggestionOn = (name) => {
+  const config = state.serverState?.config || {};
+  return name === "pre_review" ? config.rules?.passes?.pre_review === "auto" : !!config.auto?.[name];
+};
+
+function suggestHtml(name) {
+  if (!state.serverState?.config || suggestionOn(name) || dismissedSuggestions().has(name)) return "";
+  return `<div class="nc-suggest"><span>${esc(SUGGESTIONS[name].text())}</span>
+    <button type="button" data-suggest-on="${name}">Turn on</button>
+    <button type="button" class="sb-close" data-suggest-dismiss="${name}" title="Don't suggest this again" aria-label="Dismiss">${CLOSE_ICON}</button></div>`;
+}
 
 const MERGE_ON_APPROVE_KEY = "ghpr.mergeOnApprove";
 const mergeOnApprove = () => localStorage.getItem(MERGE_ON_APPROVE_KEY) === "1";
@@ -234,6 +259,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       ${bare || card.pass === "ask" ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
       ${body}
       <div class="nc-actions">${button}</div>
+      ${p.action === "rerun_checks" ? suggestHtml("rerun_checks") : p.action === "approve" && card.pass === "re_review" ? suggestHtml("approve_rereview") : ""}
     </div>`;
 }
 
@@ -261,7 +287,8 @@ function serverCardHtml(pr, card, first) {
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
-      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div></div>`;
+      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div>
+      ${card.pass === "pre_review" ? suggestHtml("pre_review") : ""}</div>`;
   }
   if (card.kind === "error" || card.kind === "raw") {
     const raw = card.raw ? `<pre>${esc(card.raw)}</pre><div class="nc-actions"><button type="button" data-copy="${card.id}">Copy</button>${continueButton(pr)}</div>` : "";
@@ -347,7 +374,7 @@ function derivedCardHtml(pr, chip) {
     return "";
   }
   return `<div class="next-card first"><div class="nc-head">${esc(chip.label)}</div><p class="nc-reason">${esc(body)}</p>
-    <div class="nc-actions">${actionsHtml}</div></div>`;
+    <div class="nc-actions">${actionsHtml}</div>${chip.kind === "review" ? suggestHtml("pre_review") : ""}</div>`;
 }
 
 function nextSection(pr) {
@@ -600,6 +627,16 @@ $("#sidebar").addEventListener("click", async (e) => {
   if ((btn = t("[data-run-pass]"))) {
     const node = btn.dataset.node ? `&node=${encodeURIComponent(btn.dataset.node)}` : "";
     return busy(btn, () => apiCall(`api/run-pass?key=${encodeURIComponent(key)}&pass=${encodeURIComponent(btn.dataset.runPass)}${node}`), `Couldn't ask ${agentName()}`);
+  }
+  if ((btn = t("[data-suggest-on]"))) {
+    const { path, value } = SUGGESTIONS[btn.dataset.suggestOn];
+    return busy(btn, () => saveSetting(path, { value }), "Couldn't turn it on");
+  }
+  if ((btn = t("[data-suggest-dismiss]"))) {
+    const names = dismissedSuggestions().add(btn.dataset.suggestDismiss);
+    try { localStorage.setItem(SUGGEST_DISMISSED_KEY, JSON.stringify([...names])); } catch {}
+    lastSidebarHtml = "";
+    return renderSidebar();
   }
   if ((btn = t("[data-dismiss]"))) return busy(btn, () => apiCall(`api/dismiss?card=${btn.dataset.dismiss}`));
   if ((btn = t("[data-cancel-wait]"))) return busy(btn, () => apiCall(`api/cancel-wait?card=${btn.dataset.cancelWait}`));
