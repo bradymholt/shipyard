@@ -245,6 +245,19 @@ class NextSteps(unittest.TestCase):
         for s, labels in cases:
             self.assertEqual([step["label"] for step in rules.next_steps(s, RULES)], labels)
 
+    def test_blocked_approved_pr_waits_on_required_checks(self):
+        now = datetime(2026, 10, 21, 10, 0, tzinfo=timezone.utc)
+        stuck = snap(decision="APPROVED", merge_state="BLOCKED", queued=[("Build", 77, "2026-10-20T22:00:00Z")])
+        self.assertEqual(stuck["ci"], "EXPECTED")
+        self.assertEqual(stuck["page"]["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"], "EXPECTED")
+        steps = rules.next_steps(stuck, RULES, now=now)
+        self.assertEqual([(s["label"], s["title"]) for s in steps], [("Re-run stuck checks", "1 workflow run queued for 12h")])
+        fresh = snap(decision="APPROVED", merge_state="BLOCKED", ci=None, queued=[("Build", 77, "2026-10-21T09:55:00Z")])
+        self.assertEqual([s["label"] for s in rules.next_steps(fresh, RULES, now=now)], ["Waiting on required checks"])
+        # Unresolved threads block a merge too, so they don't read as missing checks.
+        threads = snap(decision="APPROVED", merge_state="BLOCKED", threads=[{"body": "Typo"}])
+        self.assertEqual(threads["ci"], "SUCCESS")
+
     def test_merge_follows_your_approval_of_a_bot_pr(self):
         def theirs(bot):
             s = snap(author="dependabot", decision="APPROVED", my_review=mine_review("APPROVED"))

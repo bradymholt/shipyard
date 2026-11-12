@@ -1266,7 +1266,7 @@ class Orchestrator:
             prs[key] = {
                 "chip": rules.memory_chip(view, self.config["rules"], now, self.db.snooze(key),
                                           self.db.last_logged(key, actions.NUDGED)),
-                "steps": rules.next_steps(view, self.config["rules"], open_cards),
+                "steps": rules.next_steps(view, self.config["rules"], open_cards, now),
                 # What the server last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
                 "state": snap.get("state"), "dropped": bool(snap.get("dropped")),

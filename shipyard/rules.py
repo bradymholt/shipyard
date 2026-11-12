@@ -112,7 +112,23 @@ def _approval_step(snap, rules):
     return None
 
 
-def next_steps(snap, rules, cards=()):
+STUCK_RUN_HOURS = 0.5
+
+
+def _required_checks_step(snap, now):
+    if snap.get("ci") != "EXPECTED" or snap.get("decision") != "APPROVED":
+        return None
+    stuck = [r for r in snap.get("queued_runs") or [] if (hours_since(r.get("since"), now) or 0) >= STUCK_RUN_HOURS]
+    if stuck:
+        hours = int(max(hours_since(r.get("since"), now) for r in stuck))
+        runs = f"{len(stuck)} workflow run{'s' if len(stuck) != 1 else ''}"
+        return {"kind": "restart_runs", "label": "Re-run stuck checks", "tone": "gold", "runs": stuck,
+                "title": f"{runs} queued for {f'{hours}h' if hours else 'over 30m'}"}
+    return {"kind": "required_checks", "label": "Waiting on required checks", "tone": "muted",
+            "runs": snap.get("queued_runs") or [], "title": "GitHub is blocking the merge until required checks report"}
+
+
+def next_steps(snap, rules, cards=(), now=None):
     """Every next step the PR's GitHub state calls for, most urgent first. Each rule
     gates its own step; `cards` lends the re-review its progress."""
     if snap.get("dropped"):
@@ -176,6 +192,9 @@ def next_steps(snap, rules, cards=()):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
         out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
+    waiting = _required_checks_step(snap, now or datetime.now(timezone.utc))
+    if waiting:
+        out.append(waiting)
     if _mergeable(snap, rules):
         out.append(dict(MERGE_STEP))
     return out

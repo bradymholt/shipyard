@@ -103,6 +103,9 @@ def main():
            "author:@me")
     gh.put(pr_node(110, head="h110", branch="me/schema", decision="APPROVED", mergeable="CONFLICTING",
                    reviews=[{"state": "APPROVED", "author": "jm", "body": ""}]), "author:@me")
+    gh.put(pr_node(112, head="h112", branch="me/stuck-ci", decision="APPROVED", merge_state="BLOCKED",
+                   queued=[("Build", 4112, ago(hours=13))],
+                   reviews=[{"state": "APPROVED", "author": "jm", "body": ""}]), "author:@me")
     gh.put(pr_node(111, head="h111", branch="me/schema-docs", base="me/schema", requested=["jm"],
                    requested_at={"jm": ago(hours=1)}), "author:@me")
     lookups = pr_node(98, head="h98", branch="me/merge-on-approval", requested=["jm"])

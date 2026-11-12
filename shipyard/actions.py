@@ -7,6 +7,7 @@ name shows that text on the card first; post_reply is never automatic.
 import os
 import re
 import tempfile
+import time
 
 from . import worktrees
 from .github import GitHubError
@@ -55,6 +56,33 @@ def rerun_checks(gh, snap, payload, ctx):
     if running:
         raise RunsStillRunning(running)
     return f"re-ran failed jobs in {len(runs)} workflow run{'s' if len(runs) != 1 else ''}"
+
+
+def restart_runs(gh, snap, payload, ctx):
+    """Cancel each queued workflow run and run it again. GitHub re-runs a run only once it has
+    finished, and a cancel takes a moment to land."""
+    runs = [r["run_id"] for r in snap.get("queued_runs") or [] if r.get("run_id")]
+    if not runs:
+        raise ActionError("No queued workflow runs to re-run.")
+    for run in runs:
+        try:
+            gh.rest("POST", f"/repos/{snap['repo']}/actions/runs/{run}/cancel")
+        except GitHubError as e:
+            if e.status != 409:
+                raise
+    pending = list(runs)
+    for attempt in range(10):
+        for run in list(pending):
+            try:
+                gh.rest("POST", f"/repos/{snap['repo']}/actions/runs/{run}/rerun")
+                pending.remove(run)
+            except GitHubError:
+                if attempt == 9:
+                    raise
+        if not pending:
+            break
+        time.sleep(2)
+    return f"cancelled and re-ran {len(runs)} workflow run{'s' if len(runs) != 1 else ''}"
 
 
 def _reviewer_lists(reviewers):
@@ -318,7 +346,7 @@ def push_merge(gh, snap, payload, ctx):
 
 
 RUN = {
-    "rerun_checks": rerun_checks, "rerequest_review": rerequest_review,
+    "rerun_checks": rerun_checks, "restart_runs": restart_runs, "rerequest_review": rerequest_review,
     "enable_auto_merge": enable_auto_merge, "disable_auto_merge": undo_enable_auto_merge,
     "merge": merge, "mark_ready": mark_ready, "update_branch": update_branch,
     "post_reply": post_reply, "nudge": nudge, "approve": approve,
