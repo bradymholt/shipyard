@@ -215,6 +215,7 @@ def main():
     mock.patch("shipyard.orchestrator.worktrees.commit_merge", return_value="c" * 40).start()
     mock.patch.dict("shipyard.actions.RUN", push_merge=lambda *a: "resolved the conflicts with main and pushed the merge").start()
 
+    mock.patch.dict("shipyard.config.AUTO_DEFAULTS", approve_rereview=True).start()
     comp = Orchestrator(validate_config({"rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}), [str(tmp / "dev")], tmp / "demo.db", github=gh,
                      config_path=tmp / "shipyard.config.json")
     comp.poll_once()
