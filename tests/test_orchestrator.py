@@ -305,6 +305,16 @@ class PageState(OrchestratorCase):
         node["reviewRequests"] = {"nodes": []}
         self.assertTrue(self.poll()["o/r#1"]["dropped"])
 
+    def test_a_review_you_just_submitted_stays_listed_until_search_catches_up(self):
+        node = pr_node(author="alice", requested=["me"])
+        self.gh.put(node, "review-requested:@me")
+        self.poll()
+        node["reviewRequests"] = {"nodes": []}
+        node["viewerLatestReview"] = {"databaseId": 9, "state": "APPROVED", "submittedAt": "2026-10-19T00:00:00Z",
+                                      "commit": {"oid": node["headRefOid"]}}
+        self.gh.lists["review-requested:@me"] = []
+        self.assertEqual(self.poll()["o/r#1"]["lists"], ["reviewed"])
+
     def test_carries_when_your_review_was_requested(self):
         self.gh.put(pr_node(author="alice", requested=["me"], requested_at={"me": "2026-10-22T08:00:00Z"}),
                     "review-requested:@me")
