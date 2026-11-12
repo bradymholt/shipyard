@@ -10,6 +10,7 @@ import http.server
 import json
 import re
 import secrets
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -28,6 +29,18 @@ def page_version(directory):
     stamps = sorted((str(p.relative_to(directory)), p.stat().st_mtime_ns, p.stat().st_size)
                     for pattern in PAGE_FILES for p in Path(directory).glob(pattern))
     return hashlib.sha1(repr(stamps).encode()).hexdigest()[:12]
+
+
+class Server(http.server.ThreadingHTTPServer):
+    """Threaded: the Server-Sent Events stream holds a connection open per tab."""
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # A browser drops idle keep-alive and preconnected sockets whenever it likes. That
+        # costs nothing, so it isn't worth a traceback; anything else still prints one.
+        if isinstance(sys.exc_info()[1], (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+            return
+        super().handle_error(request, client_address)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):

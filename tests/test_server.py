@@ -209,5 +209,20 @@ class PageVersion(unittest.TestCase):
             self.assertNotEqual(page_version(tmp), before)
 
 
+class ServerErrorTest(unittest.TestCase):
+    def test_dropped_connections_print_nothing_but_other_errors_do(self):
+        from shipyard.server import Server
+        server = Server(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
+        self.addCleanup(server.server_close)
+        for exc, printed in ((ConnectionResetError(54, "reset"), False), (BrokenPipeError(), False),
+                             (ValueError("boom"), True)):
+            with mock.patch("sys.stderr") as stderr:
+                try:
+                    raise exc
+                except Exception:
+                    server.handle_error(None, ("127.0.0.1", 1))
+            self.assertEqual(stderr.write.called, printed, exc)
+
+
 if __name__ == "__main__":
     unittest.main()
