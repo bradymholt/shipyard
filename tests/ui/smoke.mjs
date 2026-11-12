@@ -103,6 +103,14 @@ try {
   check(await page.locator('.card[data-key="o/r#99"] .next-row').count() === 0, "a merged card without approval comments gets no chip");
   check(await chipText(page, 110) === "Resolve conflicts", "an approved PR with conflicts asks you to resolve them, not merge");
   check(await chipText(page, 111) === "Update from #110", "a branch behind the PR it's stacked on asks you to update it");
+  check(await chipText(page, 112) === "Re-run stuck checks" &&
+    await page.locator(".lane").nth(1).locator('.card[data-key="o/r#112"] .ci.pending').count() === 1,
+    "an approved PR blocked on queued required checks waits in Waiting and offers a re-run, not Merge");
+  await page.locator('.card[data-key="o/r#112"] .next-row').click();
+  check(await page.locator('#sidebar .next-card [data-pr-action="restart_runs"]').count() === 1,
+    "the stuck-checks card offers Cancel and re-run");
+  if (shots) await page.screenshot({ path: `${shots}/sidebar-stuck-checks.png` });
+  await page.keyboard.press("Escape");
   await page.locator('.card[data-key="o/r#98"] .next-row').click();
   await page.waitForSelector("#sidebar .next-card");
   check((await page.locator("#sidebar").locator(".next-card").first().textContent()).includes("I'd prefer a Map") &&

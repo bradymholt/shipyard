@@ -119,7 +119,7 @@ export function ciHtml(pr) {
     FAILURE: ["failure", ICONS.x, "Checks failing"],
     ERROR: ["failure", ICONS.x, "Checks errored"],
     PENDING: ["pending", ICONS.dot, "Checks running"],
-    EXPECTED: ["pending", ICONS.dot, "Checks expected"],
+    EXPECTED: ["pending", ICONS.dot, "Waiting on required checks"],
   };
   const [cls, icon, title] = map[rollup.state] || map.PENDING;
   return `<span class="ci ${cls}" title="${title}">${icon}</span>`;

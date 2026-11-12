@@ -24,7 +24,7 @@ query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 50, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
-      id updatedAt isDraft reviewDecision headRefOid mergeable
+      id updatedAt isDraft reviewDecision headRefOid mergeable mergeStateStatus
       commits(last: 1) { nodes { commit { statusCheckRollup { state contexts {
         checkRunCountsByState { state count } statusContextCountsByState { state count } } } } } }
     } }
@@ -36,7 +36,7 @@ DETAIL_FIELDS = """
   headRefName headRefOid baseRefName additions deletions changedFiles
   repository { nameWithOwner }
   author { __typename login avatarUrl }
-  reviewDecision mergeable
+  reviewDecision mergeable mergeStateStatus
   labels(first: 10) { nodes { name color } }
   viewerCanEnableAutoMerge viewerCanDisableAutoMerge
   comments(last: 10) { totalCount nodes { createdAt author { login } } }
@@ -54,6 +54,7 @@ DETAIL_FIELDS = """
   } }
   commits(last: 1) { nodes { commit {
     oid committedDate
+    checkSuites(first: 30) { nodes { status workflowRun { databaseId url updatedAt workflow { name } } } }
     statusCheckRollup { state contexts(first: 50) {
       totalCount checkRunCountsByState { state count } statusContextCountsByState { state count }
       nodes {
@@ -173,7 +174,7 @@ def signature(node):
     rollup = commit.get("statusCheckRollup") or {}
     return "|".join(str(v) for v in (node.get("updatedAt"), node.get("headRefOid"), rollup.get("state"),
                                      checks_running(rollup), node.get("reviewDecision"), node.get("isDraft"),
-                                     node.get("mergeable")))
+                                     node.get("mergeable"), node.get("mergeStateStatus") == "BLOCKED"))
 
 
 def reviewer_name(rr):
@@ -229,6 +230,32 @@ def ci_state(rollup):
     return "PENDING" if running else "SUCCESS"
 
 
+def pr_ci(node, rollup):
+    """The CI state, or EXPECTED when GitHub blocks an approved PR whose checks all passed: a
+    required check never reported, as when its workflow run sits in the queue."""
+    state = ci_state(rollup)
+    open_threads = any(not t.get("isResolved") and not t.get("isOutdated")
+                       for t in (node.get("reviewThreads") or {}).get("nodes") or [])
+    if (state in (None, "SUCCESS") and node.get("mergeStateStatus") == "BLOCKED" and not node.get("isDraft")
+            and node.get("reviewDecision") == "APPROVED" and not open_threads):
+        return "EXPECTED"
+    return state
+
+
+def queued_runs(commit):
+    """The latest queued run of each workflow; one event can queue a workflow several times."""
+    latest = {}
+    for suite in (commit.get("checkSuites") or {}).get("nodes") or []:
+        run = suite.get("workflowRun")
+        if not run or suite.get("status") not in ("QUEUED", "WAITING", "PENDING", "REQUESTED"):
+            continue
+        name = (run.get("workflow") or {}).get("name")
+        if name not in latest or (run.get("databaseId") or 0) > latest[name]["run_id"]:
+            latest[name] = {"run_id": run.get("databaseId") or 0, "name": name,
+                            "url": run.get("url"), "since": run.get("updatedAt")}
+    return list(latest.values())
+
+
 def first_author(conn):
     return [{"author": n.get("author")} for n in ((conn or {}).get("nodes") or [])[:1]]
 
@@ -237,6 +264,7 @@ def page_pr(node):
     """The PR in the shape the page's own GitHub queries return, so the page can draw it as is."""
     commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
     rollup = commit.get("statusCheckRollup")
+    ci = pr_ci(node, rollup)
     comments = node.get("comments") or {}
     return {
         **{k: node.get(k) for k in PAGE_FIELDS},
@@ -249,8 +277,8 @@ def page_pr(node):
                                      "comments": {"nodes": [{"author": n.get("author"), "createdAt": n.get("createdAt")}
                                                             for n in ((t.get("latest") or {}).get("nodes") or [])[:1]]}}
                                     for t in (node.get("reviewThreads") or {}).get("nodes") or []]},
-        "commits": {"nodes": [{"commit": {"oid": commit.get("oid"), "statusCheckRollup": rollup and {
-            "state": ci_state(rollup),
+        "commits": {"nodes": [{"commit": {"oid": commit.get("oid"), "statusCheckRollup": (rollup or ci) and {
+            "state": ci,
             # The page shows the overall state and names only the failing checks.
             "contexts": {"nodes": [{k: c[k] for k in PAGE_CONTEXT_FIELDS if k in c}
                                    for c in current_checks(rollup) if is_failing(c)]}}}}]},
@@ -343,8 +371,9 @@ def snapshot(node, viewer):
         "threads": threads,
         "comments": [{"author": (c.get("author") or {}).get("login"), "created": c.get("createdAt")}
                      for c in (node.get("comments") or {}).get("nodes") or []],
-        "ci": ci_state(rollup),
+        "ci": pr_ci(node, rollup),
         "failing": failing,
+        "queued_runs": queued_runs(commit),
         "checks_running": checks_running(rollup),
         "last_commit_at": commit.get("committedDate"),
         "page": page_pr(node),

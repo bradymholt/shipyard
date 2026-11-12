@@ -111,7 +111,7 @@ function checksText(pr) {
   const s = rollupState(pr);
   if (!s) return "";
   const failing = failingChecks(pr);
-  const text = { SUCCESS: "Checks passing", PENDING: "Checks running", EXPECTED: "Checks expected" }[s]
+  const text = { SUCCESS: "Checks passing", PENDING: "Checks running", EXPECTED: "Waiting on required checks" }[s]
     || `${failing.length || "Checks"} failing`;
   return `<span class="ci ${s === "SUCCESS" ? "success" : s === "PENDING" || s === "EXPECTED" ? "pending" : "failure"}">${ciHtml(pr).replace(/<\/?span[^>]*>/g, "")}${esc(text)}</span>`;
 }
@@ -366,6 +366,12 @@ function derivedCardHtml(pr, chip) {
     body = `#${chip.parent}, which this is stacked on, has ${chip.behind} commit${chip.behind === 1 ? "" : "s"} ${pr.headRefName || "this branch"} doesn't. Bring them in on GitHub:`;
     actionsHtml = `<button type="button" class="nc-run" data-pr-action="update_branch" data-method="merge">Merge ${esc(pr.baseRefName || "base")} in</button>`
       + `<button type="button" class="nc-run" data-pr-action="update_branch" data-method="rebase">Rebase</button>`;
+  } else if (chip.kind === "restart_runs" || chip.kind === "required_checks") {
+    body = chip.kind === "restart_runs"
+      ? `${chip.title}, so GitHub won't merge this until its required checks report.`
+      : "Every check that reported passed, but GitHub is waiting on required checks that haven't reported yet.";
+    actionsHtml = (chip.kind === "restart_runs" ? run("restart_runs", "Cancel and re-run", "primary") : "")
+      + `<a class="btn-link" href="${esc(pr.url)}/checks" target="_blank" rel="noopener">View checks</a>`;
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
       review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];

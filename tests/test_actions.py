@@ -97,6 +97,12 @@ class Actions(unittest.TestCase):
         with self.assertRaises(actions.ActionError):
             actions.run(gh, "rerun_checks", snap(), {})
 
+    def test_restart_runs_cancels_then_reruns(self):
+        gh = RecordingGitHub()
+        s = snap(decision="APPROVED", merge_state="BLOCKED", queued=[("Build", 77, "2026-10-20T22:00:00Z")])
+        actions.run(gh, "restart_runs", s, {})
+        self.assertEqual([c[1] for c in gh.calls], ["/repos/o/r/actions/runs/77/cancel", "/repos/o/r/actions/runs/77/rerun"])
+
     def test_unknown_action(self):
         with self.assertRaises(actions.ActionError):
             actions.run(RecordingGitHub(), "force_push", snap(), {})

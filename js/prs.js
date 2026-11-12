@@ -113,7 +113,7 @@ export function buildStacks(prs) {
 // Board lanes: 0 Working (incl. drafts), 1 Waiting (on reviewer), 2 Ready (approved).
 export function laneOf(pr) {
   if (pr.isDraft) return 0;
-  if (pr.reviewDecision === "APPROVED") return 2;
+  if (pr.reviewDecision === "APPROVED") return rollupState(pr) === "EXPECTED" ? 1 : 2;
   if ((pr.reviewRequests?.nodes || []).length > 0) return 1;
   return 0;
 }

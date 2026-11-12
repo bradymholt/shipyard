@@ -17,7 +17,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
             updated="2026-10-20T10:00:00Z", requested_at=None, committed="2026-10-20T09:00:00Z",
             created="2026-10-19T09:00:00Z", repo="o/r", branch="feature", comments=(), running=0,
             title=None, merged_at=None, standing=(), mergeable="MERGEABLE",
-            base="main"):
+            base="main", merge_state="CLEAN", queued=()):
     """A PullRequest node shaped like the server's detail query returns."""
     requested_at = requested_at or {}
     return copy.deepcopy({
@@ -27,7 +27,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
         "body": "Does a thing.", "headRefName": branch, "headRefOid": head, "baseRefName": base,
         "additions": 10, "deletions": 2, "changedFiles": 3,
         "repository": {"nameWithOwner": repo}, "author": {"login": author},
-        "reviewDecision": decision, "mergeable": mergeable, "autoMergeRequest": None,
+        "reviewDecision": decision, "mergeable": mergeable, "mergeStateStatus": merge_state, "autoMergeRequest": None,
         "labels": {"nodes": []}, "viewerCanEnableAutoMerge": True, "viewerCanDisableAutoMerge": False,
         "viewerLatestReview": my_review,
         "latestOpinionatedReviews": {"nodes": [{"state": s, "author": {"login": a}} for s, a in standing]},
@@ -54,6 +54,9 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
                                for c in comments]},
         "commits": {"nodes": [{"commit": {
             "oid": head, "committedDate": committed,
+            "checkSuites": {"nodes": [{"status": "QUEUED", "workflowRun": {
+                "databaseId": run, "url": f"https://github.com/{repo}/actions/runs/{run}",
+                "updatedAt": at, "workflow": {"name": name}}} for name, run, at in queued]},
             "statusCheckRollup": {"state": ci, "contexts": {
                 "nodes": contexts or [], "checkRunCountsByState": [{"state": "IN_PROGRESS", "count": running}]}}
             if ci else None}}]},
