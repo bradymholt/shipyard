@@ -318,6 +318,20 @@ class State:
         return list(reversed(self._rows("SELECT at, text FROM activity WHERE key = ? ORDER BY id DESC LIMIT ?",
                                         (key, limit))))
 
+    def work_since(self, since):
+        """What Shipyard did since an ISO time: passes finished by kind, actions it took on
+        its own, and the ones it left for you. Kept only as long as the PRs they belong to."""
+        passes = self._rows("SELECT name, COUNT(*) AS n FROM passes WHERE status = 'done' AND created >= ? "
+                            "GROUP BY name", (since,))
+        auto = self._rows("SELECT json_extract(data, '$.handled.action') AS name, COUNT(*) AS n FROM cards "
+                          "WHERE status = 'handled' AND json_extract(data, '$.handled.flag') IS NOT NULL "
+                          "AND updated >= ? GROUP BY name", (since,))
+        held = self._rows("SELECT json_extract(data, '$.auto_action') AS name, COUNT(*) AS n FROM cards "
+                          "WHERE json_extract(data, '$.auto_held') IS NOT NULL AND updated >= ? GROUP BY name", (since,))
+        oldest = self._rows("SELECT MIN(created) AS at FROM passes")[0]["at"]
+        count = lambda rows: {r["name"]: r["n"] for r in rows if r["name"]}
+        return {"since": since, "oldest": oldest, "passes": count(passes), "auto": count(auto), "held": count(held)}
+
     def auto_runs(self, key, action):
         rows = self._rows("SELECT count FROM auto_runs WHERE key = ? AND action = ?", (key, action))
         return rows[0]["count"] if rows else 0

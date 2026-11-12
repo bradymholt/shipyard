@@ -246,7 +246,9 @@ try {
 
   await page.locator('.tab[data-filter="insights"]').click();
   await page.waitForSelector(".ins-chart >> nth=2");
-  check((await page.locator(".ins-tile").first().textContent()).includes("Waiting on your review"), "Insights leads with your review load");
+  check((await page.locator(".ins-tile").first().textContent()).includes("Merged this week"), "Insights leads with this week's merges");
+  check(await page.locator(".ins-panel:has-text('Who reviews your PRs') .ins-people tbody tr").count() > 0, "Insights lists who reviews your PRs");
+  check(!(await page.locator(".ins-panel:has-text('Whose PRs you review')").textContent()).includes("dependabot"), "bot PRs stay out of the review numbers");
   check(await page.locator(".ins-chart .s-mine").count() > 0, "Insights charts the last 12 weeks of merges");
   check(await page.locator("#sort-select").isHidden(), "Insights has no sort order");
   if (shots) await page.screenshot({ path: `${shots}/insights.png`, fullPage: true });
