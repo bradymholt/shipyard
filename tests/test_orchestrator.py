@@ -649,6 +649,11 @@ class CiFailed(OrchestratorCase):
 
 
 class Reviews(OrchestratorCase):
+    def setUp(self):
+        super().setUp()
+        self.raw = {"rules": {"passes": {"pre_review": "auto"}}}
+        self.comp.config = validate_config(self.raw)
+
     def test_pre_review_runs_fresh_in_review_worktree_and_pins_it(self):
         self.agent.answers["first-pass code review"] = {
             "summary": "Solid; one edge case.",

@@ -206,7 +206,7 @@ A pass runs your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) h
 |---|---|---|---|
 | `ci_failed` | `auto` | CI fails on your PR; the agent reads the failing job's log and tells flaky from real | Re-run failed jobs, Apply fix |
 | `feedback` | `false` | A reviewer requests changes on your PR; `auto` has the agent draft a plan and replies | Post reply |
-| `pre_review` | `auto` | Your review is requested | A pending review, or Approve |
+| `pre_review` | `ask` | Your review is requested | A pending review, or Approve |
 | `re_review` | `auto` | Your review is requested again | Approve |
 
 `rules.instructions` adds your own text to a pass's prompt, keyed by pass name, ahead of the answer format Shipyard reads back.

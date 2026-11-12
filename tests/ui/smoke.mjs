@@ -178,6 +178,10 @@ try {
   check((await sb.locator(".next-card pre").textContent()).includes("registry=https://mirror.example/"), "diff shows first");
   check(await sb.locator('button.nc-run[data-action="apply_fix"]').count() === 1, "then Apply fix and push appears");
   check(await sb.locator('a.btn-link:has-text("View log")').count() === 1, "CI card links the failing log");
+  check(await sb.locator('.nc-suggest:has([data-suggest-on="rerun_checks"])').count() === 1, "a proposed re-run suggests turning automatic re-runs on");
+  if (shots) await page.screenshot({ path: `${shots}/sidebar-suggest.png` });
+  await sb.locator('[data-suggest-dismiss="rerun_checks"]').click();
+  check(await sb.locator(".nc-suggest").count() === 0, "dismissing the suggestion hides it");
 
   await page.locator('.card[data-key="o/r#103"] .next-row').click();
   await sb.locator('button.nc-run[data-pr-action="merge"]').click();
