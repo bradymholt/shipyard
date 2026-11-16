@@ -261,15 +261,20 @@ function mergedCard(pr) {
     </div>`;
 }
 
-const collapsedLanes = new Set((() => {
-  try { return JSON.parse(localStorage.getItem("ghpr.collapsedLanes") || "[]"); } catch { return []; }
-})());
+function storedSet(name) {
+  try { return new Set(JSON.parse(localStorage.getItem(name) || "[]")); } catch { return new Set(); }
+}
 
-function toggleLane(key) {
-  if (!collapsedLanes.delete(key)) collapsedLanes.add(key);
-  try { localStorage.setItem("ghpr.collapsedLanes", JSON.stringify([...collapsedLanes])); } catch { /* storage unavailable */ }
+function toggleStored(set, name, key) {
+  if (!set.delete(key)) set.add(key);
+  try { localStorage.setItem(name, JSON.stringify([...set])); } catch { /* storage unavailable */ }
   render();
 }
+
+const collapsedLanes = storedSet("ghpr.collapsedLanes");
+const toggleLane = (key) => toggleStored(collapsedLanes, "ghpr.collapsedLanes", key);
+const openSnoozed = storedSet("ghpr.openSnoozed");
+const toggleSnoozed = (key) => toggleStored(openSnoozed, "ghpr.openSnoozed", key);
 
 const mergedKind = () => (state.filter === "review" ? "review" : "mine");
 
@@ -467,7 +472,7 @@ function renderBoard() {
     const roots = [];
     for (const pr of inLane) {
       const parent = parents.get(pr.number);
-      if (parent && laneNums.has(parent.number)) {
+      if (parent && laneNums.has(parent.number) && isSnoozed(parent) === isSnoozed(pr)) {
         if (!kids.has(parent.number)) kids.set(parent.number, []);
         kids.get(parent.number).push(pr);
       } else {
@@ -494,14 +499,20 @@ function renderBoard() {
       for (const pr of inLane) if (keep(pr) && !seen.has(pr.number)) out += renderCardTree(pr, 0);
       return out;
     };
-    let laneHtml = renderGroup((p) => !p.isDraft);
-    const draftHtml = renderGroup((p) => p.isDraft);
+    let laneHtml = renderGroup((p) => !p.isDraft && !isSnoozed(p));
+    const draftHtml = renderGroup((p) => p.isDraft && !isSnoozed(p));
     if (draftHtml) laneHtml += '<div class="drafts-divider"></div>' + draftHtml;
+    const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
+    const snoozedCount = inLane.filter(isSnoozed).length;
+    if (snoozedCount) {
+      const open = openSnoozed.has(laneKey);
+      laneHtml += `<button type="button" class="snoozed-toggle" aria-expanded="${open}" data-snoozed-lane="${esc(laneKey)}"><span>${snoozedCount} snoozed${LANE_CHEVRON}</span></button>`;
+      if (open) laneHtml += renderGroup(isSnoozed);
+    }
     const needsLabel = (n) => n ? `<span class="lane-needs">${n} need${n === 1 ? "s" : ""} you</span>` : "";
     if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
       laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
     }
-    const laneKey = `${reviewBoard ? "review" : "mine"}:${name}`;
     const needs = needsLabel(state.serverState ? stepsFor(inLane) : 0);
     const laneCount = `<span class="lane-count">${needs && `${needs} · `}${inLane.length}</span>`;
     const collapsible = narrowViewport.matches;
@@ -568,6 +579,8 @@ listBody.addEventListener("click", async (e) => {
   }
   const laneHeader = e.target.closest(".lane-header[data-lane]");
   if (laneHeader) { toggleLane(laneHeader.dataset.lane); return; }
+  const snoozedToggle = e.target.closest("button.snoozed-toggle");
+  if (snoozedToggle) { toggleSnoozed(snoozedToggle.dataset.snoozedLane); return; }
   if (handleMergedClick(e)) return;
 
   const openBtn = e.target.closest("button.wt-open");
