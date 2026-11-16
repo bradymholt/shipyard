@@ -300,7 +300,7 @@ function repoPanel(rows) {
 }
 
 const PASS_NAMES = { pre_review: "Pre-reviews", re_review: "Re-reviews", ci_failed: "CI failures read", feedback: "Feedback plans",
-  conflicts: "Conflicts resolved", ask: "Questions answered", new_session: "Sessions started" };
+  conflicts: "Conflicts resolved", new_session: "Sessions started" };
 const ACTION_NAMES = { rerun_checks: ["re-run", "re-runs"], approve: ["approval", "approvals"], apply_fix: ["fix", "fixes"],
   enable_auto_merge: ["auto-merge", "auto-merges"] };
 

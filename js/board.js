@@ -678,7 +678,7 @@ document.querySelectorAll(".tab").forEach((tab) =>
 function nextRowHtml(pr) {
   const chip = nextChip(pr);
   const cp = serverPr(pr);
-  const ready = (cp?.cards || []).find((c) => c.kind === "pass" || c.kind === "answer");
+  const ready = (cp?.cards || []).find((c) => c.kind === "pass");
   const dot = cp?.running
     ? `<span class="next-spinner" title="${esc(agentName())} is working on this PR"></span>`
     : cp?.planReady && ready ? `<span class="plan-dot" title="${esc(agentName())} has looked at this — open it to see"></span>` : "";

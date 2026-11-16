@@ -59,7 +59,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                       ".js": "text/javascript", ".css": "text/css"}
     BRANCH_ACTIONS = {"/open-in-main", "/branch-worktree", "/open-app", "/open-agent"}
     CHECKOUT_ACTIONS = {"/open-in-main", "/branch-worktree"}
-    API_ACTIONS = {"/api/snooze", "/api/pin", "/api/unpin", "/api/ask", "/api/run-pass",
+    API_ACTIONS = {"/api/snooze", "/api/pin", "/api/unpin", "/api/run-pass",
                          "/api/card-action", "/api/dismiss", "/api/undo", "/api/cancel-wait",
                          "/api/pr-action", "/api/auto-approve",
                          "/api/check-now", "/api/rescan-worktrees", "/api/settings",
@@ -260,7 +260,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "snooze": lambda c: c.snooze(arg("key"), body.get("hours")),
             "pin": lambda c: c.repin(arg("key"), arg("session")),
             "unpin": lambda c: c.unpin(arg("key")),
-            "ask": lambda c: c.ask(arg("key"), body.get("question")),
             "run-pass": lambda c: c.run_pass_now(arg("key"), arg("pass"), arg("node") or None),
             "card-action": lambda c: c.card_action(card_id(), int(arg("index") or 0), body.get("payload")),
             "dismiss": lambda c: c.dismiss(card_id()),

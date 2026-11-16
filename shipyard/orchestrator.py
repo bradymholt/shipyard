@@ -458,14 +458,14 @@ class Orchestrator:
                 self.db.update_card(card["id"], status="done")
         return new
 
-    def queue_pass(self, snap, name, question=None, retry=False, head=None):
+    def queue_pass(self, snap, name, retry=False, head=None):
         """Queue a pass with its "running" card; None when it already ran for this head.
         `head` is the dedupe key: the PR's head SHA, or a finer one from the event."""
         key = snap["key"]
-        head = None if name == "ask" else head or snap["head"]
+        head = head or snap["head"]
         card_id = self.db.add_card(key, {"kind": "running", "pass": name, "title": passes.TITLES[name],
-                                         "head": snap["head"], "question": question})
-        pass_id = self.db.queue_pass(key, name, head, passes.PASS_MODES[name], card_id, question)
+                                         "head": snap["head"]})
+        pass_id = self.db.queue_pass(key, name, head, passes.PASS_MODES[name], card_id)
         if pass_id is None:
             existing = next((p for p in self.db.passes(key) if p["name"] == name and p["head"] == head), None)
             if not existing or not retry or existing["status"] not in ("failed", "skipped", "done"):
@@ -518,7 +518,7 @@ class Orchestrator:
                                   raw=passes.raw_event_text(name, snap))
 
         mode = passes.PASS_MODES[name]
-        question = row.get("question")
+        earlier = None
         new_session = None
         pin_after = False
         review_path = None
@@ -558,7 +558,7 @@ class Orchestrator:
             session = pin["session_id"] if pin else None
             if name == "new_session":
                 old = adapter.session_file(pin["path"], session) if session else None
-                question = str(old) if old else None
+                earlier = str(old) if old else None
                 session, pin_after = None, True
             if not session:
                 pin_after = pin_after or mode == "resume"
@@ -572,7 +572,7 @@ class Orchestrator:
         if mode == "fresh" and adapter.key == "claude-code":
             new_session = str(uuid.uuid4())
 
-        values = passes.inputs(name, snap, self.github, question)
+        values = passes.inputs(name, snap, self.github, earlier)
         if merge:
             values["conflicts"] = passes.conflicts_text(merge["files"])
         prompt = passes.render(name, values, self.config["rules"]["instructions"].get(name, ""))
@@ -599,7 +599,6 @@ class Orchestrator:
         if pin_after and produced:
             self.db.set_pin(snap["key"], cwd, produced, "shipyard")
         self.db.log(snap["key"], "started a new session, now pinned" if name == "new_session" else
-                    f"asked “{question}”" if name == "ask" else
                     f'{PASS_ACTIVITY.get(name, f"ran {name}")} {session_used(mode, pin_after and produced, kept)}')
         if name == "pre_review" and answer.get("auto_approve"):
             saved = self.db.auto_approve(snap["key"])
@@ -610,21 +609,18 @@ class Orchestrator:
             answer["proposals"] = self.draft_on_github(snap, answer["proposals"])
         if merge:
             answer["proposals"] = self.stage_merge(snap, merge, answer["proposals"])
-        kind = "answer" if name == "ask" else "pass"
         for proposal in answer["proposals"]:
             context = reply_context(snap, (proposal.get("payload") or {}).get("comment_id"))
             if proposal["action"] == "post_reply" and context:
                 proposal["context"] = context
-        card = self.db.update_card(row["card_id"], kind=kind, summary=answer["summary"],
+        card = self.db.update_card(row["card_id"], kind="pass", summary=answer["summary"],
                                    proposals=answer["proposals"], addressed=answer.get("addressed"),
                                    total=answer.get("total"), mode=mode, session_id=produced,
                                    kept_path=cwd if kept else None,
                                    status="done" if name == "new_session" else None)
         if merge and card:
             self.push_staged_merge(card["id"], snap, answer)
-        if kind == "answer" and card:
-            self.post_spelled_out(card["id"], snap, question, answer["proposals"])
-        if kind == "pass" and card:
+        if card:
             acted = False
             for proposal in answer["proposals"]:
                 if self.maybe_auto(card["id"], proposal["action"], proposal["payload"],
@@ -775,28 +771,6 @@ class Orchestrator:
             "undoable": action in actions.UNDOABLE, "flag": flag})
         self.poke()
         return True
-
-    def post_spelled_out(self, card_id, snap, question, proposals):
-        """An ask that quotes the comment to post posts it: you wrote those words yourself."""
-        for p in proposals:
-            body = " ".join(((p.get("payload") or {}).get("body") or "").split())
-            if p["action"] != "post_reply" or not body:
-                continue
-            if not any(f"{a}{body}{b}" in (question or "") for a, b in ('""', "''", "“”", "‘’")):
-                continue
-            if not self.db.claim_card(card_id):
-                return
-            try:
-                result = actions.run(self.github, "post_reply", snap, p["payload"], self.action_context(snap))
-            except Exception as e:
-                self.db.update_card(card_id, status="open")
-                self.db.log(snap["key"], f"tried to post your comment: {e}")
-                return
-            self.db.log(snap["key"], f"{result}: “{body}”")
-            self.db.update_card(card_id, status="handled", handled={
-                "action": "post_reply", "result": result, "reason": f"“{body}”", "payload": p["payload"]})
-            self.poke()
-            return
 
     def approve_ready_at(self, snap, minutes):
         seen = self.db.head_seen_at(snap["key"], snap.get("head")) or now_iso()
@@ -1149,23 +1123,13 @@ class Orchestrator:
         self.publish()
         return {"ok": True, "until": until}
 
-    def ask(self, key, question):
-        snap = self.snapshot_or_error(key)
-        question = " ".join((question or "").split())[:1000]
-        if not question:
-            raise ValueError("Type a question first.")
-        for card in self.db.cards(key, ("open",)):
-            if card.get("pass") == "ask":
-                self.db.update_card(card["id"], status="done")
-        return {"ok": True, "card": self.queue_pass(snap, "ask", question)}
-
     def run_pass_now(self, key, name, node_id=None):
         if name == "new_session" and node_id and self.viewer and not self.db.pr(key):
             # Merged before the server saw it: read it once so there is something to pin to.
             for found in self.poller.details([node_id], self.viewer):
                 self.db.save_pr(found)
         snap = self.snapshot_or_error(key)
-        if name not in passes.TITLES or name == "ask":
+        if name not in passes.TITLES:
             raise ValueError(f"Unknown pass: {name}")
         for card in self.db.cards(key, ("open",)):
             if card.get("pass") == name and (card.get("kind") in ("offer", "error", "raw") or name == "new_session"):
@@ -1247,7 +1211,7 @@ class Orchestrator:
     def card_view(self, card):
         view = {k: card.get(k) for k in ("id", "status", "kind", "pass", "action", "title", "summary",
                                          "proposals", "payload", "raw", "error", "handled", "created",
-                                         "question", "addressed", "total", "result", "auto_held", "auto_action", "auto_wait")}
+                                         "addressed", "total", "result", "auto_held", "auto_action", "auto_wait")}
         view["kept"] = ({"path": card["kept_path"], "session": card.get("session_id"), "fork": card.get("mode") == "fork"}
                         if card.get("kept_path") else None)
         return view
@@ -1268,8 +1232,8 @@ class Orchestrator:
                     session["how"] = pin.get("how")
             cards = [self.card_view(c) for c in self.db.cards(key)]
             open_cards = [c for c in cards if c["status"] == "open"]
-            # Your own asks and new sessions show in the sidebar where you started them, not as a chip.
-            next_cards = [c for c in cards if c["status"] == "open" and c.get("pass") not in ("ask", "new_session")]
+            # New sessions show in the sidebar where you started them, not as a chip.
+            next_cards = [c for c in cards if c["status"] == "open" and c.get("pass") != "new_session"]
             done = [p for p in self.db.passes(key) if p["status"] == "done"]
             exchange = done[-1] if done else None
             path = pin.get("path") if pin else None
@@ -1288,7 +1252,7 @@ class Orchestrator:
                 "requestedAt": (snap.get("requested_at") or {}).get(snap.get("viewer")),
                 "cards": open_cards,
                 "handled": [c for c in cards if c["status"] == "handled"],
-                "planReady": any(c["kind"] in ("pass", "answer") for c in next_cards),
+                "planReady": any(c["kind"] == "pass" for c in next_cards),
                 "running": any(c["kind"] == "running" for c in next_cards),
                 "session": session,
                 "path": path or self.checkout_for(snap),
