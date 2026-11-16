@@ -515,7 +515,7 @@ button.am-toggle:disabled { opacity: .5; cursor: default; }
 .merged-divider, .drafts-divider {
   position: relative; text-align: center; line-height: 1;
 }
-.merged-divider::after, .drafts-divider::after {
+.merged-divider::after, .drafts-divider::after, .snoozed-toggle::after {
   content: ""; position: absolute; left: 1.125rem; right: 1.125rem; top: 50%;
   transform: translateY(-50%);
   border-top: 1px dashed var(--border); z-index: 0;
@@ -529,6 +529,20 @@ button.am-toggle:disabled { opacity: .5; cursor: default; }
 .merged-divider::before { content: "recently merged"; }
 .drafts-divider::before { content: "drafts"; }
 .lane .merged-divider, .lane .drafts-divider { margin: 0.5rem 0 0.375rem; }
+.snoozed-toggle {
+  position: relative; display: block; width: 100%; margin: 0.5rem 0 0.375rem; padding: 0;
+  border: 0; background: none; text-align: center; line-height: 1; cursor: pointer;
+}
+.snoozed-toggle > span {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 0.25rem;
+  background: var(--surface); padding: 0 0.75rem;
+  font: 700 0.625rem var(--display); color: var(--fg-faint);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.snoozed-toggle:hover { background: none; }
+.snoozed-toggle:hover > span, .snoozed-toggle:focus-visible > span { color: var(--teal); }
+.snoozed-toggle svg { fill: currentColor; width: 10px; height: 10px; transition: transform .15s; }
+.snoozed-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
 .merged-actions {
   display: flex; justify-content: center; gap: 0.75rem; padding: 0.375rem 0;
 }
