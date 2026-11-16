@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS passes (
   id INTEGER PRIMARY KEY, key TEXT NOT NULL, name TEXT NOT NULL, head TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL, mode TEXT, session_id TEXT, card_id INTEGER, question TEXT, error TEXT,
   summary TEXT, created TEXT NOT NULL, finished TEXT);
-CREATE UNIQUE INDEX IF NOT EXISTS passes_once ON passes (key, name, head) WHERE name != 'ask';
+CREATE UNIQUE INDEX IF NOT EXISTS passes_once ON passes (key, name, head);
 CREATE TABLE IF NOT EXISTS activity (id INTEGER PRIMARY KEY, key TEXT NOT NULL, at TEXT NOT NULL, text TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS auto_runs (key TEXT NOT NULL, action TEXT NOT NULL, count INTEGER NOT NULL,
   PRIMARY KEY (key, action));
@@ -70,6 +70,8 @@ class State:
                     self.db.execute(f"DELETE FROM {table} WHERE name = ?", (old,))
             self.db.execute("UPDATE cards SET data = json_set(data, '$.pass', 'feedback') "
                             "WHERE json_extract(data, '$.pass') = 'changes_requested'")
+            self.db.execute("UPDATE cards SET status = 'done' WHERE status = 'open' "
+                            "AND json_extract(data, '$.pass') = 'ask'")
             self.db.commit()
 
     def close(self):
@@ -268,13 +270,13 @@ class State:
         return [self._card(r) for r in self._rows(sql + " ORDER BY id", args)]
 
     # ---- passes
-    def queue_pass(self, key, name, head, mode, card_id, question=None):
+    def queue_pass(self, key, name, head, mode, card_id):
         """The new pass id, or None when this pass already ran for this head. The card
         is attached in the same insert, so a worker never sees a pass without one."""
         try:
-            cur = self._exec("INSERT INTO passes (key, name, head, status, mode, card_id, question, created) "
-                             "VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)",
-                             (key, name, head or "", mode, card_id, question, now_iso()))
+            cur = self._exec("INSERT INTO passes (key, name, head, status, mode, card_id, created) "
+                             "VALUES (?, ?, ?, 'queued', ?, ?, ?)",
+                             (key, name, head or "", mode, card_id, now_iso()))
             return cur.lastrowid
         except sqlite3.IntegrityError:
             return None

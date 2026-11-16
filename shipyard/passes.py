@@ -3,7 +3,7 @@ template from shipyard/passes/, runs the agent headlessly through its adapter, a
 parses the answer into a Next card. The agent proposes; it never acts.
 
 How a pass runs:
-  - your PR, a question (ci_failed, ask): a fork of the pinned session, so the history
+  - your PR, a question (ci_failed): a fork of the pinned session, so the history
     is there and nothing is written back. Agents that cannot fork run a fresh session.
   - your PR, a plan you will continue (feedback): a resume of the pinned
     session, so the plan is in the conversation when you open it.
@@ -23,13 +23,12 @@ TEMPLATE_FILES = {
     "ci_failed": "ci-failed.md",
     "pre_review": "pre-review.md",
     "re_review": "re-review.md",
-    "ask": "ask.md",
     "new_session": "new-session.md",
     "conflicts": "conflicts.md",
 }
 # fork: question; resume: plan to continue; fresh: new pinned session.
 PASS_MODES = {"feedback": "resume", "ci_failed": "fork", "pre_review": "fresh",
-              "re_review": "resume", "ask": "fork", "new_session": "fresh", "conflicts": "fresh"}
+              "re_review": "resume", "new_session": "fresh", "conflicts": "fresh"}
 ACTIONS = ["continue", "post_reply", "apply_fix", "rerun_checks", "rerequest_review", "approve",
            "comment_unresolved", "submit_review", "enable_auto_merge", "merge", "mark_ready", "nudge", "push_merge"]
 
@@ -61,7 +60,7 @@ ANSWER_SCHEMA = {
     },
 }
 TITLES = {"feedback": "Address feedback", "ci_failed": "Fix CI",
-          "pre_review": "Pre-review", "re_review": "Re-review", "ask": "Answer", "new_session": "New session",
+          "pre_review": "Pre-review", "re_review": "Re-review", "new_session": "New session",
           "conflicts": "Resolve conflicts"}
 
 
@@ -121,7 +120,7 @@ def conflicts_text(files):
     return "\n".join(f"- {path} ({len(blocks)} block{'s' if len(blocks) != 1 else ''})" for path, blocks in files.items())
 
 
-def inputs(name, snap, github=None, question=None):
+def inputs(name, snap, github=None, earlier=None):
     """Template values for a pass: summarized, so a few hundred tokens land per event."""
     values = {k: snap.get(k) for k in ("repo", "number", "title", "url", "branch", "head", "base",
                                        "author")}
@@ -143,11 +142,9 @@ def inputs(name, snap, github=None, question=None):
         values["reviewed_commit"] = review.get("commit") or "unknown"
         values["review_state"] = review.get("state") or "unknown"
         values["threads"] = my_threads_text(snap)
-    elif name == "ask":
-        values["question"] = question or ""
     elif name == "new_session":
         values["state"] = (snap.get("state") or "").lower()
-        values["earlier"] = question or "(none found)"
+        values["earlier"] = earlier or "(none found)"
     return values
 
 

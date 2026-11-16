@@ -10,7 +10,7 @@ import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
 // worktree icons: Header, Next, PR session, Review, Activity.
 export let sidebarKey = null;
 
-const drafts = new Map();       // unsent text (edited replies, the Ask field), by field id
+const drafts = new Map();       // unsent text (edited replies), by field id
 
 // Text you typed and haven't sent; a review's event choice and a session pick are not text.
 export const hasUnsentText = () => [...drafts].some(([field, value]) =>
@@ -67,7 +67,7 @@ function suggestHtml(name) {
 const MERGE_ON_APPROVE_KEY = "ghpr.mergeOnApprove";
 const mergeOnApprove = () => localStorage.getItem(MERGE_ON_APPROVE_KEY) === "1";
 
-export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", ask: "Answer", new_session: "New session", conflicts: "Conflict resolution" };
+export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", new_session: "New session", conflicts: "Conflict resolution" };
 
 const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
   latest: "latest in the checkout", manual: "picked by you", shipyard: "started by Shipyard", review: "review worktree",
@@ -256,7 +256,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
     ? ` · replies on <a class="nc-thread" href="${esc(`${pr.url}#discussion_r${p.payload.comment_id}`)}" target="_blank" rel="noopener">the review thread</a>` : "";
   return `
     <div class="nc-proposal">
-      ${bare || card.pass === "ask" ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
+      ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
       ${body}
       <div class="nc-actions">${button}</div>
       ${p.action === "rerun_checks" ? suggestHtml("rerun_checks") : p.action === "approve" && card.pass === "re_review" ? suggestHtml("approve_rereview") : ""}
@@ -283,7 +283,7 @@ function serverCardHtml(pr, card, first) {
   if (card.kind === "running") {
     return `<div class="${cls}"><div class="nc-head"><span class="plan-dot running"></span>${title}</div>
       <p class="nc-reason">${card.pass === "conflicts" ? `${esc(agentName())} is resolving the conflicts…`
-        : `${esc(agentName())} is reading the PR${card.question ? `: “${esc(card.question)}”` : ""}…`}</p></div>`;
+        : `${esc(agentName())} is reading the PR…`}</p></div>`;
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
@@ -292,7 +292,7 @@ function serverCardHtml(pr, card, first) {
   }
   if (card.kind === "error" || card.kind === "raw") {
     const raw = card.raw ? `<pre>${esc(card.raw)}</pre><div class="nc-actions"><button type="button" data-copy="${card.id}">Copy</button>${continueButton(pr)}</div>` : "";
-    const retry = card.kind === "error" && card.pass && card.pass !== "ask"
+    const retry = card.kind === "error" && card.pass
       ? `<div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Try again</button>${continueButton(pr)}</div>` : "";
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
       <p class="${card.kind === "error" ? "nc-error" : "nc-reason"}">${esc(card.error || "")}</p>${raw}${retry}</div>`;
@@ -309,7 +309,6 @@ function serverCardHtml(pr, card, first) {
     + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
   const openKept = card.kept
     ? sessionLink(card.kept.path, card.kept.session, card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
-  const question = card.kind === "answer" && card.question ? `<p class="nc-reason">“${esc(card.question)}”</p>` : "";
   const review = card.pass === "pre_review" || card.pass === "re_review";
   const vi = verdictProposal(card);
   const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
@@ -318,9 +317,9 @@ function serverCardHtml(pr, card, first) {
     : card.auto_wait?.manual ? `<p class="nc-held">Re-runs the failed jobs once the rest of the workflow run finishes.</p>`
     : card.auto_wait ? `<p class="nc-held">Re-runs the failed checks automatically once the running ones finish.</p>` : "";
   const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
-  return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${question}${verdict}${held}
+  return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${verdict}${held}
     ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
-    ${card.pass === "ask" || (review && !openKept) ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
+    ${review && !openKept ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
 }
 
 function rerequestButton(reviewers, cardId) {
@@ -391,8 +390,8 @@ function nextSection(pr) {
   const key = prKey(pr);
   const cp = serverPr(pr);
   const open = !pr.mergedAt;
-  // Your own asks and new sessions show under PR session.
-  const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session" && c.pass !== "ask");
+  // New sessions show under PR session.
+  const cards = (cp?.cards || []).filter((c) => c.pass !== "new_session");
   let html = cards.map((c, i) => serverCardHtml(pr, c, i === 0)).join("");
   if (!html && cp) html = derivedCardHtml(pr, serverSteps(pr)[0] || (cp.chip?.kind !== "snoozed" ? cp.chip : null));
   if (!html) {
@@ -435,15 +434,6 @@ function autoApproveSection(pr) {
     <div class="auto-why">${esc(why)}</div></div></div>`;
 }
 
-// A question runs in a fork of the pinned session, so it lives in that session's section.
-function askHtml(pr, cp) {
-  if (pr.mergedAt) return "";
-  const key = prKey(pr);
-  const q = drafts.get(`ask-${key}`) || "";
-  return `<form class="sb-ask" data-ask="${esc(key)}"><input type="text" data-field="ask-${esc(key)}" value="${esc(q)}" placeholder="Ask ${esc(agentName())} about this PR" autocomplete="off"><button type="submit">Ask</button></form>`
-    + (cp.cards || []).filter((c) => c.pass === "ask").map((c) => serverCardHtml(pr, c, false)).join("");
-}
-
 function sessionSection(pr) {
   if (!state.agent) return "";
   const key = prKey(pr);
@@ -457,7 +447,7 @@ function sessionSection(pr) {
   const starting = (cp.cards || []).find((c) => c.pass === "new_session");
   if (starting?.kind === "running") {
     return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">
-      <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div>${askHtml(pr, cp)}</div>`;
+      <div class="sb-empty">Starting a new ${esc(agentName())} session…</div></div></div>`;
   }
   const failed = ["error", "raw"].includes(starting?.kind) ? `<p class="nc-error">${esc(starting.error || "Couldn't start the session.")}</p>` : "";
   let picker = "";
@@ -484,7 +474,7 @@ function sessionSection(pr) {
       <div class="nc-actions">${repin}
         <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
   }
-  return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div>${askHtml(pr, cp)}</div>`;
+  return `<div class="sb-section"><div class="sb-h">PR session</div><div class="sb-session">${failed}${body}${picker}</div></div>`;
 }
 
 function timelineEntries(d) {
@@ -580,18 +570,6 @@ $("#sidebar").addEventListener("change", async (e) => {
     await busy(null, () => apiCall(`api/auto-approve?key=${encodeURIComponent(t.dataset.autoApprove)}`, { on: t.checked }));
   }
   if (t.dataset.mergeOnApprove !== undefined) localStorage.setItem(MERGE_ON_APPROVE_KEY, t.checked ? "1" : "0");
-});
-
-$("#sidebar").addEventListener("submit", async (e) => {
-  const form = e.target.closest("form[data-ask]");
-  if (!form) return;
-  e.preventDefault();
-  const key = form.dataset.ask;
-  const question = fieldValue(`ask-${key}`) || "";
-  await busy(form.querySelector("button"), async () => {
-    await apiCall(`api/ask?key=${encodeURIComponent(key)}`, { question });
-    drafts.delete(`ask-${key}`);
-  }, "Couldn't ask");
 });
 
 $("#sidebar").addEventListener("click", async (e) => {
