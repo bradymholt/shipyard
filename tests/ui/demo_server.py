@@ -49,7 +49,6 @@ class DemoGitHub(FakeGitHub):
                 reviewers = [["ana", "raj", "lee", "kim", "ana"][n % 5]] + (["lee"] if n % 3 == 0 else []) if mine else ["me"]
                 rows.append({"createdAt": ago(days=d + age, hours=3), "mergedAt": ago(days=d),
                              "additions": size * 3 // 4, "deletions": size // 4,
-                             "repository": {"nameWithOwner": "o/r" if n % 3 else "o/web"},
                              "author": {"__typename": "Bot" if author == "dependabot" else "User", "login": author},
                              "reviews": {"nodes": [{"state": "APPROVED", "author": {"login": r},
                                                     "submittedAt": ago(days=d + age, hours=3 - (2 + (n * 5 + i * 7) % 20))}

@@ -132,7 +132,6 @@ query($q: String!, $after: String) {
     pageInfo { hasNextPage endCursor }
     nodes { ... on PullRequest {
       createdAt mergedAt additions deletions
-      repository { nameWithOwner }
       author { __typename login }
       reviews(first: 20) { nodes { state submittedAt author { login } } }
     } }
@@ -409,7 +408,6 @@ def insight_row(n):
                if r and r.get("submittedAt") and r.get("state") != "PENDING"]
     return {"created": n["createdAt"], "merged": n["mergedAt"],
             "size": (n.get("additions") or 0) + (n.get("deletions") or 0),
-            "repo": (n.get("repository") or {}).get("nameWithOwner"),
             "author": author.get("login"), "bot": author.get("__typename") == "Bot",
             "reviews": reviews}
 

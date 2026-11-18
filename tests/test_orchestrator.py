@@ -235,7 +235,7 @@ class SharedCosts(OrchestratorCase):
             searched = gql.call_count
             self.comp.insights("")
         self.assertEqual(out["merged"]["mine"][0], {"created": node["createdAt"], "merged": "2026-10-20T00:00:00Z",
-                                                    "size": 12, "repo": "o/r", "author": "me", "bot": False,
+                                                    "size": 12, "author": "me", "bot": False,
                                                     "reviews": [["rev", "2026-10-19T00:00:00Z"]]})
         self.assertEqual(out["merged"]["review"], [])
         self.assertEqual(out["shipyard"]["passes"], {})
