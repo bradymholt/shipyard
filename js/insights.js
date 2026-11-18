@@ -281,23 +281,6 @@ function peoplePanels(rows) {
       peopleTable(people(rows.review), "review", "No reviewed PRs merged yet.", "Author"));
 }
 
-function repoPanel(rows) {
-  const repos = new Map();
-  for (const s of SERIES) {
-    for (const r of s.key === "review" ? people(rows.review) : rows.mine) {
-      if (!r.repo) continue;
-      if (!repos.has(r.repo)) repos.set(r.repo, { mine: [], review: [] });
-      repos.get(r.repo)[s.key].push(r);
-    }
-  }
-  if (repos.size < 2) return "";
-  const sorted = [...repos].sort((a, b) => (b[1].mine.length + b[1].review.length) - (a[1].mine.length + a[1].review.length));
-  const days = (v) => v == null ? "–" : fmtDays(v);
-  return panel("By repository", "Merges in the last 12 weeks, and median time to merge, per repository",
-    `<table class="ins-people"><thead><tr><th>Repository</th><th>Yours</th><th>Time to merge</th><th>Reviewed by you</th></tr></thead><tbody>${sorted.map(([repo, r]) =>
-      `<tr><td>${esc(repo)}</td><td>${r.mine.length}</td><td>${days(medianOf(r.mine, mergeDays))}</td><td>${r.review.length}</td></tr>`).join("")}</tbody></table>`, true);
-}
-
 const PASS_NAMES = { pre_review: "Pre-reviews", re_review: "Re-reviews", ci_failed: "CI failures read", feedback: "Feedback plans",
   conflicts: "Conflicts resolved", new_session: "Sessions started" };
 const ACTION_NAMES = { rerun_checks: ["re-run", "re-runs"], approve: ["approval", "approvals"], apply_fix: ["fix", "fixes"],
@@ -326,7 +309,7 @@ export function insightsHtml(rerender) {
   const rows = data?.merged || null;
   if (rows) {
     const { perWeek, toMerge, toReview } = trendCharts(rows);
-    return `<div class="insights">${tiles(rows)}${perWeek}${toMerge}${toReview}${peoplePanels(rows)}${sizeChart(rows)}${repoPanel(rows)}${shipyardPanel(data.shipyard)}</div>`;
+    return `<div class="insights">${tiles(rows)}${perWeek}${toMerge}${toReview}${peoplePanels(rows)}${sizeChart(rows)}${shipyardPanel(data.shipyard)}</div>`;
   }
   const waitBody = failed?.view === view ? `<div class="error-box">${esc(failed.message)}</div>`
     : '<div class="loading"><div class="spinner"></div>Loading the last 12 weeks of merges…</div>';
