@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timedelta, timezone
 import os
 import json
 import tempfile
@@ -37,6 +38,9 @@ class FakeGitHub:
     def graphql(self, query, variables=None):
         if "search(" in query:
             nodes = self.lists[max((k for k in self.lists if k in variables["q"]), key=len)]
+            if "merged:" in variables["q"]:
+                lo, hi = variables["q"].split("merged:")[1].split("..")
+                nodes = [n for n in nodes if lo <= (n.get("mergedAt") or "")[:10] <= hi]
             return {"viewer": {"login": VIEWER},
                     "search": {"pageInfo": {"hasNextPage": False}, "nodes": copy.deepcopy(nodes)}}
         if "nodes(ids" in query:
@@ -237,6 +241,19 @@ class SharedCosts(OrchestratorCase):
         self.assertEqual(out["shipyard"]["passes"], {})
         self.assertEqual(gql.call_count, searched)  # the second read is the cache
         self.assertTrue(any(f"merged:{out['since']}.." in c.args[1]["q"] for c in gql.call_args_list))
+
+    def test_insights_keep_settled_merges_and_search_only_recent_days(self):
+        day = lambda n: (datetime.now(timezone.utc) - timedelta(days=n)).strftime("%Y-%m-%dT12:00:00Z")
+        self.comp.viewer = VIEWER
+        self.gh.put(pr_node(1, state="MERGED", merged_at=day(30)), "author:@me")
+        self.gh.put(pr_node(2, state="MERGED", merged_at=day(2)), "author:@me")
+        self.comp.insights("")
+        self.comp.insights_cache.clear()
+        with mock.patch.object(self.gh, "graphql", wraps=self.gh.graphql) as gql:
+            out = self.comp.insights("")
+        self.assertEqual(sorted(r["merged"] for r in out["merged"]["mine"]), [day(30), day(2)])
+        self.assertTrue(gql.call_args_list)
+        self.assertTrue(all(f"merged:{day(13)[:10]}.." in c.args[1]["q"] for c in gql.call_args_list))
 
 
 class Settings(OrchestratorCase):
