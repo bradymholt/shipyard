@@ -77,8 +77,7 @@ function axisHtml(W, max, fmt, labels) {
     return `<line class="grid" x1="${PAD.left}" x2="${W - PAD.right}" y1="${y}" y2="${y}"/>`
       + `<text class="tick" x="${PAD.left - 6}" y="${y + 3}" text-anchor="end">${esc(fmt(v))}</text>`;
   }).join("");
-  const every = labels.length > 6 ? 2 : 1;
-  const xs = labels.map((label, i) => (labels.length - 1 - i) % every ? "" :
+  const xs = labels.map((label, i) =>
     `<text class="tick" x="${PAD.left + slot * (i + 0.5)}" y="${H - 6}" text-anchor="middle">${esc(label)}</text>`).join("");
   return grid + xs;
 }
