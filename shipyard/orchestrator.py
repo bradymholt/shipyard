@@ -17,7 +17,7 @@ from .agents import AgentError, adapter_for, process_cwds, read_text
 from .config import CONFIDENCE, CONFIG_PATH, HARD_LOCKED, config_mtime, page_config, read_config, read_raw, view_targets
 from .events import derive
 from .github import GitHub, GitHubError
-from .poll import INSIGHTS_WEEKS, MERGED_SEARCHES, Poller
+from .poll import INSIGHTS_ROW_VERSION, INSIGHTS_SETTLED_DAYS, INSIGHTS_WEEKS, MERGED_SEARCHES, Poller
 from .settings import MISSING, SECTIONS, fields as setting_fields, save as save_setting_file
 from .state import State, now_iso
 
@@ -1043,12 +1043,30 @@ class Orchestrator:
         now = time.time()
         hit = self.insights_cache.get(key)
         if not hit or now - hit[0] >= INSIGHTS_CACHE_SECONDS:
-            since = (datetime.now(timezone.utc) - timedelta(weeks=INSIGHTS_WEEKS)).strftime("%Y-%m-%d")
-            hit = (now, {"since": since, "merged": self.poller.insights(view, since)})
+            hit = (now, self.insights_merges(key, view))
             self.insights_cache = {k: v for k, v in self.insights_cache.items() if now - v[0] < INSIGHTS_CACHE_SECONDS}
             self.insights_cache[key] = hit
         work = self.db.work_since((datetime.now(timezone.utc) - timedelta(days=SHIPYARD_WORK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ"))
         return {"ok": True, **hit[1], "shipyard": work}
+
+    def insights_merges(self, key, view):
+        """The last 12 weeks of merges. Ones merged before the last two weeks don't change,
+        so they're kept in the db and a later read searches only the days since."""
+        today = datetime.now(timezone.utc).date()
+        since = (today - timedelta(weeks=INSIGHTS_WEEKS)).isoformat()
+        stored = self.db.insights_history(key) if self.viewer else None
+        if (not stored or stored.get("version") != INSIGHTS_ROW_VERSION or stored.get("viewer") != self.viewer
+                or stored["through"] < since):
+            stored = {"through": since, "rows": {}}
+        fresh = self.poller.insights(view, stored["through"])
+        rows = {kind: [r for r in stored["rows"].get(kind, []) if r["merged"][:10] >= since]
+                + [r for r in fresh[kind] if r["merged"][:10] >= stored["through"]] for kind in MERGED_SEARCHES}
+        if self.viewer:
+            through = max(stored["through"], (today - timedelta(days=INSIGHTS_SETTLED_DAYS)).isoformat())
+            self.db.set_insights_history(key, {
+                "version": INSIGHTS_ROW_VERSION, "viewer": self.viewer, "through": through,
+                "rows": {kind: [r for r in rs if r["merged"][:10] < through] for kind, rs in rows.items()}})
+        return {"since": since, "merged": rows}
 
     def record_review(self, snap, action, payload):
         """Save a review you just submitted, so the card doesn't fall back to "Review" until the poll sees it."""

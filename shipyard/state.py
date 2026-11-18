@@ -128,6 +128,14 @@ class State:
         self._exec("INSERT INTO meta (key, value) VALUES ('current_view', ?) "
                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (view,))
 
+    def insights_history(self, view):
+        rows = self._rows("SELECT value FROM meta WHERE key = ?", (f"insights:{view}",))
+        return json.loads(rows[0]["value"]) if rows else None
+
+    def set_insights_history(self, view, value):
+        self._exec("INSERT INTO meta (key, value) VALUES (?, ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (f"insights:{view}", json.dumps(value)))
+
     def take_old_views(self):
         """Views saved here before they moved to the config file, once."""
         rows = self._rows("SELECT value FROM meta WHERE key = 'views'")

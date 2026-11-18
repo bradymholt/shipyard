@@ -123,6 +123,9 @@ query($q: String!, $after: String, $first: Int!) {
 INSIGHTS_WEEKS = 12
 INSIGHTS_MAX_PAGES = 3
 INSIGHTS_WINDOW_DAYS = 14
+# History older than this is kept in the db; bump the version when insight_row changes shape.
+INSIGHTS_SETTLED_DAYS = INSIGHTS_WINDOW_DAYS - 1
+INSIGHTS_ROW_VERSION = 1
 INSIGHTS_QUERY = """
 query($q: String!, $after: String) {
   search(query: $q, type: ISSUE, first: 100, after: $after) {
