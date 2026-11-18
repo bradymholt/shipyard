@@ -193,6 +193,14 @@ class PollerTest(unittest.TestCase):
         self.assertEqual([(s["number"], s["state"]) for s in snaps], [(2, "MERGED")])
         self.assertEqual(open_ids, {a["id"]})
 
+    def test_approved_but_blocked_prs_are_reread_every_poll(self):
+        a = pr_node(1, decision="APPROVED", merge_state="BLOCKED")
+        gh = FakeGitHub({"author:@me": [a]}, {a["id"]: a})
+        poller = Poller(gh)
+        _, _, open_ids = poller.poll(set())
+        _, snaps, _ = poller.poll(open_ids)
+        self.assertEqual([s["number"] for s in snaps], [1])
+
     def test_signature_includes_checks(self):
         a = pr_node()
         before = signature(a)

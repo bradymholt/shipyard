@@ -187,6 +187,15 @@ def signature(node):
                                      node.get("mergeable"), node.get("mergeStateStatus") == "BLOCKED"))
 
 
+def blocked_after_approval(node):
+    """Search can keep returning BLOCKED for a PR GitHub has since cleared to merge, so
+    these are re-read every poll rather than trusted from the signature."""
+    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    state = (commit.get("statusCheckRollup") or {}).get("state")
+    return (node.get("mergeStateStatus") == "BLOCKED" and node.get("reviewDecision") == "APPROVED"
+            and not node.get("isDraft") and state in (None, "SUCCESS"))
+
+
 def reviewer_name(rr):
     rr = rr or {}
     return rr.get("login") or (f"team:{rr['slug']}" if rr.get("slug") else None)
@@ -516,7 +525,7 @@ class Poller:
                 light[n["id"]] = n
                 lists.setdefault(n["id"], []).append(name)
         self.lists = lists
-        changed = [i for i, n in light.items() if self.signatures.get(i) != signature(n)]
+        changed = [i for i, n in light.items() if self.signatures.get(i) != signature(n) or blocked_after_approval(n)]
         gone = [i for i in known_open if i not in light]
         snaps = self.details(changed + gone, viewer) if viewer else []
         for i in changed:
