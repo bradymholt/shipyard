@@ -310,7 +310,7 @@ function serverCardHtml(pr, card, first) {
     + (chip?.approval ? "" : rerequestButton(chip?.reviewers, card.id)) : "";
   const review = card.pass === "pre_review" || card.pass === "re_review";
   const openKept = card.kept
-    ? sessionLink(card.kept.path, card.kept.session, review ? "Open the review session" : card.kept.fork ? "Open the fork" : "Open the session", "btn-link", prKey(pr)) : "";
+    ? sessionLink(card.kept.path, card.kept.session, review ? "Open the review session" : "Open the session", "btn-link", prKey(pr)) : "";
   const vi = verdictProposal(card);
   const verdict = vi >= 0 ? verdictHtml(card.proposals[vi]) : "";
   const held = card.auto_held ? `<p class="nc-held">${AUTO_HELD_LABELS[card.auto_action] || AUTO_HELD_LABELS.approve} is on, but this one waits for you: ${esc(card.auto_held)}.</p>`
