@@ -201,6 +201,8 @@ try {
   await sb.locator('button.nc-run[data-pr-action="rerequest_review"]').click();
   await page.waitForFunction(() => !document.querySelector('#sidebar [data-pr-action="rerequest_review"]'), null, { timeout: 2000 });
   check(await page.locator(".lane").nth(1).locator('.card[data-key="o/r#101"]').count() === 1, "Re-request review moves the card to Waiting right away");
+  check(await page.waitForSelector('.card.changed[data-key="o/r#101"]', { timeout: 3000 }).then(() => true, () => false),
+    "a card that changed in a refresh is highlighted");
 
   await page.locator('.card[data-key="o/r#102"] .next-row').click();
   await page.waitForSelector('#sidebar [data-show-diff]');
@@ -389,6 +391,17 @@ try {
   await page.click("#settings-back");
   await page.waitForSelector(".list", { state: "visible" });
   check((await page.evaluate(() => location.hash)) === "", "Back to board returns to the board");
+
+  console.log("refresh");
+  await page.waitForTimeout(1100);  // clicking back into this page focused its window, and a second focus that soon is ignored
+  const asked = page.waitForRequest((r) => r.url().endsWith("api/check-now"), { timeout: 3000 }).then(() => true, () => false);
+  await page.evaluate(() => {
+    window.__dashboard.state.serverState.status.lastPoll = "2000-01-01T00:00:00Z";
+    dispatchEvent(new Event("focus"));
+  });
+  check(await asked, "coming back to the window asks the server to check GitHub");
+  await page.evaluate(() => { window.__dashboard.state.serverState.status.polling = true; window.__dashboard.updateGitHubStatus(); });
+  check(await page.locator("#github-status.checking #last-updated").textContent() === "Checking GitHub…", "a check in progress says so");
 
   console.log("narrow window");
   const narrow = await openPage(browser, DEMO_PORT, { width: 420, height: 900 });

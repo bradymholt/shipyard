@@ -250,6 +250,27 @@ export function isUnseen(pr) {
   return new Date(pr.updatedAt).getTime() > at;
 }
 
+// A card whose PR changed in the server's latest push glows briefly, so a refresh shows what it brought.
+const CHANGED_MS = 2500;
+const signatures = new Map();
+const changedUntil = new Map();
+
+export function noteChanges() {
+  const first = !signatures.size;
+  for (const [key, cp] of Object.entries(state.serverState?.prs || {})) {
+    const sig = JSON.stringify([cp.pr, cp.chip?.label, (cp.steps || []).map((s) => s.label),
+      (cp.cards || []).map((c) => `${c.id}:${c.kind}`)]);
+    if (!first && signatures.get(key) !== sig) changedUntil.set(key, Date.now() + CHANGED_MS);
+    signatures.set(key, sig);
+  }
+}
+
+// How far into its glow a card is, in ms, or -1 when it isn't glowing.
+export function changedFor(pr) {
+  const left = (changedUntil.get(prKey(pr)) || 0) - Date.now();
+  return left > 0 ? CHANGED_MS - left : -1;
+}
+
 export function stageOf(pr) {
   if (pr.mergedAt) return "Merged";
   if (isReviewPr(pr)) return reviewLaneOf(pr) === 0 ? "To review" : "Review submitted";

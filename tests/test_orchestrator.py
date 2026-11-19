@@ -307,6 +307,13 @@ class Settings(OrchestratorCase):
 
 
 class PageState(OrchestratorCase):
+    def test_says_it_is_polling_only_while_it_is(self):
+        during = []
+        poll = self.comp.poller.poll
+        self.comp.poller.poll = lambda *a: during.append(self.comp.page_state()["status"].get("polling")) or poll(*a)
+        self.poll()
+        self.assertEqual((during, "polling" in self.comp.page_state()["status"]), ([True], False))
+
     def test_carries_pr_state_and_open_thread_count_for_the_page(self):
         self.gh.put(pr_node(threads=[{"body": "a"}, {"body": "b", "resolved": True}]), "author:@me")
         pr = self.poll()["o/r#1"]

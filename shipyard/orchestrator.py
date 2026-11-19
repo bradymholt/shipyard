@@ -151,6 +151,7 @@ class Orchestrator:
                 self.poll_once()
             except Exception as e:  # keep polling through any one bad cycle
                 self.status["github"] = str(e)
+                self.status.pop("polling", None)
                 print(f"Warning: poll failed: {e}")
                 if not isinstance(e, GitHubError):
                     traceback.print_exc()
@@ -273,6 +274,8 @@ class Orchestrator:
         return {"ok": True}
 
     def poll_once(self):
+        self.status = {**self.status, "polling": True}  # so the page can say it is checking
+        self.publish()
         self.refresh_worktrees()  # local, so it stays current while GitHub is unreachable
         viewer, snaps, listed = self.poller.poll(self.db.open_node_ids())
         self.viewer = viewer
