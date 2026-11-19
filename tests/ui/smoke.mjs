@@ -131,6 +131,14 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-conflicts.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
+  await page.keyboard.press("j");
+  const firstKey = await page.evaluate(() => document.activeElement.dataset.key);
+  await page.keyboard.press("Enter");
+  check(firstKey && await page.evaluate((k) => document.querySelector(".card.selected")?.dataset.key === k && document.activeElement.id === "sidebar", firstKey),
+    "j focuses the first card and Enter opens it in the sidebar");
+  await page.keyboard.press("Escape");
+  check(await page.evaluate((k) => !document.body.classList.contains("sidebar-open") && document.activeElement.dataset.key === k, firstKey),
+    "Esc closes the sidebar and returns focus to its card");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
     document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional):not(:has(.next-status))").length,

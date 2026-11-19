@@ -690,7 +690,10 @@ $("#sidebar").addEventListener("click", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && sidebarKey && !document.querySelector("dialog[open]")) closeSidebar();
+  if (e.key !== "Escape" || !sidebarKey || document.querySelector("dialog[open]")) return;
+  const key = sidebarKey;
+  closeSidebar();
+  document.querySelector(`.card[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 });
 
 // A click on the board's empty space closes the sidebar; cards and controls keep their own behavior.

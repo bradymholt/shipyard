@@ -584,6 +584,8 @@ footer { margin-top: 1rem; color: var(--fg-muted); font-size: 0.75rem; display: 
 /* ---------- next step ---------- */
 .card[data-key] { cursor: pointer; }
 .card[data-key]:hover { border-color: var(--muted-bar); }
+.card[data-key]:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+#sidebar:focus { outline: none; }
 .card.selected { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal); scroll-margin: 1rem; }
 .card.snoozed { opacity: .55; }
 .next-row {
