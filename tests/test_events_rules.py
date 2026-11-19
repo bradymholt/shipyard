@@ -292,8 +292,6 @@ class NextSteps(unittest.TestCase):
         self.assertEqual(names(derive(half, done)), ["review_addressed"])
         self.assertEqual(derive(done, done), [])
         self.assertEqual(derive(half, done, unasked=False), [])
-        # asking afterwards on the same commit doesn't run it twice
-        self.assertEqual(derive(done, snap(**base, requested=["me"], threads=answered)), [])
         soon = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
         self.assertEqual(rules.next_steps(half, RULES, now=soon), [])
         step = rules.next_steps(done, RULES, now=soon)[0]

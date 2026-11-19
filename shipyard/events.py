@@ -168,9 +168,7 @@ def derive(prev, cur, image_sign_off=True, unasked=True):
     was_requested = not first and prev.get("requested_me")
     was_addressed = unasked and not first and threads_addressed(prev)
     if cur.get("requested_me") and not was_requested:
-        # Asking after the threads were answered adds nothing the re-review hasn't read.
-        if not (mine and was_addressed and prev.get("head") == cur.get("head")):
-            add("review_rerequested" if mine else "review_requested_of_me")
+        add("review_rerequested" if mine else "review_requested_of_me")
     if unasked and not first and not was_addressed and threads_addressed(cur):
         add("review_addressed", key=f":{mine.get('id')}")
     if (mine and mine.get("state") == "DISMISSED" and
