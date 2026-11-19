@@ -137,6 +137,8 @@ try {
     [...document.querySelectorAll(".lane-needs")].reduce((n, el) => n + parseInt(el.textContent, 10), 0),
   ]);
   check(steps > 0 && badge === String(steps) && lanes === steps, "the My PRs badge and lane headers count the Next steps on the board");
+  check((await page.locator("#list-title").textContent()).includes(`, ${steps} need you`) &&
+    /^\d+ of \d+ need/.test(await page.locator(".lane-needs").first().textContent()), "the title and lane headers say what their counts are");
   if (shots) await page.screenshot({ path: `${shots}/board.png`, fullPage: true });
 
   check(await page.locator('.card[data-key="o/r#101"] .wt-links a[title="Open on GitHub"]').count() === 1, "a card has an Open on GitHub icon");
@@ -214,6 +216,7 @@ try {
   }), "an opened Snoozed section sits at the bottom of its lane");
 
   await page.locator('.tab[data-filter="review"]').click();
+  check((await page.locator(".lane-header").first().textContent()).startsWith("To review"), "the Reviews lane that waits on you isn't called Waiting");
   await page.waitForSelector('.card[data-key="o/r#201"] .next-row');
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
