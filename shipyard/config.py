@@ -25,7 +25,7 @@ rule and trust settings that decide what the server does on its own.
       "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } },
       "views": ["acme", "me/tools, acme/web"],  // the page's views: repos, orgs, or
                                                 // users; the settings page edits these
-      "theme": "dark"          // "light" or "dark"; "system" (the default) follows the computer
+      "theme": "dark"          // "light" (the default), "dark", or "system" to follow the computer
     }
 """
 import json
@@ -123,10 +123,10 @@ CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
 
 APPROVE_REPLIES = ["LGTM", "Looks great!", "\u2764\ufe0f", "\U0001faf6"]
 
-THEMES = ("system", "light", "dark")
+THEMES = ("light", "dark", "system")
 DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT,
                   "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": [], "approve_replies": APPROVE_REPLIES,
-                  "theme": "system"}
+                  "theme": "light"}
 TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
 

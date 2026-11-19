@@ -20,7 +20,7 @@ class Config(unittest.TestCase):
         self.assertEqual(cfg["approve_replies"][:2], ["LGTM", "Looks great!"])
         with self.assertRaises(ValueError):
             validate_config({"approve_replies": ["LGTM", " "]})
-        self.assertEqual((cfg["theme"], validate_config({"theme": "dark"})["theme"]), ("system", "dark"))
+        self.assertEqual((cfg["theme"], validate_config({"theme": "dark"})["theme"]), ("light", "dark"))
         with self.assertRaises(ValueError):
             validate_config({"theme": "sepia"})
 
