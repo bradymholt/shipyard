@@ -286,7 +286,7 @@ function serverCardHtml(pr, card, first) {
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
-      <div class="nc-actions"><button type="button" class="primary" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div>
+      <div class="nc-actions"><button type="button" class="${first ? "primary" : ""}" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div>
       ${card.pass === "pre_review" ? suggestHtml("pre_review") : ""}</div>`;
   }
   if (card.kind === "error" || card.kind === "raw") {
@@ -299,7 +299,7 @@ function serverCardHtml(pr, card, first) {
   if (card.kind === "proposal") {
     return `<div class="${cls}"><div class="nc-head">${fmtCode(card.title)}${dismiss}</div>
       <p class="nc-reason">${fmtCode(card.summary || "")}</p>
-      <div class="nc-actions"><button type="button" class="nc-run primary" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
+      <div class="nc-actions"><button type="button" class="nc-run${first ? " primary" : ""}" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
         <button type="button" data-dismiss="${card.id}">Dismiss</button></div></div>`;
   }
   const chip = card.pass === "feedback"
@@ -315,11 +315,13 @@ function serverCardHtml(pr, card, first) {
     : card.auto_wait?.until ? `<p class="nc-held">Auto-approves at ${esc(new Date(card.auto_wait.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}, a few minutes after the push.</p>`
     : card.auto_wait?.manual ? `<p class="nc-held">Re-runs the failed jobs once the rest of the workflow run finishes.</p>`
     : card.auto_wait ? `<p class="nc-held">Re-runs the failed checks automatically once the running ones finish.</p>` : "";
-  // One button leads: the first proposal that runs from here, or Continue when the agent only said to carry on.
-  // A review card's verdict already leads, and a fix stays behind its diff.
+  // One button leads, on the first card only: the first proposal that runs from here, or Continue when the
+  // agent only said to carry on. A review card's verdict already leads, a fix stays behind its diff, and
+  // nothing leads while the card is waiting to act on its own.
   const list = card.proposals || [];
-  const lead = vi >= 0 ? -1 : list.findIndex((p) => !["continue", "apply_fix"].includes(p.action) && !(p.action === "rerun_checks" && card.auto_wait?.manual));
-  const leadContinue = vi < 0 && lead < 0 && list.some((p) => p.action === "continue");
+  const leads = first && vi < 0 && !card.auto_wait;
+  const lead = leads ? list.findIndex((p) => !["continue", "apply_fix"].includes(p.action)) : -1;
+  const leadContinue = leads && lead < 0 && list.some((p) => p.action === "continue");
   const proposals = list.map((p, i) => proposalHtml(pr, card, p, i, i === vi, i === lead)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${verdict}${held}
     ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
