@@ -258,7 +258,6 @@ function proposalHtml(pr, card, p, i, bare = false, lead = false) {
       ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
       ${body}
       <div class="nc-actions">${button}</div>
-      ${p.action === "rerun_checks" ? suggestHtml("rerun_checks") : ""}
     </div>`;
 }
 
@@ -325,7 +324,8 @@ function serverCardHtml(pr, card, first) {
   const proposals = list.map((p, i) => proposalHtml(pr, card, p, i, i === vi, i === lead)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${verdict}${held}
     ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
-    ${review && !openKept ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr, leadContinue ? "primary" : "")}${rerun}${rerequest}${viewLog}</div>`}</div>`;
+    ${review && !openKept ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr, leadContinue ? "primary" : "")}${rerun}${rerequest}${viewLog}</div>`}
+    ${list.some((p) => p.action === "rerun_checks") ? suggestHtml("rerun_checks") : ""}</div>`;
 }
 
 function rerequestButton(reviewers, cardId, cls = "") {
@@ -431,13 +431,13 @@ function autoApproveSection(pr) {
   if (!setting || pr.mergedAt || !isReviewPr(pr)) return "";
   const rule = state.serverState?.config?.approveRereview;
   const why = automationHeld() ? "Held: Shipyard isn't acting on its own until you turn it on."
-    : !rule ? "Off for every PR: auto.approve_rereview is false in shipyard.config.json."
-    : AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
-    : setting.on ? "On because your last review approved it." : "Off because your last review didn't approve it.";
+    : !rule ? 'Off for every PR. Turn it on in <a href="#settings/rules/reviews">Settings</a>.'
+    : esc(AUTO_BY[setting.by] ? `${AUTO_BY[setting.by]}${setting.why ? `: ${setting.why}` : "."}`
+      : setting.on ? "On because your last review approved it." : "Off because your last review didn't approve it.");
   return `<div class="sb-section"><div class="sb-h">Auto-approve</div><div class="sb-auto">
     <label><input type="checkbox" data-auto-approve="${esc(prKey(pr))}"${setting.on && rule ? " checked" : ""}${rule ? "" : " disabled"}>
       Approve on its own when a re-review finds my review addressed</label>
-    <div class="auto-why">${esc(why)}</div></div></div>`;
+    <div class="auto-why">${why}</div></div></div>`;
 }
 
 function sessionSection(pr) {
@@ -511,7 +511,7 @@ function activitySection(pr) {
   ].filter((e) => e.at).sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 25);
   if (!entries.length) return "";
   return `<div class="sb-section"><div class="sb-h">Activity</div><ul class="sb-activity">${entries.map((e) =>
-    `<li><span class="act-when">${agoSpan(e.at, true)}</span><span>${e.shipyard ? '<span class="act-shipyard">Shipyard</span> ' : ""}${esc(e.text)}</span></li>`).join("")}</ul></div>`;
+    `<li><span class="act-when">${agoSpan(e.at)}</span><span>${e.shipyard ? '<span class="act-shipyard">Shipyard</span> ' : ""}${esc(e.text)}</span></li>`).join("")}</ul></div>`;
 }
 
 export function renderSidebar() {
