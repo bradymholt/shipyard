@@ -131,6 +131,9 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-conflicts.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
+  await page.keyboard.press("?");
+  check(await page.locator("#shortcuts-dialog[open] kbd").count() > 0, "? lists the keyboard shortcuts");
+  await page.keyboard.press("Escape");
   await page.keyboard.press("j");
   const firstKey = await page.evaluate(() => document.activeElement.dataset.key);
   await page.keyboard.press("Enter");
