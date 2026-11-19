@@ -877,6 +877,9 @@ class Reviews(OrchestratorCase):
         self.assertFalse(any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls))
         card = self.comp.page_state()["prs"]["o/r#7"]["cards"][0]
         self.assertEqual((card["pass"], card["auto_held"]), ("re_review", "the author hasn't asked you to look again"))
+        self.comp.run_pass_now("o/r#7", "re_review")
+        self.idle()
+        self.assertTrue(any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls))
 
     def test_trusted_approve_fires_after_your_approval_was_dismissed(self):
         small = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]

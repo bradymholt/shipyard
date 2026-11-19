@@ -462,13 +462,13 @@ class Orchestrator:
                 self.db.update_card(card["id"], status="done")
         return new
 
-    def queue_pass(self, snap, name, retry=False, head=None):
+    def queue_pass(self, snap, name, retry=False, head=None, by_hand=False):
         """Queue a pass with its "running" card; None when it already ran for this head.
         `head` is the dedupe key: the PR's head SHA, or a finer one from the event."""
         key = snap["key"]
         head = head or snap["head"]
         card_id = self.db.add_card(key, {"kind": "running", "pass": name, "title": passes.TITLES[name],
-                                         "head": snap["head"]})
+                                         "head": snap["head"], "by_hand": by_hand})
         pass_id = self.db.queue_pass(key, name, head, passes.PASS_MODES[name], card_id)
         if pass_id is None:
             existing = next((p for p in self.db.passes(key) if p["name"] == name and p["head"] == head), None)
@@ -728,7 +728,7 @@ class Orchestrator:
         if action == "approve" and not self.auto_approve_setting(snap)["on"]:
             self.db.log(snap["key"], "left the approval for you: auto-approve is off for this PR")
             return False
-        if (action == "approve" and not snap.get("requested_me")
+        if (action == "approve" and not card.get("by_hand") and not snap.get("requested_me")
                 and (snap.get("my_review") or {}).get("state") != "DISMISSED"):
             self.db.update_card(card_id, auto_held="the author hasn't asked you to look again")
             return False
@@ -1160,7 +1160,7 @@ class Orchestrator:
         for card in self.db.cards(key, ("open",)):
             if card.get("pass") == name and (card.get("kind") in ("offer", "error", "raw") or name == "new_session"):
                 self.db.update_card(card["id"], status="done")
-        card = self.queue_pass(snap, name, retry=True)
+        card = self.queue_pass(snap, name, retry=True, by_hand=True)
         if card is None:
             raise ValueError("That pass is already running for this commit.")
         return {"ok": True, "card": card}
