@@ -74,9 +74,13 @@ There is nothing to build or install.
 
 Colors, fonts, and spacing tokens are CSS custom properties in the `:root` block at the
 top of `app.css` (`--green`, `--fg-muted`, `--purple`, `--sans`, etc.). **Use these
-variables — never hardcode a hex color or font stack.** When adding UI, match the weight
-and size of nearby elements so new pieces don't outshout existing ones (e.g. row meta is
-`11px/500-600`, the PR title is `15px/600`).
+variables — never hardcode a hex color or font stack.** The page follows the system's light
+or dark setting: the `prefers-color-scheme: dark` block under `:root` overrides the tokens
+whose value changes, so a new color token needs a value there too. Text on a color that stays
+the same in both themes (a GitHub label, an avatar) uses `--on-light` / `--on-dark`, not
+`--fg` / `--surface`. When adding UI, match the weight and size of nearby elements so new
+pieces don't outshout existing ones (e.g. row meta is `11px/500-600`, the PR title is
+`15px/600`).
 
 ## Workflow
 
