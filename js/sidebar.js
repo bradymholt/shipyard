@@ -139,16 +139,16 @@ function continueTarget(pr) {
   return target && { path: target.path, session: target.session.id };
 }
 
-function continueButton(pr) {
+function continueButton(pr, cls = "") {
   const target = continueTarget(pr);
-  return target ? sessionLink(target.path, target.session, `Continue in ${esc(agentName())}`, "btn-link", prKey(pr)) : "";
+  return target ? sessionLink(target.path, target.session, `Continue in ${esc(agentName())}`, `btn-link ${cls}`, prKey(pr)) : "";
 }
 
 // A new session with the rule's prompt typed in; agents without a prompt URL resume instead.
-function promptButton(pr, rule, verb) {
+function promptButton(pr, rule, verb, cls = "") {
   const url = state.agent?.prompt_url;
   const template = state.rules?.[rule]?.prompt;
-  if (!url || !template) return continueButton(pr);
+  if (!url || !template) return continueButton(pr, cls);
   const prompt = template.replaceAll("{url}", pr.url).replaceAll("{repo}", pr.repository?.nameWithOwner || "")
     .replaceAll("{number}", pr.number).replaceAll("{branch}", pr.headRefName || "").replaceAll("{base}", pr.baseRefName || "");
   // A pin can sit in a clone that has since switched off your branch.
@@ -157,7 +157,7 @@ function promptButton(pr, rule, verb) {
   const link = url.replaceAll("{prompt}", encodeURIComponent(prompt));
   const make = path || review ? "" : ` data-make-worktree="${esc(link)}"`;
   const href = link.replaceAll("{path}", encodeURIComponent(path));
-  return `<a class="btn-link" data-continue="${esc(prKey(pr))}"${make} href="${esc(href)}" title="${esc(prompt)}">${esc(verb)} in ${esc(agentName())}</a>`;
+  return `<a class="btn-link ${cls}" data-continue="${esc(prKey(pr))}"${make} href="${esc(href)}" title="${esc(prompt)}">${esc(verb)} in new session</a>`;
 }
 
 function sidebarHeader(pr) {
@@ -204,7 +204,7 @@ function verdictHtml(p) {
 
 const cancelWaitButton = (card) => `<button type="button" data-cancel-wait="${card.id}">Cancel re-run</button>`;
 
-function proposalHtml(pr, card, p, i, bare = false) {
+function proposalHtml(pr, card, p, i, bare = false, lead = false) {
   if (p.action === "continue") return p.reason ? `<p class="nc-reason">${fmtCode(p.reason)}</p>` : "";
   if (p.action === "finish_on_github") {
     const n = p.payload?.comments || 0;
@@ -242,7 +242,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       body += `<ul class="nc-inline">${inline.map((c) => `<li><code>${esc(c.path)}:${esc(c.line)}</code> ${fmtCode(c.body)}</li>`).join("")}</ul>`;
     }
   }
-  let button = `<button type="button" class="nc-run${bare && p.action === "approve" ? " primary" : ""}" data-card="${card.id}" data-index="${i}" data-action="${esc(p.action)}" data-field="${field}">${esc(label)}</button>`;
+  let button = `<button type="button" class="nc-run${lead || (bare && p.action === "approve") ? " primary" : ""}" data-card="${card.id}" data-index="${i}" data-action="${esc(p.action)}" data-field="${field}">${esc(label)}</button>`;
   if (p.action === "apply_fix") {
     // Never the default: the diff shows first, and the button stays plain.
     button = shownDiffs.has(field)
@@ -286,7 +286,7 @@ function serverCardHtml(pr, card, first) {
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
-      <div class="nc-actions"><button type="button" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div>
+      <div class="nc-actions"><button type="button" class="${first ? "primary" : ""}" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div>
       ${card.pass === "pre_review" ? suggestHtml("pre_review") : ""}</div>`;
   }
   if (card.kind === "error" || card.kind === "raw") {
@@ -299,7 +299,7 @@ function serverCardHtml(pr, card, first) {
   if (card.kind === "proposal") {
     return `<div class="${cls}"><div class="nc-head">${fmtCode(card.title)}${dismiss}</div>
       <p class="nc-reason">${fmtCode(card.summary || "")}</p>
-      <div class="nc-actions"><button type="button" class="nc-run" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
+      <div class="nc-actions"><button type="button" class="nc-run${first ? " primary" : ""}" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
         <button type="button" data-dismiss="${card.id}">Dismiss</button></div></div>`;
   }
   const chip = card.pass === "feedback"
@@ -315,16 +315,23 @@ function serverCardHtml(pr, card, first) {
     : card.auto_wait?.until ? `<p class="nc-held">Auto-approves at ${esc(new Date(card.auto_wait.until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}, a few minutes after the push.</p>`
     : card.auto_wait?.manual ? `<p class="nc-held">Re-runs the failed jobs once the rest of the workflow run finishes.</p>`
     : card.auto_wait ? `<p class="nc-held">Re-runs the failed checks automatically once the running ones finish.</p>` : "";
-  const proposals = (card.proposals || []).map((p, i) => proposalHtml(pr, card, p, i, i === vi)).join("");
+  // One button leads, on the first card only: the first proposal that runs from here, or Continue when the
+  // agent only said to carry on. A review card's verdict already leads, a fix stays behind its diff, and
+  // nothing leads while the card is waiting to act on its own.
+  const list = card.proposals || [];
+  const leads = first && vi < 0 && !card.auto_wait;
+  const lead = leads ? list.findIndex((p) => !["continue", "apply_fix"].includes(p.action)) : -1;
+  const leadContinue = leads && lead < 0 && list.some((p) => p.action === "continue");
+  const proposals = list.map((p, i) => proposalHtml(pr, card, p, i, i === vi, i === lead)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${verdict}${held}
     ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
-    ${review && !openKept ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr)}${rerun}${rerequest}${viewLog}</div>`}</div>`;
+    ${review && !openKept ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr, leadContinue ? "primary" : "")}${rerun}${rerequest}${viewLog}</div>`}</div>`;
 }
 
-function rerequestButton(reviewers, cardId) {
+function rerequestButton(reviewers, cardId, cls = "") {
   if (!reviewers?.length) return "";
   const done = cardId ? ` data-done-card="${cardId}"` : "";
-  return `<button type="button" class="nc-run" data-pr-action="rerequest_review" data-reviewers="${esc(reviewers.join(","))}"${done}>Re-request review</button>`;
+  return `<button type="button" class="nc-run ${cls}" data-pr-action="rerequest_review" data-reviewers="${esc(reviewers.join(","))}"${done}>Re-request review</button>`;
 }
 
 // With no card from the server, the chip still implies the buttons that fit it.
@@ -333,20 +340,20 @@ function derivedCardHtml(pr, chip) {
   const key = prKey(pr);
   const field = `d-${key}-${chip.kind}`;
   const run = (action, label, cls = "") => `<button type="button" class="nc-run ${cls}" data-pr-action="${esc(action)}" data-field="${esc(field)}">${esc(label)}</button>`;
-  const rerequest = rerequestButton(chip.reviewers);
+  const rerequest = rerequestButton(chip.reviewers, null, chip.kind === "address_feedback" ? "" : "primary");
   let body = "";
   let actionsHtml = "";
   if (chip.kind === "merge") {
     body = "Approved and checks are green.";
-    actionsHtml = run("merge", "Merge") + (pr.viewerCanEnableAutoMerge ? run("enable_auto_merge", "Enable auto-merge") : "");
+    actionsHtml = run("merge", "Merge", "primary") + (pr.viewerCanEnableAutoMerge ? run("enable_auto_merge", "Enable auto-merge") : "");
   } else if (chip.kind === "rerequest_mine") {
     body = `@${chip.author} updated this after you requested changes but hasn't asked you to look again. Put it back in your review queue:`;
-    actionsHtml = rerequestButton([state.viewer]);
+    actionsHtml = rerequestButton([state.viewer], null, "primary");
   } else if (chip.kind === "nudge") {
     const owner = (pr.repository?.nameWithOwner || "").split("/")[0];
     const mentions = (chip.reviewers || []).map((r) => r.startsWith("team:") ? `@${owner}/${r.slice(5)}` : `@${r}`).join(" ");
     body = `Waiting on review for ${chip.label.split("· ")[1] || "a while"}. The nudge posts as a PR comment under your name:`;
-    actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge");
+    actionsHtml = textField(field, `${mentions} friendly nudge: this is ready for review when you have a minute. Thanks!`) + run("nudge", "Post nudge", "primary");
   } else if (chip.kind === "ask_approval") {
     body = `${chip.reviewers.join(", ")} signed off in a comment, but GitHub still needs an approval to merge. Ask again so it lands in their review queue:`;
     actionsHtml = rerequest;
@@ -358,7 +365,7 @@ function derivedCardHtml(pr, chip) {
     const verb = chip.approval ? "approved with comments"
       : pr.reviewDecision === "CHANGES_REQUESTED" ? "requested changes" : "left review comments";
     body = `${chip.reviewers.join(", ")} ${verb}${open ? ` · ${open} open thread${open === 1 ? "" : "s"}` : ""}.`;
-    actionsHtml = (chip.approval ? afterApprovalButton(pr) : "") + promptButton(pr, "address_feedback", "Address") + (chip.approval
+    actionsHtml = (chip.approval ? afterApprovalButton(pr) : "") + promptButton(pr, "address_feedback", "Address", chip.approval ? "" : "primary") + (chip.approval
       ? `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>` : rerequest);
   } else if (chip.kind === "resolve_conflicts") {
     body = `This branch conflicts with ${pr.baseRefName || "its base"}, so it can't merge until they're resolved.`;
@@ -376,7 +383,7 @@ function derivedCardHtml(pr, chip) {
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
       review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
-    actionsHtml = `<button type="button" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
+    actionsHtml = `<button type="button" class="primary" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
       + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "");
   } else {
     return "";

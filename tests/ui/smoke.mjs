@@ -145,6 +145,7 @@ try {
   await page.waitForSelector("#sidebar .next-card");
   const sb = page.locator("#sidebar");
   check(await sb.isVisible(), "clicking a card opens the sidebar");
+  check((await sb.locator(".next-card .primary").allTextContents()).join() === "Post reply", "a card's first runnable proposal is its one primary button");
   await page.waitForTimeout(400);
   const lefts = await page.evaluate(() => [".header-inner", ".container"].map((s) => document.querySelector(s).getBoundingClientRect().left));
   check(Math.abs(lefts[0] - lefts[1]) < 1, "the header stays lined up with the board when the sidebar opens");
@@ -184,6 +185,7 @@ try {
   check(await sb.locator('button.nc-run[data-action="apply_fix"]').count() === 0, "Apply fix stays hidden until the diff is shown");
   await sb.locator("[data-show-diff]").click();
   check((await sb.locator(".next-card pre").textContent()).includes("registry=https://mirror.example/"), "diff shows first");
+  check((await sb.locator(".next-card .primary").allTextContents()).join() === "Re-run failed jobs", "a shown fix stays a plain button");
   check(await sb.locator('button.nc-run[data-action="apply_fix"]').count() === 1, "then Apply fix and push appears");
   check(await sb.locator('a.btn-link:has-text("View log")').count() === 1, "CI card links the failing log");
   check(await sb.locator('.nc-suggest:has([data-suggest-on="rerun_checks"])').count() === 1, "a proposed re-run suggests turning automatic re-runs on");
