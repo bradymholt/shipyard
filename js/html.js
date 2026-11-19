@@ -55,17 +55,11 @@ export function timeAgo(iso) {
 }
 
 // The server's quiet polls don't re-render, so these labels age in place.
-function agoText(at, short) {
-  const text = timeAgo(at);
-  return short ? text.replace(" ago", "") : text;
-}
-
-export const agoSpan = (at, short = false) =>
-  `<span data-ago="${new Date(at).getTime()}"${short ? " data-short" : ""}>${agoText(at, short)}</span>`;
+export const agoSpan = (at) => `<span data-ago="${new Date(at).getTime()}">${timeAgo(at)}</span>`;
 
 export function refreshAgoLabels() {
   document.querySelectorAll("[data-ago]").forEach((el) => {
-    el.textContent = agoText(Number(el.dataset.ago), el.hasAttribute("data-short"));
+    el.textContent = timeAgo(Number(el.dataset.ago));
   });
 }
 
