@@ -431,6 +431,11 @@ try {
     return (sel === "body" || sel === ".card" ? cs.backgroundColor : cs.color).match(/\d+/g).slice(0, 3).reduce((n, v) => n + Number(v), 0);
   }));
   check(sums[0] < 200 && sums[1] < 250 && sums[2] > 500, "a dark system setting gives dark surfaces and light text");
+  await narrow.page.selectOption("#theme-select", "light");
+  await narrow.page.reload();
+  await narrow.page.waitForSelector(".card[data-key]");
+  check(await narrow.page.evaluate(() => getComputedStyle(document.body).backgroundColor === "rgb(247, 249, 250)" &&
+    document.querySelector("#theme-select").value === "light"), "the footer's theme choice overrides the system setting and survives a reload");
   check(narrow.errors.length === 0, `no page errors narrow${narrow.errors.length ? `: ${narrow.errors.join(" | ")}` : ""}`);
 
   await browser.close();

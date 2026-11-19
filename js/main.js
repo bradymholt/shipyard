@@ -1,5 +1,5 @@
 // Entry point: starts the page.
-import { state } from "./base.js";
+import { $, LS, state } from "./base.js";
 import { connectServerEvents, moveLocalViews, refreshOnFocus } from "./server.js";
 import { updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
@@ -18,6 +18,19 @@ moveLocalViews().finally(() => {
 
 connectServerEvents();
 route();
+
+const themeSelect = $("#theme-select");
+themeSelect.value = document.documentElement.dataset.theme || "";
+themeSelect.addEventListener("change", () => {
+  const theme = themeSelect.value;
+  if (theme) {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(LS.THEME, theme);
+  } else {
+    delete document.documentElement.dataset.theme;
+    localStorage.removeItem(LS.THEME);
+  }
+});
 
 
 setInterval(updateGitHubStatus, 10 * 1000);
