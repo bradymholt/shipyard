@@ -3,7 +3,7 @@ import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isSnoozed, isUnseen, justChanged, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, changedFor, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -249,7 +249,7 @@ function mergedRepoPrefix(pr) {
 
 function mergedCard(pr) {
   return `
-    <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}" tabindex="0">
+    <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}" tabindex="0"${glowAttr(pr)}>
       <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a></div>
       <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
       ${mergedWorktreeLinks(pr)}
@@ -364,7 +364,7 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   const unseen = isUnseen(pr) && sidebarKey !== prKey(pr)
     ? '<span class="new-dot" title="Updated since you last opened it"></span>' : "";
   return `
-    <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}" tabindex="0">
+    <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}" tabindex="0"${glowAttr(pr)}>
       <div class="card-title">${unseen}<a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
       <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}${size}</div>
       <div class="card-icons">
@@ -734,5 +734,8 @@ function nextRowHtml(pr) {
 
 function cardClasses(pr, extra) {
   return ["card", extra, isSnoozed(pr) ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : "",
-    justChanged(pr) ? "changed" : ""].filter(Boolean).join(" ");
+    changedFor(pr) >= 0 ? "changed" : ""].filter(Boolean).join(" ");
 }
+
+// Re-rendering restarts a CSS animation, so each render picks the glow up where it had got to.
+const glowAttr = (pr) => (changedFor(pr) >= 0 ? ` style="animation-delay:-${changedFor(pr)}ms"` : "");

@@ -265,7 +265,11 @@ export function noteChanges() {
   }
 }
 
-export const justChanged = (pr) => (changedUntil.get(prKey(pr)) || 0) > Date.now();
+// How far into its glow a card is, in ms, or -1 when it isn't glowing.
+export function changedFor(pr) {
+  const left = (changedUntil.get(prKey(pr)) || 0) - Date.now();
+  return left > 0 ? CHANGED_MS - left : -1;
+}
 
 export function stageOf(pr) {
   if (pr.mergedAt) return "Merged";
