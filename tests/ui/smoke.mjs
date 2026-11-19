@@ -134,6 +134,9 @@ try {
   await page.keyboard.press("?");
   check(await page.locator("#shortcuts-dialog[open] kbd").count() > 0, "? lists the keyboard shortcuts");
   await page.keyboard.press("Escape");
+  await page.locator("#shortcuts-hint").click();
+  check(await page.locator("#shortcuts-dialog[open]").count() === 1, "the footer hint opens the same list");
+  await page.keyboard.press("Escape");
   await page.keyboard.press("j");
   const firstKey = await page.evaluate(() => document.activeElement.dataset.key);
   await page.keyboard.press("Enter");
