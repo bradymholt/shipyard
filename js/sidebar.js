@@ -347,7 +347,7 @@ function derivedCardHtml(pr, chip) {
     body = "Approved and checks are green.";
     actionsHtml = run("merge", "Merge", "primary") + (pr.viewerCanEnableAutoMerge ? run("enable_auto_merge", "Enable auto-merge") : "");
   } else if (chip.kind === "rerequest_mine") {
-    body = `@${chip.author} updated this after you requested changes but hasn't asked you to look again. Put it back in your review queue:`;
+    body = `@${chip.author} updated this after your review but hasn't asked you to look again. Put it back in your review queue:`;
     actionsHtml = rerequestButton([state.viewer], null, "primary");
   } else if (chip.kind === "nudge") {
     const owner = (pr.repository?.nameWithOwner || "").split("/")[0];
@@ -385,7 +385,9 @@ function derivedCardHtml(pr, chip) {
     actionsHtml = `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>`;
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
-      review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];
+      review: "Your review is requested.", re_review: { addressed: `@${pr.author?.login} answered your comments but hasn't asked you to look again.`,
+        quiet: `@${pr.author?.login} updated this after your review but hasn't asked you to look again.`,
+      }[chip.unasked] || "The author asked you to look again." }[chip.kind];
     actionsHtml = `<button type="button" class="primary" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
       + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "");
   } else {

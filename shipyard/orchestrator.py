@@ -329,7 +329,8 @@ class Orchestrator:
     def ingest(self, snap):
         prev = self.db.pr(snap["key"])
         self.db.save_pr(snap)
-        for event in derive(prev, snap, self.config["rules"]["image_sign_off"]):
+        for event in derive(prev, snap, self.config["rules"]["image_sign_off"],
+                            self.config["rules"]["unasked_rereview"]):
             # Activity holds Shipyard's own actions; the page reads GitHub's timeline itself.
             if not self.db.record_event(snap["key"], event):
                 continue
@@ -726,6 +727,10 @@ class Orchestrator:
             return False
         if action == "approve" and not self.auto_approve_setting(snap)["on"]:
             self.db.log(snap["key"], "left the approval for you: auto-approve is off for this PR")
+            return False
+        if (action == "approve" and not snap.get("requested_me")
+                and (snap.get("my_review") or {}).get("state") != "DISMISSED"):
+            self.db.update_card(card_id, auto_held="the author hasn't asked you to look again")
             return False
         task, done = AUTO_WORDS.get(action, (action.replace("_", " "), action.replace("_", " ")))
         failing = sorted(c["name"] for c in snap.get("failing") or [] if c.get("name"))

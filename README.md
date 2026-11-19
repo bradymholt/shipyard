@@ -194,8 +194,9 @@ Most rules gate one next step. Set a rule to `false` to drop its step and any pa
 | `merge` | Merge once approved, green, and not conflicting | |
 | `review` | Review when your review is requested | |
 | `re_review` | Re-review when your review is requested again or a push dismissed it | |
+| `unasked_rereview` | Re-review, and move the PR back to To review, once the author has replied to or changed the code under every thread you opened, without waiting for them to re-request you | |
 | `nudge` | Nudge a reviewer who has sat on your PR | `after_hours` (24) |
-| `ask_rereview` | Re-request review on a PR you requested changes on, when the author moved on without asking you back | `after_hours` (24) |
+| `ask_rereview` | Move a PR you reviewed back to To review when the author updated it and then left it without asking you back | `after_hours` (24) |
 | `image_sign_off` | An approval whose comment is only an image (a GIF, say) needs no reply | |
 
 The two `prompt` rules hand the work to a new agent session instead of a pass: the card's **Address** or **Resolve** button opens one with the prompt typed in, so a skill of yours can take it from there. Placeholders are `{url}`, `{repo}`, `{number}`, `{branch}`, and `{base}` for conflicts. The defaults are `Address the review feedback on {url} (branch {branch})` and `Merge {base} into {branch} and resolve the conflicts on {url}`. The session starts from the repository, not the PR's checkout, so the prompt names the branch to work on.
@@ -209,7 +210,7 @@ A pass runs your agent's CLI (`claude`, or `codex` with `"sessions": "codex"`) h
 | `ci_failed` | `auto` | CI fails on your PR; the agent reads the failing job's log and tells flaky from real | Re-run failed jobs, Apply fix |
 | `feedback` | `false` | A reviewer requests changes on your PR; `auto` has the agent draft a plan and replies | Post reply |
 | `pre_review` | `ask` | Your review is requested | A pending review, or Approve |
-| `re_review` | `auto` | Your review is requested again | Approve |
+| `re_review` | `auto` | Your review is requested again, or the author answered every thread you opened | Approve |
 
 `rules.instructions` adds your own text to a pass's prompt, keyed by pass name, ahead of the answer format Shipyard reads back.
 

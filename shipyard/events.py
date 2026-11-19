@@ -75,7 +75,45 @@ def needs_changes(snap, image_sign_off=True):
             bool(requesters(snap, image_sign_off) or approval_feedback(snap, image_sign_off)))
 
 
-def derive(prev, cur, image_sign_off=True):
+def author_moved_at(snap):
+    """When the author last pushed or commented after your review, while it still asks
+    something of them and they haven't asked you to look again; None otherwise."""
+    review = snap.get("my_review") or {}
+    since = review.get("submitted")
+    if review.get("state") not in FEEDBACK or snap.get("requested_me") or not since:
+        return None
+    # A comment-only review counts when it answered a request, not when you chimed in.
+    asked = (snap.get("requested_at") or {}).get(snap.get("viewer"))
+    if review["state"] == "COMMENTED" and not (asked and asked <= since):
+        return None
+    author = snap.get("author")
+    times = [c.get("created") for t in snap.get("threads") or [] for c in t.get("comments") or []
+             if c.get("author") == author]
+    times += [c.get("created") for c in snap.get("comments") or [] if c.get("author") == author]
+    if review.get("commit") != snap.get("head"):
+        times.append(snap.get("last_commit_at"))
+    times = [t for t in times if t and t > since]
+    return max(times) if times else None
+
+
+def threads_addressed(snap):
+    """The author answered every thread you opened without asking you back: each open one
+    is outdated or has their reply after your last comment, and they moved since your review."""
+    if (snap.get("mine") or snap.get("state") != "OPEN" or snap.get("draft") or snap.get("author_bot")
+            or not author_moved_at(snap)):
+        return False
+    viewer, author = snap.get("viewer"), snap.get("author")
+    opened = [t for t in snap.get("threads") or [] if t.get("comments") and t["comments"][0].get("author") == viewer]
+
+    def answered(thread):
+        authors = [c.get("author") for c in thread["comments"]]
+        last_mine = len(authors) - 1 - authors[::-1].index(viewer)
+        return thread.get("outdated") or author in authors[last_mine + 1:]
+
+    return bool(opened) and all(answered(t) for t in opened if not t.get("resolved"))
+
+
+def derive(prev, cur, image_sign_off=True, unasked=True):
     events = []
 
     def add(name, key=None, **data):
@@ -128,8 +166,13 @@ def derive(prev, cur, image_sign_off=True):
 
     mine = cur.get("my_review")
     was_requested = not first and prev.get("requested_me")
+    was_addressed = unasked and not first and threads_addressed(prev)
     if cur.get("requested_me") and not was_requested:
-        add("review_rerequested" if mine else "review_requested_of_me")
+        # Asking after the threads were answered adds nothing the re-review hasn't read.
+        if not (mine and was_addressed and prev.get("head") == cur.get("head")):
+            add("review_rerequested" if mine else "review_requested_of_me")
+    if unasked and not first and not was_addressed and threads_addressed(cur):
+        add("review_addressed", key=f":{mine.get('id')}")
     if (mine and mine.get("state") == "DISMISSED" and
             (first or (prev.get("my_review") or {}).get("state") != "DISMISSED")):
         add("review_dismissed")
