@@ -155,6 +155,10 @@ try {
   await page.waitForSelector("#sidebar .next-card");
   const sb = page.locator("#sidebar");
   check(await sb.isVisible(), "clicking a card opens the sidebar");
+  await sb.locator("textarea").first().focus();
+  await page.keyboard.type("j");
+  check(await page.locator('.card.selected[data-key="o/r#101"]').count() === 1, "typing j in a field doesn't move to another card");
+  await page.keyboard.press("Backspace");
   check(await sb.locator(".sess-exchange").count() === 1 && !(await sb.locator(".sess-exchange").textContent()).includes("Rev questions"),
     "PR session doesn't repeat a summary the card above already shows");
   check((await sb.locator(".next-card .primary").allTextContents()).join() === "Post reply", "a card's first runnable proposal is its one primary button");

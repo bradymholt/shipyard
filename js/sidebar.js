@@ -691,9 +691,13 @@ $("#sidebar").addEventListener("click", async (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || !sidebarKey || document.querySelector("dialog[open]")) return;
+  // Hand focus back to the card only when the keyboard had taken it into the sidebar; a card opened
+  // with the mouse would otherwise pick up a focus ring that reads as still selected.
   const key = sidebarKey;
+  const within = $("#sidebar").contains(document.activeElement);
+  if (!within) document.activeElement?.blur?.();
   closeSidebar();
-  document.querySelector(`.card[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+  if (within) document.querySelector(`.card[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 });
 
 // A click on the board's empty space closes the sidebar; cards and controls keep their own behavior.

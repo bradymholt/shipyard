@@ -669,7 +669,7 @@ $("#sort-select").addEventListener("change", (e) => {
 });
 
 listBody.addEventListener("keydown", (e) => {
-  if (e.target.matches(".card[data-key]") && (e.key === "Enter" || e.key === " ")) {
+  if (e.target.matches(".card[data-key]") && e.key === "Enter") {
     e.preventDefault();
     openSidebar(e.target.dataset.key);
     $("#sidebar").focus({ preventScroll: true });
