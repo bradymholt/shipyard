@@ -118,8 +118,14 @@ export function laneOf(pr) {
   return 0;
 }
 
+// The server's step can trail a review you just submitted, so it counts only for the review it read.
+function unaskedRereview(pr) {
+  const step = serverSteps(pr).find((s) => s.kind === "re_review" && s.unasked);
+  return !!step && (pr.viewerLatestReview?.submittedAt || "") <= (step.since || "");
+}
+
 export function reviewLaneOf(pr) {
-  return reviewRequestedForViewer(pr) || viewerReviewDismissed(pr) ? 0 : 1;
+  return reviewRequestedForViewer(pr) || viewerReviewDismissed(pr) || unaskedRereview(pr) ? 0 : 1;
 }
 
 // A card gets one chip, only when there is a next step. The server decides every

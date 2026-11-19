@@ -90,6 +90,7 @@ RULE_DEFAULTS = {
     "merge": True,
     "review": True,
     "re_review": True,
+    "unasked_rereview": True,
     "nudge": {"after_hours": 24},
     "ask_rereview": {"after_hours": 24},
     "rerequest_review": True,

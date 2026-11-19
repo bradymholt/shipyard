@@ -859,6 +859,25 @@ class Reviews(OrchestratorCase):
         card = self.comp.page_state()["prs"]["o/r#7"]["cards"][0]
         self.assertEqual(card["auto_held"], "the re-review didn't recommend approving")
 
+    def test_trusted_approve_waits_for_a_request_when_the_re_review_was_unasked(self):
+        self.trust("approve_rereview", {"min_wait_minutes": 0})
+        self.comp.db.set_auto_approve("o/r#7", True, "you")
+        self.gh.compare = {"files": [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]}
+        self.agent.answers = {"re-review": {"summary": "all addressed", "proposals": [
+            {"action": "approve", "confidence": "high", "reason": "threads fixed"}]}}
+        review = {"databaseId": 9, "state": "CHANGES_REQUESTED", "submittedAt": "2026-10-19T00:00:00Z",
+                  "commit": {"oid": "old"}}
+        thread = {"author": VIEWER, "body": "rename this"}
+        self.gh.put(pr_node(number=7, author="bob", my_review=review, threads=[thread]), "reviewed-by:@me")
+        self.poll()
+        self.assertEqual(self.comp.page_state()["prs"]["o/r#7"]["cards"], [])
+        self.gh.put(pr_node(number=7, author="bob", my_review=review, threads=[{**thread, "replies": ["bob"]}],
+                            updated="2026-10-21T10:00:00Z"), "reviewed-by:@me")
+        self.poll()
+        self.assertFalse(any(c[1] == "/repos/o/r/pulls/7/reviews" for c in self.gh.calls))
+        card = self.comp.page_state()["prs"]["o/r#7"]["cards"][0]
+        self.assertEqual((card["pass"], card["auto_held"]), ("re_review", "the author hasn't asked you to look again"))
+
     def test_trusted_approve_fires_after_your_approval_was_dismissed(self):
         small = [{"filename": "a.py", "status": "modified", "additions": 1, "deletions": 1}]
         self.assertTrue(self.rereview_approval_posted(small, state="DISMISSED", dismissed_from="APPROVED"))

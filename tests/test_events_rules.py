@@ -282,6 +282,30 @@ class NextSteps(unittest.TestCase):
     def test_a_rule_turned_off_drops_its_step(self):
         self.assertEqual(rules.next_steps(snap(decision="APPROVED"), validate_rules({"merge": False})), [])
 
+    def test_answered_threads_bring_a_review_back_unasked(self):
+        base = dict(author="alice", my_review=mine_review("COMMENTED"), requested_at={"me": "2026-10-19T10:00:00Z"})
+        thread = {"author": "me", "body": "rename this", "at": "2026-10-21T10:00:00Z"}
+        half = snap(**base, threads=[{**thread, "replies": ["alice"]}, thread])
+        answered = [{**thread, "replies": ["alice"]}, {**thread, "outdated": True}]
+        done = snap(**base, threads=answered)
+        self.assertEqual(derive(snap(**base, threads=[thread, thread]), half), [])
+        self.assertEqual(names(derive(half, done)), ["review_addressed"])
+        self.assertEqual(derive(done, done), [])
+        self.assertEqual(derive(half, done, unasked=False), [])
+        soon = datetime(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(rules.next_steps(half, RULES, now=soon), [])
+        step = rules.next_steps(done, RULES, now=soon)[0]
+        self.assertEqual((step["kind"], step["unasked"], step["since"]), ("re_review", "addressed", "2026-10-20T10:00:00Z"))
+        self.assertEqual(rules.next_steps(done, validate_rules({"unasked_rereview": False}), now=soon), [])
+        # a comment you weren't asked for is chiming in, not a review
+        self.assertEqual(rules.next_steps(snap(**{**base, "requested_at": None}, threads=[{**thread, "replies": ["alice"]}]),
+                                          RULES, now=soon), [])
+
+    def test_an_update_left_quiet_comes_back_after_the_wait(self):
+        s = snap(author="alice", my_review=mine_review("CHANGES_REQUESTED", commit="old"), committed="2026-10-23T10:00:00Z")
+        self.assertEqual(rules.next_steps(s, RULES, now=NOW)[0]["unasked"], "quiet")
+        self.assertEqual(rules.next_steps(s, validate_rules({"ask_rereview": {"after_hours": 48}}), now=NOW), [])
+
 
 class StaleCards(unittest.TestCase):
     def test_changes_card_goes_when_decision_changes(self):

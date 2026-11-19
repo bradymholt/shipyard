@@ -40,7 +40,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
              "body": r.get("body", ""), "author": {"login": r["author"]}, "commit": {"oid": r.get("commit", head)}}
             for i, r in enumerate(reviews)]},
         "reviewThreads": {"nodes": [
-            {"id": f"T{i}", "isResolved": t.get("resolved", False), "isOutdated": False,
+            {"id": f"T{i}", "isResolved": t.get("resolved", False), "isOutdated": t.get("outdated", False),
              "path": t.get("path", "app.py"), "line": t.get("line", 3),
              "comments": {"nodes": [{"databaseId": t.get("comment_id", 500 + i), "body": t["body"],
                                      "createdAt": t.get("at", updated), "diffHunk": t.get("hunk"),

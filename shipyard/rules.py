@@ -20,6 +20,7 @@ EVENT_PASSES = {
     "review_requested_of_me": ("pre_review", "review"),
     "review_rerequested": ("re_review", "re_review"),
     "review_dismissed": ("re_review", "re_review"),
+    "review_addressed": ("re_review", "re_review"),
 }
 
 
@@ -55,23 +56,6 @@ def waiting_since(snap):
     return max(times) if times else snap.get("ready_at") or snap.get("created")
 
 
-def author_moved_at(snap):
-    """When the author last pushed or commented after your changes request, while it still
-    stands and they haven't asked you to look again; None otherwise."""
-    review = snap.get("my_review") or {}
-    since = review.get("submitted")
-    if review.get("state") != "CHANGES_REQUESTED" or snap.get("requested_me") or not since:
-        return None
-    author = snap.get("author")
-    times = [c.get("created") for t in snap.get("threads") or [] for c in t.get("comments") or []
-             if c.get("author") == author]
-    times += [c.get("created") for c in snap.get("comments") or [] if c.get("author") == author]
-    if review.get("commit") != snap.get("head"):
-        times.append(snap.get("last_commit_at"))
-    times = [t for t in times if t and t > since]
-    return max(times) if times else None
-
-
 def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
     now = now or datetime.now(timezone.utc)
     if snoozed_until:
@@ -83,7 +67,7 @@ def memory_chip(snap, rules, now=None, snoozed_until=None, nudged_at=None):
         return None
     if not snap.get("mine"):
         rule = rules.get("ask_rereview")
-        waited = hours_since(author_moved_at(snap), now)
+        waited = hours_since(events.author_moved_at(snap), now)
         if rule and waited is not None and waited >= rule["after_hours"]:
             age = f"{int(waited // 24)}d" if waited >= 24 else f"{int(waited)}h"
             return {"kind": "rerequest_mine", "label": f"Re-request review · {age}", "author": snap.get("author")}
@@ -128,6 +112,18 @@ def _required_checks_step(snap, now):
             "runs": snap.get("queued_runs") or [], "title": "GitHub is blocking the merge until required checks report"}
 
 
+def _unasked(snap, rules, now):
+    """Why a PR you reviewed is back with you though nobody asked: "addressed" when the
+    author answered your threads, "quiet" when they updated it and then left it a while."""
+    if snap.get("draft") or snap.get("author_bot"):
+        return None
+    if rules.get("unasked_rereview") and events.threads_addressed(snap):
+        return "addressed"
+    rule = rules.get("ask_rereview")
+    waited = hours_since(events.author_moved_at(snap), now)
+    return "quiet" if rule and waited is not None and waited >= rule["after_hours"] else None
+
+
 def next_steps(snap, rules, cards=(), now=None):
     """Every next step the PR's GitHub state calls for, most urgent first. Each rule
     gates its own step; `cards` lends the re-review its progress."""
@@ -144,10 +140,15 @@ def next_steps(snap, rules, cards=(), now=None):
         requested = snap.get("requested_me")
         if requested and not review and rules.get("review"):
             out.append({"kind": "review", "label": "Review", "tone": "gold"})
-        if ((requested and review) or (review or {}).get("state") == "DISMISSED") and rules.get("re_review"):
+        asked = (requested and review) or (review or {}).get("state") == "DISMISSED"
+        unasked = None if asked else _unasked(snap, rules, now or datetime.now(timezone.utc))
+        if (asked or unasked) and rules.get("re_review"):
             card = next((c for c in cards if c.get("pass") == "re_review" and c.get("total")), None)
-            out.append({"kind": "re_review", "tone": "gold",
-                        "label": f"Re-review · {card['addressed']} of {card['total']} addressed" if card else "Re-review"})
+            step = {"kind": "re_review", "tone": "gold",
+                    "label": f"Re-review · {card['addressed']} of {card['total']} addressed" if card else "Re-review"}
+            if unasked:
+                step.update(unasked=unasked, since=review.get("submitted"))
+            out.append(step)
         # A bot's PR has no author to merge it, so whoever approved it does.
         if snap.get("author_bot") and (review or {}).get("state") == "APPROVED" and _mergeable(snap, rules):
             out.append(dict(MERGE_STEP))
