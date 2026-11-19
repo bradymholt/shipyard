@@ -23,5 +23,7 @@ route();
 setInterval(updateGitHubStatus, 10 * 1000);
 
 document.addEventListener("visibilitychange", refreshOnFocus);
+// Switching back from another app focuses the window without changing the tab's visibility.
+addEventListener("focus", refreshOnFocus);
 
 window.__dashboard = { render, state, openSidebar, closeSidebar, updateGitHubStatus };

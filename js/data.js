@@ -11,8 +11,8 @@ export function resetData() {
   applyServerPrs();
 }
 
-// Past the auto-refresh interval, a refresh was missed and what's on screen is old.
-const STALE_AFTER = 5 * 60 * 1000;
+// The server polls about once a minute, so by now one was missed and what's on screen is old.
+const STALE_AFTER = 2 * 60 * 1000;
 
 export const lastPollAt = () => Date.parse(state.serverState?.status?.lastPoll || "") || 0;
 
@@ -27,13 +27,16 @@ export function updateGitHubStatus() {
   const updatedAt = lastPollAt();
   const problem = githubProblem();
   const stale = !problem && !!updatedAt && Date.now() - updatedAt > STALE_AFTER;
+  // Every check shows, the server's own each minute included; the bar is for one you asked for.
+  const checking = state.refreshing || !!state.serverState?.status?.polling;
   const status = $("#github-status");
-  status.classList.toggle("hidden", state.refreshing || (!updatedAt && !problem));
-  status.classList.toggle("failed", !!problem);
-  status.classList.toggle("stale", stale);
+  status.classList.toggle("hidden", !checking && !updatedAt && !problem);
+  status.classList.toggle("checking", checking);
+  status.classList.toggle("failed", !!problem && !checking);
+  status.classList.toggle("stale", stale && !checking);
   $("#load-bar").classList.toggle("hidden", !state.refreshing);
-  el.textContent = problem
-    ? updatedAt ? `Refresh failed · ${githubAge(updatedAt)}` : "Refresh failed"
+  el.textContent = checking ? "Checking GitHub…"
+    : problem ? updatedAt ? `Refresh failed · ${githubAge(updatedAt)}` : "Refresh failed"
     : updatedAt ? `Updated ${githubAge(updatedAt)}` : "";
   el.title = problem || "";
   renderStaleBanner();

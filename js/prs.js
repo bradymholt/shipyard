@@ -250,6 +250,23 @@ export function isUnseen(pr) {
   return new Date(pr.updatedAt).getTime() > at;
 }
 
+// A card whose PR changed in the server's latest push glows briefly, so a refresh shows what it brought.
+const CHANGED_MS = 2500;
+const signatures = new Map();
+const changedUntil = new Map();
+
+export function noteChanges() {
+  const first = !signatures.size;
+  for (const [key, cp] of Object.entries(state.serverState?.prs || {})) {
+    const sig = JSON.stringify([cp.pr, cp.chip?.label, (cp.steps || []).map((s) => s.label),
+      (cp.cards || []).map((c) => `${c.id}:${c.kind}`)]);
+    if (!first && signatures.get(key) !== sig) changedUntil.set(key, Date.now() + CHANGED_MS);
+    signatures.set(key, sig);
+  }
+}
+
+export const justChanged = (pr) => (changedUntil.get(prKey(pr)) || 0) > Date.now();
+
 export function stageOf(pr) {
   if (pr.mergedAt) return "Merged";
   if (isReviewPr(pr)) return reviewLaneOf(pr) === 0 ? "To review" : "Review submitted";

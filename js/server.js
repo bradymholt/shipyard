@@ -3,6 +3,7 @@ import { DEFAULT_LAUNCHER, state } from "./base.js";
 import { clip, esc, refreshAgoLabels, showError } from "./html.js";
 import { applyServerPrs, githubProblem, lastPollAt, resetData, updateGitHubStatus } from "./data.js";
 import { render } from "./board.js";
+import { noteChanges } from "./prs.js";
 import { renderRepoSelect, renderViewsList } from "./settings.js";
 import { hasUnsentText } from "./sidebar.js";
 
@@ -125,6 +126,7 @@ export function connectServerEvents() {
     applyViews();
     applyServerPrs();
     applyWorktrees();
+    noteChanges();
     updateGitHubStatus();
     render();
   });
@@ -168,8 +170,9 @@ export function serverStatusHtml() {
   return `<span class="dot ok"></span>Connected${agent}`;
 }
 
-// The server polls about once a minute; coming back to the tab asks it to look now.
-const FOCUS_POLL_MS = 30 * 1000;
+// The server polls about once a minute; coming back to the tab or the window asks it to look now.
+const FOCUS_POLL_MS = 10 * 1000;
+let lastFocusCheck = 0;
 
 // A poll re-scans checkouts too, so ask for one or the other.
 // New page code is on disk: reload once nothing would be lost, right away for a hidden tab.
@@ -186,7 +189,9 @@ function reloadWhenIdle() {
 }
 
 export function refreshOnFocus() {
-  if (document.hidden) return;
+  // Showing a tab also focuses its window, so the two events arrive together.
+  if (document.hidden || Date.now() - lastFocusCheck < 1000) return;
+  lastFocusCheck = Date.now();
   if (serverLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
     apiCall("api/check-now").catch(() => {});
   } else {

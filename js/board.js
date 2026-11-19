@@ -3,7 +3,7 @@ import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isSnoozed, isUnseen, justChanged, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -733,5 +733,6 @@ function nextRowHtml(pr) {
 }
 
 function cardClasses(pr, extra) {
-  return ["card", extra, isSnoozed(pr) ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : ""].filter(Boolean).join(" ");
+  return ["card", extra, isSnoozed(pr) ? "snoozed" : "", sidebarKey === prKey(pr) ? "selected" : "",
+    justChanged(pr) ? "changed" : ""].filter(Boolean).join(" ");
 }
