@@ -59,7 +59,7 @@ reset deletes it), validates the result, and writes the raw form back, never the
 config, so the file holds only what you changed. It refuses when the value changed since the
 page loaded. A new setting goes in `validate_config` and, to show it on the page, `FIELDS`. Machine
 state (PRs, cards, pins, the token, which view is showing) lives in `shipyard.db`; display
-preferences (tab, sort, theme, collapsed lanes) stay in the browser's local storage.
+preferences (tab, sort, collapsed lanes) stay in the browser's local storage.
 
 ## Running it
 
@@ -75,7 +75,7 @@ There is nothing to build or install.
 Colors, fonts, and spacing tokens are CSS custom properties in the `:root` block at the
 top of `app.css` (`--green`, `--fg-muted`, `--purple`, `--sans`, etc.). **Use these
 variables — never hardcode a hex color or font stack.** The page follows the system's light
-or dark setting, or the theme picked in the footer: a token whose value changes gives both as
+or dark setting, or the `theme` setting: a token whose value changes gives both as
 `light-dark(light, dark)`, so a new color token needs both too. Text on a color that stays
 the same in both themes (a GitHub label, an avatar) uses `--on-light` / `--on-dark`, not
 `--fg` / `--surface`. When adding UI, match the weight and size of nearby elements so new

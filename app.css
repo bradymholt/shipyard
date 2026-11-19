@@ -60,7 +60,7 @@ html { font-size: 17px; }
   --caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='16' height='16'%3E%3Cpath fill='%235c7078' d='M4.427 7.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z'/%3E%3C/svg%3E");
   --caret-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' width='16' height='16'%3E%3Cpath fill='%23a3b5c2' d='M4.427 7.427l3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z'/%3E%3C/svg%3E");
 }
-/* The footer's switch forces a scheme; without it the system's setting decides. */
+/* The Appearance setting forces a scheme; without it the system's setting decides. */
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 /* A data URI can't hold light-dark(), so the caret is swapped by hand. */
@@ -341,8 +341,8 @@ dialog#welcome-dialog::backdrop { background: var(--scrim); }
 .list-head { display: flex; align-items: baseline; gap: 0.625rem; margin-bottom: 0.625rem; }
 #list-title { font: 600 0.8125rem var(--sans); color: var(--fg); }
 #list-title a { font: 500 0.6875rem var(--mono); color: var(--teal); }
-#sort-select { margin-left: auto; }
-#sort-select, #theme-select {
+#sort-select {
+  margin-left: auto;
   appearance: none; -webkit-appearance: none;
   border: 1px solid transparent;
   background-color: transparent;
@@ -355,8 +355,8 @@ dialog#welcome-dialog::backdrop { background: var(--scrim); }
   border-radius: 0.375rem;
   cursor: pointer;
 }
-#sort-select:hover, #theme-select:hover { background-color: var(--btn-hover); color: var(--fg); }
-#sort-select:focus, #theme-select:focus { outline: none; border-color: transparent; box-shadow: none; }
+#sort-select:hover { background-color: var(--btn-hover); color: var(--fg); }
+#sort-select:focus { outline: none; border-color: transparent; box-shadow: none; }
 
 .list {
   background: var(--surface);

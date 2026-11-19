@@ -2,7 +2,6 @@
 
 export const LS = {
   FILTER: "ghpr.filter",
-  THEME: "ghpr.theme",   // "light" or "dark"; absent follows the system. index.html reads it before the first paint.
 };
 
 export const $ = (sel) => document.querySelector(sel);

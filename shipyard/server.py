@@ -163,6 +163,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                            "pageVersion": page_version(self.directory)}).replace("<", "\\u003c")
         tag = f'<script id="shipyard-boot" type="application/json">{boot}</script>\n</head>'
         html = Path(self.directory, "index.html").read_text().replace("</head>", tag, 1)
+        # Written into the markup, so a forced theme is there before the first paint.
+        theme = self.orchestrator.config["theme"]
+        if theme != "system":
+            html = html.replace("<html ", f'<html data-theme="{theme}" ', 1)
         body = html.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
