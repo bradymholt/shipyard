@@ -357,6 +357,8 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
       ? reviewBadge(pr)
       : "";
   const reviewUpdate = reviewMode ? reviewUpdateBadge(pr) : "";
+  const size = reviewMode && pr.additions != null
+    ? ` · <span class="f-add">+${pr.additions}</span> <span class="f-del">−${pr.deletions}</span>` : "";
   const authorReplied = reviewMode && reviewLaneOf(pr) === 1 ? authorRepliedBadge(pr) : "";
   const pendingReview = reviewMode && reviewLaneOf(pr) === 0 ? pendingReviewBadge(pr) : "";
   const unseen = isUnseen(pr) && sidebarKey !== prKey(pr)
@@ -364,7 +366,7 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   return `
     <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}" tabindex="0">
       <div class="card-title">${unseen}<a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
-      <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}</div>
+      <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}${size}</div>
       <div class="card-icons">
         ${ciHtml(pr)}
         ${comments}

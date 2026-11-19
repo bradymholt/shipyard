@@ -64,7 +64,7 @@ Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` an
 - **New since you looked:** a dot on each card updated since you last opened it.
 - **Light and dark:** the page follows your system's appearance setting, or the theme you pick in Settings.
 - **Insights:** for the current view, over the last 12 weeks of merges: PRs merged per week, time to merge, time to first review (on your PRs, and your own turnaround), time to merge by PR size, who reviews your PRs and whose you review, and a per-repository breakdown, with bot PRs left out of the review numbers. A last panel counts what Shipyard did lately: passes run, actions it took on its own, and ones it left for you. The merges are read once and cached for 15 minutes.
-- **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
+- **Useful context:** CI checks, labels, comments, stacked PR relationships, lines changed on the PRs you're reviewing, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
 - **PR actions:** toggle auto-merge and move drafts to ready without leaving the dashboard.
 - **Next actions:** a **Next** row at the bottom of each card that has a next step (Address feedback, Resolve conflicts, Update from a stacked parent, Fix CI, Merge, Review, Re-review), and a sidebar with the PR's timeline.
