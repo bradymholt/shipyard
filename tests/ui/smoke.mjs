@@ -115,8 +115,8 @@ try {
     await page.locator(".lane").nth(1).locator('.card[data-key="o/r#113"] .ci.success').count() === 1,
     "an approved PR whose base a ruleset restricts waits in Waiting with passing checks, not Merge");
   await page.locator('.card[data-key="o/r#113"] .next-row').click();
-  check(await page.locator('#sidebar .next-card [data-pr-action="merge"]').count() === 0 &&
-    (await page.locator("#sidebar .next-card").first().textContent()).includes("limits who can merge into release"),
+  check((await page.locator("#sidebar .next-card").first().textContent()).includes("limits who can merge into release") &&
+    await page.locator('#sidebar .next-card [data-pr-action="merge"]').count() === 0,
     "the restricted-merge card explains the ruleset and offers no Merge");
   if (shots) await page.screenshot({ path: `${shots}/sidebar-merge-restricted.png` });
   await page.keyboard.press("Escape");
