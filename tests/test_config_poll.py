@@ -204,6 +204,26 @@ class PollerTest(unittest.TestCase):
         _, snaps, _ = poller.poll(open_ids)
         self.assertEqual([s["number"] for s in snaps], [1])
 
+    def test_a_read_that_says_blocked_is_reread_though_search_says_clear(self):
+        light = pr_node(1, decision="APPROVED")
+        full = pr_node(1, decision="APPROVED", merge_state="BLOCKED")
+        gh = FakeGitHub({"author:@me": [light]}, {light["id"]: full})
+        poller = Poller(gh)
+        _, snaps, open_ids = poller.poll(set())
+        self.assertEqual([s["ci"] for s in snaps], ["EXPECTED"])
+        full["mergeStateStatus"] = "CLEAN"
+        _, snaps, _ = poller.poll(open_ids)
+        self.assertEqual([s["ci"] for s in snaps], ["SUCCESS"])
+        _, snaps, _ = poller.poll(open_ids)
+        self.assertEqual(snaps, [])
+
+    def test_a_block_search_agrees_on_isnt_reread(self):
+        a = pr_node(1, merge_state="BLOCKED", base_rules=["UPDATE"])
+        poller = Poller(FakeGitHub({"author:@me": [a]}, {a["id"]: a}))
+        _, _, open_ids = poller.poll(set())
+        _, snaps, _ = poller.poll(open_ids)
+        self.assertEqual(snaps, [])
+
     def test_signature_includes_checks(self):
         a = pr_node()
         before = signature(a)
