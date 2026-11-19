@@ -229,10 +229,13 @@ try {
     return keys.length > 1 && keys.at(-1) === "o/r#105";
   }), "an opened Snoozed section sits at the bottom of its lane");
 
+  const mineSizes = await page.locator(".card-meta .f-add").count();
   await page.locator('.tab[data-filter="review"]').click();
   check((await page.locator(".lane-header").first().textContent()).startsWith("To review"), "the Reviews lane that waits on you isn't called Waiting");
   await page.waitForSelector('.card[data-key="o/r#201"] .next-row');
   check((await chipText(page, 201))?.trim() === "Review", "review request → Review");
+  check((await page.locator('.card[data-key="o/r#201"] .card-meta').textContent()).endsWith("+10 −2") && mineSizes === 0,
+    "a review card shows its line counts; your own cards don't");
   check((await chipText(page, 202))?.includes("Re-review · 2 of 3 addressed"), "re-request → Re-review · 2 of 3 addressed");
   check(await page.locator('.card[data-key="o/r#203"]').count() === 1, "a comment after your changes request keeps the PR on Reviews");
   check((await page.locator('.card[data-key="o/r#203"] .review-badge').allTextContents()).some((t) => t.includes("Author replied · 1 of 3")),
