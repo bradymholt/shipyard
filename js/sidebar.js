@@ -380,6 +380,9 @@ function derivedCardHtml(pr, chip) {
       : "Every check that reported passed, but GitHub is waiting on required checks that haven't reported yet.";
     actionsHtml = (chip.kind === "restart_runs" ? run("restart_runs", "Cancel and re-run", "primary") : "")
       + `<a class="btn-link" href="${esc(pr.url)}/checks" target="_blank" rel="noopener">View checks</a>`;
+  } else if (chip.kind === "merge_restricted") {
+    body = `Approved and checks are green, but a ruleset limits who can merge into ${pr.baseRefName || "the base branch"}, so it can't be merged from here.`;
+    actionsHtml = `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>`;
   } else if (PASS_FOR_CHIP[chip.kind]) {
     body = { fix_ci: `Failing: ${failingChecks(pr).map((c) => c.name).join(", ") || "checks"}.`,
       review: "Your review is requested.", re_review: "The author asked you to look again." }[chip.kind];

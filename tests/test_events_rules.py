@@ -264,6 +264,14 @@ class NextSteps(unittest.TestCase):
         threads = snap(decision="APPROVED", merge_state="BLOCKED", threads=[{"body": "Typo"}])
         self.assertEqual(threads["ci"], "SUCCESS")
 
+    def test_base_that_restricts_updates_shows_restricted_not_merge(self):
+        restricted = snap(decision="APPROVED", merge_state="BLOCKED", base_rules=["DELETION", "UPDATE"])
+        self.assertEqual(restricted["ci"], "SUCCESS")
+        self.assertTrue(restricted["page"]["mergeRestricted"])
+        self.assertEqual([s["kind"] for s in rules.next_steps(restricted, RULES)], ["merge_restricted"])
+        allowed = snap(decision="APPROVED", merge_state="CLEAN", base_rules=["UPDATE"])
+        self.assertEqual([s["kind"] for s in rules.next_steps(allowed, RULES)], ["merge"])
+
     def test_merge_follows_your_approval_of_a_bot_pr(self):
         def theirs(bot):
             s = snap(author="dependabot", decision="APPROVED", my_review=mine_review("APPROVED"))

@@ -35,6 +35,7 @@ query($q: String!, $after: String) {
 DETAIL_FIELDS = """
   id number title url state isDraft createdAt updatedAt mergedAt closedAt body
   headRefName headRefOid baseRefName additions deletions changedFiles
+  baseRef { rules(first: 50) { nodes { type } } }
   repository { nameWithOwner }
   author { __typename login avatarUrl }
   reviewDecision mergeable mergeStateStatus
@@ -248,6 +249,13 @@ def ci_state(rollup):
     return "PENDING" if running else "SUCCESS"
 
 
+def merge_restricted(node):
+    """GitHub blocks the merge and a ruleset restricts updates to the base branch, so only
+    those the ruleset allows can merge, whatever the reviews and checks say."""
+    base_rules = ((node.get("baseRef") or {}).get("rules") or {}).get("nodes") or []
+    return node.get("mergeStateStatus") == "BLOCKED" and any(r.get("type") == "UPDATE" for r in base_rules)
+
+
 def pr_ci(node, rollup):
     """The CI state, or EXPECTED when GitHub blocks an approved PR whose checks all passed: a
     required check never reported, as when its workflow run sits in the queue."""
@@ -255,7 +263,7 @@ def pr_ci(node, rollup):
     open_threads = any(not t.get("isResolved") and not t.get("isOutdated")
                        for t in (node.get("reviewThreads") or {}).get("nodes") or [])
     if (state in (None, "SUCCESS") and node.get("mergeStateStatus") == "BLOCKED" and not node.get("isDraft")
-            and node.get("reviewDecision") == "APPROVED" and not open_threads):
+            and node.get("reviewDecision") == "APPROVED" and not open_threads and not merge_restricted(node)):
         return "EXPECTED"
     return state
 
@@ -290,6 +298,7 @@ def page_pr(node):
                                     for r in (node.get("latestReviews") or {}).get("nodes") or []]},
         "comments": {"totalCount": comments.get("totalCount") or 0},
         "recentComments": {"nodes": comments.get("nodes") or []},
+        "mergeRestricted": merge_restricted(node),
         "reviewThreads": {"nodes": [{"isResolved": bool(t.get("isResolved")),
                                      "opener": {"nodes": first_author(t.get("comments"))},
                                      "comments": {"nodes": [{"author": n.get("author"), "createdAt": n.get("createdAt")}
@@ -377,6 +386,7 @@ def snapshot(node, viewer):
         "decision": node.get("reviewDecision"),
         "auto_merge": bool(node.get("autoMergeRequest")),
         "mergeable": node.get("mergeable"),
+        "merge_restricted": merge_restricted(node),
         "requested": requested,
         "requested_me": viewer in requested,
         "requested_at": requested_at,
