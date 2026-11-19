@@ -9,7 +9,7 @@ import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
 
 const laneEmptyText = (name, reviewBoard) => reviewBoard
-  ? (name === "Waiting" ? "You're all caught up" : "Nothing reviewed yet")
+  ? (name === "To review" ? "You're all caught up" : "Nothing reviewed yet")
   : ({ Working: "Nothing in progress", Waiting: "Nothing awaiting review", Ready: "Nothing ready to merge" }[name] || "Nothing here");
 
 function reviewerHtml(login, avatarUrl, stateClass, stateIcon, title) {
@@ -232,7 +232,7 @@ function worktreeLinks(pr) {
 // repo's review queue scoped to the PR's column (still waiting on you vs. reviewed).
 // Merged items (from Recently merged) carry mergedAt, so scope those to is:closed —
 // they're no longer open and wouldn't show under the open filter.
-// A dismissed review lands in Waiting but has no matching search qualifier, so it
+// A dismissed review lands in To review but has no matching search qualifier, so it
 // falls back to reviewed-by:@me — the one list GitHub will actually return it in.
 function repoPullsUrl(pr) {
   const base = `https://github.com/${pr.repository?.nameWithOwner || ""}/pulls`;
@@ -462,7 +462,7 @@ function renderBoard() {
   const laneItems = reviewBoard ? [[], []] : [[], [], []];
   for (const pr of matches) laneItems[reviewBoard ? reviewLaneOf(pr) : laneOf(pr)].push(pr);
   const defs = reviewBoard
-    ? [["Waiting", "yellow"], ["Review submitted", "green"]]
+    ? [["To review", "yellow"], ["Review submitted", "green"]]
     : [["Working", "blue"], ["Waiting", "yellow"], ["Ready", "green"]];
   const recentMerged = mergedItems();
   let html = `<div class="board${reviewBoard ? " two-lane" : ""}">` + defs.map(([name, color], i) => {
@@ -509,12 +509,13 @@ function renderBoard() {
       laneHtml += `<button type="button" class="snoozed-toggle" aria-expanded="${open}" data-snoozed-lane="${esc(laneKey)}"><span>${snoozedCount} snoozed${LANE_CHEVRON}</span></button>`;
       if (open) laneHtml += renderGroup(isSnoozed);
     }
-    const needsLabel = (n) => n ? `<span class="lane-needs">${n} need${n === 1 ? "s" : ""} you</span>` : "";
     if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
       laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
     }
-    const needs = needsLabel(state.serverState ? stepsFor(inLane) : 0);
-    const laneCount = `<span class="lane-count">${needs && `${needs} · `}${inLane.length}</span>`;
+    const needs = state.serverState ? stepsFor(inLane) : 0;
+    const laneCount = `<span class="lane-count">${needs
+      ? `<span class="lane-needs">${needs}${needs < inLane.length ? ` of ${inLane.length}` : ""} need${needs === 1 ? "s" : ""} you</span>`
+      : inLane.length}</span>`;
     const collapsible = narrowViewport.matches;
     const collapsed = collapsible && collapsedLanes.has(laneKey);
     const header = collapsible
@@ -538,9 +539,9 @@ function renderBoard() {
       : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
     return;
   }
-  const titleLabel = state.filter === "review"
-    ? `${count} review pull request${count === 1 ? "" : "s"}`
-    : `${count} open pull request${count === 1 ? "" : "s"}`;
+  const needs = reviewBoard ? reviewCount : mineCount;
+  const titleLabel = `${count} ${reviewBoard ? "review" : "open pull request"}${count === 1 ? "" : "s"}`
+    + (needs ? `, ${needs} need${needs === 1 ? "s" : ""} you` : "");
   $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
   listBody.innerHTML = html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`;
 }

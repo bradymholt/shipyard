@@ -252,6 +252,6 @@ export function isUnseen(pr) {
 
 export function stageOf(pr) {
   if (pr.mergedAt) return "Merged";
-  if (isReviewPr(pr)) return reviewLaneOf(pr) === 0 ? "Waiting on you" : "Review submitted";
+  if (isReviewPr(pr)) return reviewLaneOf(pr) === 0 ? "To review" : "Review submitted";
   return pr.isDraft ? "Draft" : ["Working", "Waiting", "Ready"][laneOf(pr)];
 }
