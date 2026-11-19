@@ -65,6 +65,9 @@ function suggestHtml(name) {
 const MERGE_ON_APPROVE_KEY = "ghpr.mergeOnApprove";
 const mergeOnApprove = () => localStorage.getItem(MERGE_ON_APPROVE_KEY) === "1";
 
+const RUN_LABELS = { feedback: "Plan the response", ci_failed: "Diagnose CI", pre_review: "Run pre-review", re_review: "Run re-review" };
+const runPassButton = (pass, cls) => `<button type="button" class="${cls}" data-run-pass="${esc(pass)}" title="Asks ${esc(agentName())} and shows you its answer">${RUN_LABELS[pass] || `Ask ${esc(agentName())}`}</button>`;
+
 export const PASS_LABELS = { feedback: "Plan for the feedback", ci_failed: "Why CI failed", pre_review: "Pre-review", re_review: "Re-review", new_session: "New session", conflicts: "Conflict resolution" };
 
 const HOW_PINNED = { "pr-url": "opened this PR", branch: "ran gh pr create for this branch",
@@ -285,7 +288,7 @@ function serverCardHtml(pr, card, first) {
   }
   if (card.kind === "offer") {
     return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>
-      <div class="nc-actions"><button type="button" class="${first ? "primary" : ""}" data-run-pass="${esc(card.pass)}">Ask ${esc(agentName())}</button>${continueButton(pr)}</div>
+      <div class="nc-actions">${runPassButton(card.pass, first ? "primary" : "")}${continueButton(pr)}</div>
       ${card.pass === "pre_review" ? suggestHtml("pre_review") : ""}</div>`;
   }
   if (card.kind === "error" || card.kind === "raw") {
@@ -388,7 +391,7 @@ function derivedCardHtml(pr, chip) {
       review: "Your review is requested.", re_review: { addressed: `@${pr.author?.login} answered your comments but hasn't asked you to look again.`,
         quiet: `@${pr.author?.login} updated this after your review but hasn't asked you to look again.`,
       }[chip.unasked] || "The author asked you to look again." }[chip.kind];
-    actionsHtml = `<button type="button" class="primary" data-run-pass="${PASS_FOR_CHIP[chip.kind]}">Ask ${esc(agentName())}</button>` + continueButton(pr)
+    actionsHtml = runPassButton(PASS_FOR_CHIP[chip.kind], "primary") + continueButton(pr)
       + (chip.kind === "fix_ci" && failingChecks(pr)[0]?.url ? `<a class="btn-link" href="${esc(failingChecks(pr)[0].url)}" target="_blank" rel="noopener">View log</a>` : "");
   } else {
     return "";
