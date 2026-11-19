@@ -367,11 +367,23 @@ try {
   check(await narrow.page.locator('.card[data-key="o/r#101"]').count() === 1, "a browser with nothing stored shows the server's saved view");
   await narrow.page.locator('.card[data-key="o/r#101"] .card-meta').click();
   await narrow.page.waitForSelector("#sidebar .sb-title");
+  const settled = () => narrow.page.waitForFunction(() => {
+    const r = document.querySelector("#sidebar").getBoundingClientRect();
+    return r.right === innerWidth && (innerWidth > 900 ? r.width === 400 : r.left === 0);
+  });
+  await settled();
   const box = await narrow.page.locator("#sidebar").boundingBox();
-  const listBox = await narrow.page.locator(".list").boundingBox();
-  check(box.y >= listBox.y + listBox.height - 1 && box.width <= 420, "sidebar stacks below the board on a narrow window");
+  check(box.x === 0 && box.y === 0 && box.width === 420 && box.height === 900, "sidebar covers the window on a narrow one");
+  check(await narrow.page.locator("#sidebar .sb-back").isVisible(), "the covering sidebar has a way back to the board");
   const overflow = await narrow.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 0, "no horizontal scroll on a phone-width window");
+  await narrow.page.setViewportSize({ width: 1100, height: 900 });
+  await settled();
+  const beside = await narrow.page.evaluate(() => ["#repo-select", ".list"].map((s) =>
+    document.querySelector(s).getBoundingClientRect().right <= document.querySelector("#sidebar").getBoundingClientRect().left));
+  check(beside.every(Boolean), "the board and header make room for the sidebar on a mid-width window");
+  await narrow.page.setViewportSize({ width: 420, height: 900 });
+  await settled();
   if (shots) await narrow.page.screenshot({ path: `${shots}/narrow.png`, fullPage: true });
 
   console.log("new activity");
