@@ -464,7 +464,7 @@ function sessionSection(pr) {
           <button type="button" data-pin="${esc(key)}">Pin</button><button type="button" class="nc-quiet" data-repin-cancel>Cancel</button></div>`
       : `<div class="sb-empty">No ${esc(agentName())} sessions in this checkout.</div>`;
   }
-  const repin = cp.path ? `<button type="button" class="nc-quiet" data-repin="${esc(key)}">Re-pin</button>` : "";
+  const repin = cp.path ? `<button type="button" class="nc-quiet" data-repin="${esc(key)}">${s ? "Re-pin" : "Pin a session"}</button>` : "";
   let body;
   if (!s) {
     body = `<div class="sb-empty">${cp.path ? `No ${esc(agentName())} session pinned.` : "No local checkout for this PR."}</div>
@@ -472,11 +472,12 @@ function sessionSection(pr) {
   } else {
     const yours = Math.max(0, s.turns - (s.shipyardTurns || 0));
     const ex = cp.exchange;
+    const shownAbove = ex && (cp.cards || []).some((c) => c.pass === ex.pass && c.summary === ex.summary);
     body = `
       <div class="sess-title">${esc(s.title || s.id)}</div>
       <div class="sess-meta"><span class="dot ${s.live ? "ok" : "off"}"></span>${s.live ? "active now" : `idle · ${agoSpan(s.updated * 1000)}`}
         · ${yours} yours · ${s.shipyardTurns || 0} Shipyard's${s.how ? ` · ${esc(HOW_PINNED[s.how] || s.how)}` : ""}</div>
-      ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${agoSpan(ex.at)}${ex.mode === "fork" ? " · in a fork" : ""}<br>${fmtCode(clip(ex.summary || "", 280))}</div>` : ""}
+      ${ex ? `<div class="sess-exchange"><strong>${esc(PASS_LABELS[ex.pass] || ex.pass)}</strong> · ${agoSpan(ex.at)}${ex.mode === "fork" ? " · in a fork" : ""}${shownAbove ? "" : `<br>${fmtCode(clip(ex.summary || "", 280))}`}</div>` : ""}
       <div class="nc-actions">${repin}
         <button type="button" class="nc-quiet" data-unpin="${esc(key)}" title="Stop using this session for the PR">Unpin</button>${newSession("nc-quiet")}</div>`;
   }
