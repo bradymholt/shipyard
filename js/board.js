@@ -686,11 +686,12 @@ listBody.addEventListener("keydown", (e) => {
 
 narrowViewport.addEventListener("change", render);
 
-// j and k walk the cards in reading order; with the sidebar open, it follows along.
+// j and k walk the cards in reading order; with the sidebar open, it follows along. ? lists the shortcuts.
 document.addEventListener("keydown", (e) => {
-  if ((e.key !== "j" && e.key !== "k") || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
-  if (document.querySelector("dialog[open]") || document.body.classList.contains("settings-open")) return;
+  if (!["j", "k", "?"].includes(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]")) return;
+  if (e.key === "?") { e.preventDefault(); $("#shortcuts-dialog").showModal(); return; }
+  if (document.body.classList.contains("settings-open")) return;
   const cards = [...listBody.querySelectorAll(".card[data-key]")].filter((c) => c.offsetParent);
   const current = sidebarKey || (document.activeElement?.matches?.(".card[data-key]") ? document.activeElement.dataset.key : null);
   const at = cards.findIndex((c) => c.dataset.key === current);
