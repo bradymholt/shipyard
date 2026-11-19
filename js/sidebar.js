@@ -43,8 +43,6 @@ const PASS_FOR_CHIP = { fix_ci: "ci_failed", review: "pre_review", re_review: "r
 const SUGGESTIONS = {
   rerun_checks: { path: ["auto", "rerun_checks"], value: true,
     text: () => `Re-run checks on its own when ${agentName()} is confident they're flaky?` },
-  approve_rereview: { path: ["auto", "approve_rereview"], value: true,
-    text: () => "Approve re-reviews on their own when the change since your review is small?" },
   pre_review: { path: ["rules", "passes", "pre_review"], value: "auto",
     text: () => "Pre-review on its own whenever your review is requested?" },
 };
@@ -259,7 +257,7 @@ function proposalHtml(pr, card, p, i, bare = false) {
       ${bare ? "" : `<div class="nc-reason"><strong>${esc(label)}</strong> · ${esc(p.confidence)} confidence${where} — ${fmtCode(p.reason || "")}</div>`}
       ${body}
       <div class="nc-actions">${button}</div>
-      ${p.action === "rerun_checks" ? suggestHtml("rerun_checks") : p.action === "approve" && card.pass === "re_review" ? suggestHtml("approve_rereview") : ""}
+      ${p.action === "rerun_checks" ? suggestHtml("rerun_checks") : ""}
     </div>`;
 }
 
