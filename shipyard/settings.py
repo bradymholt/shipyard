@@ -10,7 +10,7 @@ import shlex
 
 from . import passes
 from .agents import ADAPTERS
-from .config import (AGENT_DEFAULTS, CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, LAUNCHER_DEFAULTS, read_raw, validate_auto,
+from .config import (AGENT_DEFAULTS, CONFIG_FILE, CONFIG_PATH, HARD_LOCKED, LAUNCHER_DEFAULTS, THEMES, read_raw, validate_auto,
                      validate_config, validate_views, write_raw)
 
 SECTIONS = [
@@ -23,6 +23,7 @@ SECTIONS = [
              "when a pass is confident enough. Auto runs a pass on its own; Ask waits until you ask in the sidebar. "
              "Cards say when an automatic action holds back, and offer Undo where they can."},
     {"id": "roots", "title": "Folders to scan", "help": "Where Shipyard looks for your Git clones."},
+    {"id": "appearance", "title": "Appearance", "help": "How the page looks, in every browser you open it in."},
 ]
 
 OPEN_MODES = [["url", "Open a URL"], ["command", "Run a command"]]
@@ -201,6 +202,10 @@ FIELDS = [
     _field("roots", ("roots",), "lines", "Folders", lambda cfg: "\n".join(cfg["roots"]),
            to_raw=lambda v: [line.strip() for line in v.splitlines() if line.strip()],
            help="One per line, each a folder that holds your Git clones. Takes effect right away."),
+
+    _field("appearance", ("theme",), "segments", "Theme", lambda cfg: cfg["theme"],
+           choices=[[t, t.capitalize()] for t in THEMES],
+           help="System follows your computer's light or dark setting."),
 ]
 BY_PATH = {f["path"]: f for f in FIELDS}
 SWITCHED = {f["parent"] for f in FIELDS if f["parent"]}  # settings that are false, true, or an object of options

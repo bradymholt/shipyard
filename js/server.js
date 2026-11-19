@@ -119,6 +119,8 @@ export function connectServerEvents() {
       reloadWhenIdle();
     }
     const config = state.serverState.config;
+    if (config?.theme === "light" || config?.theme === "dark") document.documentElement.dataset.theme = config.theme;
+    else if (config) delete document.documentElement.dataset.theme;
     if (config) Object.assign(state, { rules: config.rules, agent: config.agent, launcher: config.launcher || DEFAULT_LAUNCHER, approveReplies: config.approveReplies || [] });
     applyViews();
     applyServerPrs();

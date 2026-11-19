@@ -20,6 +20,9 @@ class Config(unittest.TestCase):
         self.assertEqual(cfg["approve_replies"][:2], ["LGTM", "Looks great!"])
         with self.assertRaises(ValueError):
             validate_config({"approve_replies": ["LGTM", " "]})
+        self.assertEqual((cfg["theme"], validate_config({"theme": "dark"})["theme"]), ("system", "dark"))
+        with self.assertRaises(ValueError):
+            validate_config({"theme": "sepia"})
 
     def test_rules_validation(self):
         self.assertEqual(validate_rules({"instructions": {"ci_failed": "Flaky specs live in spec/system."}})["instructions"],

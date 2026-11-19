@@ -23,8 +23,10 @@ rule and trust settings that decide what the server does on its own.
       "rules": { "address_feedback": { "prompt": "/pr-review-respond {url} (branch {branch})" },
                  "nudge": { "after_hours": 24 }, "passes": { "ci_failed": "ask" } },
       "auto": { "rerun_checks": { "when": "confidence >= high", "max_per_pr": 2 } },
-      "views": ["acme", "me/tools, acme/web"]   // the page's views: repos, orgs, or
-    }                                           // users; the settings page edits these
+      "views": ["acme", "me/tools, acme/web"],  // the page's views: repos, orgs, or
+                                                // users; the settings page edits these
+      "theme": "dark"          // "light" or "dark"; "system" (the default) follows the computer
+    }
 """
 import json
 import os
@@ -121,8 +123,10 @@ CONFIDENCE = {"low": 1, "medium": 2, "high": 3}
 
 APPROVE_REPLIES = ["LGTM", "Looks great!", "\u2764\ufe0f", "\U0001faf6"]
 
+THEMES = ("system", "light", "dark")
 DEFAULT_CONFIG = {"roots": [], "launcher": DEFAULT_LAUNCHER, "agent": DEFAULT_AGENT,
-                  "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": [], "approve_replies": APPROVE_REPLIES}
+                  "rules": RULE_DEFAULTS, "auto": AUTO_DEFAULTS, "views": [], "approve_replies": APPROVE_REPLIES,
+                  "theme": "system"}
 TARGET = re.compile(r"[A-Za-z0-9-]+(/[A-Za-z0-9._-]+)?")
 
 
@@ -326,8 +330,11 @@ def validate_config(raw):
     replies = raw.get("approve_replies", APPROVE_REPLIES)
     if not isinstance(replies, list) or any(not isinstance(r, str) or not r.strip() for r in replies):
         raise ValueError('"approve_replies" must be an array of non-empty strings')
+    theme = raw.get("theme", DEFAULT_CONFIG["theme"])
+    if theme not in THEMES:
+        raise ValueError(f'"theme" must be one of: {", ".join(THEMES)}')
     return {"roots": roots, "launcher": launcher, "agent": agent, "rules": rules, "auto": auto, "views": views,
-            "approve_replies": replies}
+            "approve_replies": replies, "theme": theme}
 
 
 def config_mtime(path=CONFIG_PATH):
@@ -393,4 +400,5 @@ def page_config(cfg):
     """The parts of the config the page needs."""
     return {"launcher": cfg["launcher"], "agent": cfg["agent"], "rules": cfg["rules"],
             "auto": {k: bool(v) for k, v in cfg["auto"].items()},
-            "approveRereview": cfg["auto"]["approve_rereview"], "approveReplies": cfg["approve_replies"]}
+            "approveRereview": cfg["auto"]["approve_rereview"], "approveReplies": cfg["approve_replies"],
+            "theme": cfg["theme"]}

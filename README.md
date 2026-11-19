@@ -62,7 +62,7 @@ Shipyard uses the [GitHub CLI](https://cli.github.com/)'s token: install `gh` an
 - **Action-focused views:** My PRs and Reviews, with priority, updated, and created sorting.
 - **Board layout:** reviewer state, new commits since your review, drafts, approvals, and ready-to-merge work at a glance, with lanes that stack and collapse on a phone.
 - **New since you looked:** a dot on each card updated since you last opened it.
-- **Light and dark:** the page follows your system's appearance setting, or the theme you pick in the footer.
+- **Light and dark:** the page follows your system's appearance setting, or the theme you pick in Settings.
 - **Insights:** for the current view, over the last 12 weeks of merges: PRs merged per week, time to merge, time to first review (on your PRs, and your own turnaround), time to merge by PR size, who reviews your PRs and whose you review, and a per-repository breakdown, with bot PRs left out of the review numbers. A last panel counts what Shipyard did lately: passes run, actions it took on its own, and ones it left for you. The merges are read once and cached for 15 minutes.
 - **Useful context:** CI checks, labels, comments, stacked PR relationships, and your three most recently merged PRs.
 - **Flexible scope:** combine repositories, organizations, and usernames, then filter across titles, authors, branches, and repositories.
@@ -104,7 +104,8 @@ cp shipyard.config.example.json shipyard.config.json
 ```
 
 - `roots`: the folders that hold your clones, the same as the command-line folders.
-- `views`: your saved views, so every browser sees the same ones. Display preferences (tab, sort, theme, collapsed lanes) stay in the browser.
+- `views`: your saved views, so every browser sees the same ones. Display preferences (tab, sort, collapsed lanes) stay in the browser.
+- `theme`: `light` or `dark`. The default, `system`, follows your computer's setting.
 - `launcher`: how to open a checkout, below.
 - `agent`: which coding agent to resume and run, under [Resume a coding agent](#resume-a-coding-agent).
 - `rules` and `auto`: what Shipyard offers and what it may do on its own, under [Rules, passes, and trust](#rules-passes-and-trust).
