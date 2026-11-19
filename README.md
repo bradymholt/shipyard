@@ -147,7 +147,7 @@ When a checkout has a recent coding-agent session, a second icon next to the ope
 
 ### Next actions and the sidebar
 
-Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**.
+Click a card (or its Next row) to open the sidebar: the PR's state and launch buttons, **Next**, **PR session**, and **Activity**. From the keyboard, `j` and `k` move between cards, Enter opens the focused one, and Esc closes it.
 
 - **Next steps** come from the PR's GitHub state: Address feedback, Re-request review, Resolve conflicts, Update from a stacked parent, Fix CI, Merge, Review, Re-review. Waiting steps show their age (`Nudge · 1d` when a reviewer has sat on your PR, `Re-request review · 1d` when an author updated a PR you requested changes on but never asked you back), and snoozed cards dim and sink to the bottom of their lane.
 - **Cards** are what a pass turned the agent's answer into: a short judgment and the buttons that fit it. Continue in your agent, Re-run failed jobs, Apply fix, Post reply, Submit as review, Re-request review, Merge, and so on. Anything that posts under your name shows the full, editable text first, and Apply fix shows the diff first. An **Ask** field puts one question to the PR's session (as a fork).

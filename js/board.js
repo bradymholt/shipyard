@@ -249,7 +249,7 @@ function mergedRepoPrefix(pr) {
 
 function mergedCard(pr) {
   return `
-    <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}">
+    <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}" tabindex="0">
       <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a></div>
       <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
       ${mergedWorktreeLinks(pr)}
@@ -362,7 +362,7 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   const unseen = isUnseen(pr) && sidebarKey !== prKey(pr)
     ? '<span class="new-dot" title="Updated since you last opened it"></span>' : "";
   return `
-    <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}">
+    <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}" tabindex="0">
       <div class="card-title">${unseen}<a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
       <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}</div>
       <div class="card-icons">
@@ -539,8 +539,12 @@ function renderBoard() {
   const titleLabel = `${count} ${reviewBoard ? "review" : "open pull request"}${count === 1 ? "" : "s"}`
     + (needs ? `, ${needs} need${needs === 1 ? "s" : ""} you` : "");
   $("#list-title").innerHTML = `${titleLabel} · ${targetLink}`;
+  const focused = document.activeElement?.matches?.(".card[data-key]") ? document.activeElement.dataset.key : null;
   listBody.innerHTML = html || `<div class="empty">${EMPTY_ICON}<span>No pull requests match.</span></div>`;
+  if (focused) cardEl(focused)?.focus({ preventScroll: true });
 }
+
+const cardEl = (key) => listBody.querySelector(`.card[data-key="${CSS.escape(key)}"]`);
 
 function targetLinkHtml() {
   return getCurrentRepo() ? viewTargets(getCurrentRepo()).map((target) => {
@@ -665,6 +669,12 @@ $("#sort-select").addEventListener("change", (e) => {
 });
 
 listBody.addEventListener("keydown", (e) => {
+  if (e.target.matches(".card[data-key]") && e.key === "Enter") {
+    e.preventDefault();
+    openSidebar(e.target.dataset.key);
+    $("#sidebar").focus({ preventScroll: true });
+    return;
+  }
   const laneHeader = e.target.closest(".lane-header[data-lane]");
   if (!laneHeader || (e.key !== "Enter" && e.key !== " ")) return;
   e.preventDefault();
@@ -673,6 +683,25 @@ listBody.addEventListener("keydown", (e) => {
 });
 
 narrowViewport.addEventListener("change", render);
+
+// j and k walk the cards in reading order; with the sidebar open, it follows along.
+document.addEventListener("keydown", (e) => {
+  if ((e.key !== "j" && e.key !== "k") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (document.querySelector("dialog[open]") || document.body.classList.contains("settings-open")) return;
+  const cards = [...listBody.querySelectorAll(".card[data-key]")].filter((c) => c.offsetParent);
+  const current = sidebarKey || (document.activeElement?.matches?.(".card[data-key]") ? document.activeElement.dataset.key : null);
+  const at = cards.findIndex((c) => c.dataset.key === current);
+  const next = cards[at < 0 ? 0 : at + (e.key === "j" ? 1 : -1)];
+  if (!next) return;
+  e.preventDefault();
+  if (sidebarKey) {
+    openSidebar(next.dataset.key);
+    $("#sidebar").focus({ preventScroll: true });
+  } else {
+    next.focus();
+  }
+});
 stackedPanels.addEventListener("change", () => { if (state.filter === "insights") render(); });
 
 document.querySelectorAll(".tab").forEach((tab) =>

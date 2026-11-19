@@ -131,6 +131,14 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/sidebar-conflicts.png` });
   await page.keyboard.press("Escape");
   check((await page.locator("#server-status").textContent()).trim() === "Connected", "footer shows Shipyard connected");
+  await page.keyboard.press("j");
+  const firstKey = await page.evaluate(() => document.activeElement.dataset.key);
+  await page.keyboard.press("Enter");
+  check(firstKey && await page.evaluate((k) => document.querySelector(".card.selected")?.dataset.key === k && document.activeElement.id === "sidebar", firstKey),
+    "j focuses the first card and Enter opens it in the sidebar");
+  await page.keyboard.press("Escape");
+  check(await page.evaluate((k) => !document.body.classList.contains("sidebar-open") && document.activeElement.dataset.key === k, firstKey),
+    "Esc closes the sidebar and returns focus to its card");
   const [badge, steps, lanes] = await page.evaluate(() => [
     document.querySelector("#count-mine").textContent,
     document.querySelectorAll(".card:not(.merged) .next-row:not(.muted):not(.optional):not(:has(.next-status))").length,
@@ -147,6 +155,10 @@ try {
   await page.waitForSelector("#sidebar .next-card");
   const sb = page.locator("#sidebar");
   check(await sb.isVisible(), "clicking a card opens the sidebar");
+  await sb.locator("textarea").first().focus();
+  await page.keyboard.type("j");
+  check(await page.locator('.card.selected[data-key="o/r#101"]').count() === 1, "typing j in a field doesn't move to another card");
+  await page.keyboard.press("Backspace");
   check(await sb.locator(".sess-exchange").count() === 1 && !(await sb.locator(".sess-exchange").textContent()).includes("Rev questions"),
     "PR session doesn't repeat a summary the card above already shows");
   check((await sb.locator(".next-card .primary").allTextContents()).join() === "Post reply", "a card's first runnable proposal is its one primary button");
