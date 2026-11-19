@@ -173,11 +173,17 @@ def next_steps(snap, rules, cards=(), now=None):
         elif rules.get("address_feedback"):
             out.append({"kind": "address_feedback", "label": f"Address feedback · {len(waiting)}", "tone": "red",
                         "reviewers": waiting})
-    elif snap.get("decision") == "REVIEW_REQUIRED" and not pending and not snap.get("draft") and rules.get("rerequest_review"):
+    elif snap.get("decision") == "REVIEW_REQUIRED" and not snap.get("draft") and rules.get("rerequest_review"):
+        dismissed = [r["author"] for r in snap.get("reviews") or []
+                     if r.get("state") == "DISMISSED" and r.get("dismissed_from") == "APPROVED"
+                     and r["author"] not in pending]
         # A comment like "lgtm" or a thumbs-up GIF reads as done, but GitHub still wants an approval.
-        signed = [r["author"] for r in snap.get("reviews") or []
-                  if r.get("state") == "COMMENTED" and r.get("author") != snap.get("viewer")]
-        if signed:
+        signed = [] if pending else [r["author"] for r in snap.get("reviews") or []
+                                     if r.get("state") == "COMMENTED" and r.get("author") != snap.get("viewer")]
+        if dismissed:
+            out.append({"kind": "rerequest_review", "label": f"Re-request review · {len(dismissed)}", "tone": "gold",
+                        "reviewers": dismissed, "title": "An approval was dismissed"})
+        elif signed:
             out.append({"kind": "ask_approval", "label": "Ask for approval", "tone": "gold", "reviewers": signed,
                         "title": "Signed off in a comment, but the PR still needs an approval to merge"})
     approval = _approval_step(snap, rules)
