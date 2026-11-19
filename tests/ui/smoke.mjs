@@ -111,6 +111,15 @@ try {
     "the stuck-checks card offers Cancel and re-run");
   if (shots) await page.screenshot({ path: `${shots}/sidebar-stuck-checks.png` });
   await page.keyboard.press("Escape");
+  check(await chipText(page, 113) === "Merge restricted by a ruleset" &&
+    await page.locator(".lane").nth(1).locator('.card[data-key="o/r#113"] .ci.success').count() === 1,
+    "an approved PR whose base a ruleset restricts waits in Waiting with passing checks, not Merge");
+  await page.locator('.card[data-key="o/r#113"] .next-row').click();
+  check(await page.locator('#sidebar .next-card [data-pr-action="merge"]').count() === 0 &&
+    (await page.locator("#sidebar .next-card").first().textContent()).includes("limits who can merge into release"),
+    "the restricted-merge card explains the ruleset and offers no Merge");
+  if (shots) await page.screenshot({ path: `${shots}/sidebar-merge-restricted.png` });
+  await page.keyboard.press("Escape");
   await page.locator('.card[data-key="o/r#98"] .next-row').click();
   await page.waitForSelector("#sidebar .next-card");
   check((await page.locator("#sidebar").locator(".next-card").first().textContent()).includes("I'd prefer a Map") &&

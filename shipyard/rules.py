@@ -204,6 +204,9 @@ def next_steps(snap, rules, cards=(), now=None):
         out.append(waiting)
     if _mergeable(snap, rules):
         out.append(dict(MERGE_STEP))
+    elif snap.get("merge_restricted") and _merge_ready(snap, rules):
+        out.append({"kind": "merge_restricted", "label": "Merge restricted by a ruleset", "tone": "muted",
+                    "title": f"A ruleset limits who can merge into {snap.get('base')}"})
     return out
 
 
@@ -211,6 +214,10 @@ MERGE_STEP = {"kind": "merge", "label": "Merge", "tone": "green"}
 
 
 def _mergeable(snap, rules):
+    return _merge_ready(snap, rules) and not snap.get("merge_restricted")
+
+
+def _merge_ready(snap, rules):
     return (snap.get("decision") == "APPROVED" and snap.get("ci") in (None, "SUCCESS") and not snap.get("auto_merge")
             and not snap.get("draft") and snap.get("mergeable") != "CONFLICTING" and rules.get("merge"))
 
