@@ -162,7 +162,7 @@ FIELDS = [
            help="When the PR yours is stacked on has commits your branch doesn't."),
     _field("rules", ("rules", "rerequest_review"), "switch", "Re-request review",
            lambda cfg: cfg["rules"]["rerequest_review"],
-           help="When you've pushed or replied after changes were requested."),
+           help="When you've pushed or replied after changes were requested, or an approval was dismissed."),
     _field("rules", ("rules", "nudge"), "switch", "Nudge", lambda cfg: cfg["rules"]["nudge"] is not False,
            help="When your PR has waited on reviewers for a while.",
            sentence="When your PR has waited on reviewers for {after_hours} hours."),

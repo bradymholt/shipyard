@@ -346,6 +346,7 @@ def snapshot(node, viewer):
         if login and login != author:
             reviews.append({"id": r.get("databaseId"), "state": r.get("state"), "author": login,
                             "submitted": r.get("submittedAt"), "body": (r.get("body") or "")[:2000],
+                            "dismissed_from": dismissed_from.get(r.get("databaseId")),
                             "commit": (r.get("commit") or {}).get("oid")})
     mine = node.get("viewerLatestReview")
     if mine and mine.get("state") == "PENDING":

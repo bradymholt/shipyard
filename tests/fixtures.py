@@ -64,7 +64,10 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
         "timelineItems": {"nodes": [
             {"__typename": "ReviewRequestedEvent", "createdAt": at,
              "requestedReviewer": {"__typename": "User", "login": who}}
-            for who, at in requested_at.items()]},
+            for who, at in requested_at.items()] + [
+            {"__typename": "ReviewDismissedEvent", "previousReviewState": r["dismissed_from"],
+             "review": {"databaseId": r.get("id", i + 100)}}
+            for i, r in enumerate(reviews) if r.get("dismissed_from")]},
     })
 
 
