@@ -1,6 +1,6 @@
 // The board: lanes, cards, and Recently merged.
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, GITHUB_ICON, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
+import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
@@ -185,17 +185,13 @@ export function openCheckoutButton(wt, label = "") {
     : `<a class="wt-link${mod}" href="${esc(launcherUrl(target))}" title="${esc(title)}">${inner}</a>`;
 }
 
-function githubLink(pr) {
-  return `<a class="wt-link" href="${esc(pr.url)}" target="_blank" rel="noopener" title="Open on GitHub">${GITHUB_ICON}</a>`;
-}
-
 // A merged PR's branch may still be checked out locally, with a session worth
 // returning to for follow-up ideas left in review. Offer only what already exists:
 // no checking out or moving a branch that's done.
 function mergedWorktreeLinks(pr) {
   const wt = worktreeFor(pr);
   const local = wt ? `${agentButton(pr)}${openCheckoutButton(wt)}` : "";
-  return `<div class="card-icons"><span class="wt-links">${githubLink(pr)}${local}</span></div>`;
+  return local && `<div class="card-icons"><span class="wt-links">${local}</span></div>`;
 }
 
 function worktreeLinks(pr) {
@@ -209,13 +205,13 @@ function worktreeLinks(pr) {
   // Already checked out somewhere → open that checkout directly. Green marks the
   // one that's the main repo's current branch.
   if (wt) {
-    return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton(wt)}</span>`;
+    return `<span class="wt-links">${agentButton(pr)}${openCheckoutButton(wt)}</span>`;
   }
 
   // A review worktree is detached, so it has no branch entry among the pushed worktrees.
   const cp = serverPr(pr);
   if (cp?.path) {
-    return `<span class="wt-links">${githubLink(pr)}${agentButton(pr)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
+    return `<span class="wt-links">${agentButton(pr)}${openCheckoutButton({ path: cp.path, workspace: null, main: false })}</span>`;
   }
 
   // Not checked out anywhere → open by checking the branch out in the main repo
@@ -225,7 +221,7 @@ function worktreeLinks(pr) {
   const mainBtn = mainWt && mainWt.dirty
     ? `<button class="wt-link wt-main blocked" disabled title="${esc(`Can't check out here — your main clone${mainOn} has uncommitted changes. Commit or stash them there first.`)}">${LAUNCH_ICON}</button>`
     : `<button class="wt-link wt-main" data-repo="${repo}" data-branch="${branch}" title="Check out in your main clone and open in ${esc(state.launcher.name)}">${LAUNCH_ICON}</button>`;
-  return `<span class="wt-links">${githubLink(pr)}${mainBtn}${agentButton(pr)}</span>`;
+  return `<span class="wt-links">${mainBtn}${agentButton(pr)}</span>`;
 }
 
 // Where the owner/repo link goes: on My PRs, your authored PRs; on Reviews, the
