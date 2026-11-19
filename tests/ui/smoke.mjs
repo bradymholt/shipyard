@@ -424,6 +424,13 @@ try {
   await narrow.page.waitForSelector("#stale-banner:not(.hidden)");
   check((await narrow.page.locator("#stale-detail").textContent()).includes("You have exceeded a secondary rate limit."),
     "a failed server poll shows GitHub's message in the stale banner");
+  console.log("dark theme");
+  await narrow.page.emulateMedia({ colorScheme: "dark" });
+  const sums = await narrow.page.evaluate(() => ["body", ".card", ".card-title"].map((sel) => {
+    const cs = getComputedStyle(document.querySelector(sel));
+    return (sel === "body" || sel === ".card" ? cs.backgroundColor : cs.color).match(/\d+/g).slice(0, 3).reduce((n, v) => n + Number(v), 0);
+  }));
+  check(sums[0] < 200 && sums[1] < 250 && sums[2] > 500, "a dark system setting gives dark surfaces and light text");
   check(narrow.errors.length === 0, `no page errors narrow${narrow.errors.length ? `: ${narrow.errors.join(" | ")}` : ""}`);
 
   await browser.close();

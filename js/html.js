@@ -73,7 +73,7 @@ export function refreshAgoLabels() {
 export function labelColors(hex) {
   const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
   const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-  return `color: ${luma > 160 ? "var(--fg)" : "var(--surface)"}; background: #${hex}`;
+  return `color: ${luma > 160 ? "var(--on-light)" : "var(--on-dark)"}; background: #${hex}`;
 }
 
 export function showError(message, title = "Can't open") {
