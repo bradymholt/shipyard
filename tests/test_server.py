@@ -57,6 +57,7 @@ class ServerCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
+        self.dir = tmp.name
         Path(tmp.name, "index.html").write_text("<!doctype html><head></head>")
         Path(tmp.name, "js").mkdir()
         Path(tmp.name, "js", "main.js").write_text("")
@@ -91,6 +92,12 @@ class ServerCase(unittest.TestCase):
 
 
 class Endpoints(ServerCase):
+    def test_a_forced_theme_is_in_the_markup(self):
+        Path(self.dir, "index.html").write_text('<!doctype html><html lang="en"><head></head>')
+        self.orchestrator.config = {**self.orchestrator.config, "theme": "dark"}
+        _, html = self.request("GET", "/")
+        self.assertIn('<html data-theme="dark" lang="en">', html.decode())
+
     def test_page_carries_token_and_rules(self):
         status, html = self.request("GET", "/")
         boot = html.decode().split('<script id="shipyard-boot" type="application/json">')[1].split("</script>")[0]
