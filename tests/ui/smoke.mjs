@@ -429,19 +429,20 @@ try {
     "a failed server poll shows GitHub's message in the stale banner");
   console.log("dark theme");
   await narrow.page.emulateMedia({ colorScheme: "dark" });
+  const bodyBg = () => narrow.page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  check(await bodyBg() === "rgb(247, 249, 250)", "the page is light by default, even when the system is dark");
+  await narrow.page.goto(`http://localhost:${DEMO_PORT}/#settings/appearance`);
+  await narrow.page.locator('[data-path="theme"] button[data-value="dark"]').click();
+  await narrow.page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   const sums = await narrow.page.evaluate(() => ["body", ".card", ".card-title"].map((sel) => {
     const cs = getComputedStyle(document.querySelector(sel));
     return (sel === "body" || sel === ".card" ? cs.backgroundColor : cs.color).match(/\d+/g).slice(0, 3).reduce((n, v) => n + Number(v), 0);
   }));
-  check(sums[0] < 200 && sums[1] < 250 && sums[2] > 500, "a dark system setting gives dark surfaces and light text");
-  await narrow.page.goto(`http://localhost:${DEMO_PORT}/#settings/appearance`);
-  await narrow.page.locator('[data-path="theme"] button[data-value="light"]').click();
-  await narrow.page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+  check(sums[0] < 200 && sums[1] < 250 && sums[2] > 500, "the Dark theme gives dark surfaces and light text");
   await narrow.page.reload();
-  check(await narrow.page.evaluate(() => document.documentElement.dataset.theme === "light" &&
-    getComputedStyle(document.body).backgroundColor === "rgb(247, 249, 250)"), "the Theme setting overrides the system setting and is in the page the server sends");
+  check(await narrow.page.evaluate(() => document.documentElement.dataset.theme) === "dark", "a saved theme survives a reload");
   await narrow.page.locator('[data-path="theme"] [data-reset]').click();
-  await narrow.page.waitForFunction(() => !document.documentElement.dataset.theme);
+  await narrow.page.waitForFunction(() => document.documentElement.dataset.theme === "light");
   check(narrow.errors.length === 0, `no page errors narrow${narrow.errors.length ? `: ${narrow.errors.join(" | ")}` : ""}`);
 
   await browser.close();
