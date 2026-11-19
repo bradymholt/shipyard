@@ -536,9 +536,11 @@ class Poller:
         changed = [i for i, n in light.items() if self.signatures.get(i) != signature(n) or blocked_after_approval(n)]
         gone = [i for i in known_open if i not in light]
         snaps = self.details(changed + gone, viewer) if viewer else []
-        # Search and the detail read can disagree about a block, and a read can come back
-        # empty, so a signature is kept only for a PR whose own read shows it unblocked.
-        settled = {s["id"] for s in snaps if s["ci"] != "EXPECTED" and not s["merge_restricted"]}
+        # A read can come back empty, or say blocked when search says clear; the signature
+        # wouldn't move when the block lifts, so such a PR keeps none and is read again.
+        settled = {s["id"] for s in snaps if s["id"] in light
+                   and (light[s["id"]].get("mergeStateStatus") == "BLOCKED"
+                        or (s["ci"] != "EXPECTED" and not s["merge_restricted"]))}
         for i in changed:
             if i in settled:
                 self.signatures[i] = signature(light[i])
