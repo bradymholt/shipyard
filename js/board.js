@@ -686,6 +686,8 @@ listBody.addEventListener("keydown", (e) => {
 
 narrowViewport.addEventListener("change", render);
 
+$("#shortcuts-hint").addEventListener("click", () => $("#shortcuts-dialog").showModal());
+
 // j and k walk the cards in reading order; with the sidebar open, it follows along. ? lists the shortcuts.
 document.addEventListener("keydown", (e) => {
   if (!["j", "k", "?"].includes(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
