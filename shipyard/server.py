@@ -47,6 +47,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     config = DEFAULT_CONFIG
     session_token = ""
     orchestrator = None
+    # Every response, errors included, names Shipyard and nothing else: a second copy reads
+    # this to tell its own running server from another program on the port.
+    SERVER_NAME = "Shipyard"
     STATIC_PATHS = {"/", "/index.html", "/favicon.svg", "/docs/board.png",
                     "/manifest.webmanifest", "/icons/icon-192.png",
                     "/icons/icon-512.png", "/icons/icon-maskable-512.png",
@@ -65,6 +68,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                          "/api/check-now", "/api/rescan-worktrees", "/api/settings",
                          "/api/current-view", "/api/automation",
                          "/api/welcome"}
+
+    def version_string(self):
+        return self.SERVER_NAME
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()

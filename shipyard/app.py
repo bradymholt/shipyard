@@ -1,6 +1,8 @@
 import argparse
+import errno
 import functools
 import sys
+import http.client
 
 from .orchestrator import Orchestrator
 from .config import CONFIG_FILE, REPO_DIR, load_config
@@ -32,8 +34,34 @@ def parse_args(argv):
     return args.port, args.roots
 
 
+def is_shipyard(port):
+    """Whether the server answering on this localhost port is Shipyard's."""
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+    try:
+        connection.request("HEAD", "/")
+        return connection.getresponse().getheader("Server") == Handler.SERVER_NAME
+    except (OSError, http.client.HTTPException):
+        return False
+    finally:
+        connection.close()
+
+
+def bind(port):
+    """The server on this port, or exit with a plain message when something holds it."""
+    try:
+        return Server(("127.0.0.1", port), functools.partial(Handler, directory=str(REPO_DIR)))
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            sys.exit(f"Can't listen on port {port}: {e.strerror}. Pick another port with --port.")
+    if is_shipyard(port):
+        sys.exit(f"Shipyard is already running → http://localhost:{port}")
+    sys.exit(f"Port {port} is in use by another program. Stop it, or pick another port with --port.")
+
+
 def main(argv=None):
     port, cli_roots = parse_args(sys.argv[1:] if argv is None else argv)
+    # Bind before opening the database or starting anything, so a second copy stops cleanly.
+    httpd = bind(port)
     config = load_config()
     # Folders on the command line hold for the run; otherwise the "roots" setting applies,
     # and Shipyard runs without any: the board needs only GitHub.
@@ -44,7 +72,6 @@ def main(argv=None):
     warn_unavailable_roots(roots)
     Handler.orchestrator.move_old_views()
     Handler.session_token = Handler.orchestrator.db.session_token()
-    httpd = Server(("127.0.0.1", port), functools.partial(Handler, directory=str(REPO_DIR)))
     print(f"Shipyard → http://localhost:{port}")
     print(f"Scanning worktrees under: {', '.join(roots)}" if roots else
           "Not scanning any folders yet: add one in Settings (Folders to scan) to open checkouts.")
