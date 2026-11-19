@@ -1,6 +1,6 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
-import { $, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
+import { $, state } from "./base.js";
+import { AGENT_ICONS, agoSpan, BACK_ICON, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiGet, apiPost, automationHeld, saveSetting, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
 import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markSeen, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
@@ -76,9 +76,9 @@ export function openSidebar(key) {
   sessionChoices = null;
   document.body.classList.add("sidebar-open");
   render();
-  if (narrowViewport.matches || matchMedia("(max-width: 900px)").matches) {
-    $("#sidebar").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  $("#sidebar").scrollTop = 0;
+  // Making room for the sidebar can reflow the lanes and move the card that was clicked.
+  document.querySelector(".card.selected")?.scrollIntoView({ block: "nearest" });
 }
 
 export function closeSidebar() {
@@ -175,6 +175,7 @@ function sidebarHeader(pr) {
   if (checkout) launch += openCheckoutButton(checkout, state.launcher.name || "Open");
   return `
     <div class="sb-top">
+      <button type="button" class="sb-back" data-close>${BACK_ICON}Board</button>
       <div class="sb-where">${esc(pr.repository?.nameWithOwner || "")} · #${pr.number} · ${esc(pr.headRefName || "")}</div>
       <button type="button" class="sb-close" data-close title="Close (Esc)" aria-label="Close">${CLOSE_ICON}</button>
     </div>

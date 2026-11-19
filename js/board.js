@@ -683,7 +683,7 @@ document.querySelectorAll(".tab").forEach((tab) =>
     state.filter = tab.dataset.filter;
     state.mergedExtra = 0;
     localStorage.setItem(LS.FILTER, state.filter);
-    render();
+    closeSidebar();
   })
 );
 
