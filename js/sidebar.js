@@ -80,7 +80,6 @@ export function openSidebar(key) {
   document.body.classList.add("sidebar-open");
   render();
   $("#sidebar").scrollTop = 0;
-  // Making room for the sidebar can reflow the lanes and move the card that was clicked.
   document.querySelector(".card.selected")?.scrollIntoView({ block: "nearest" });
 }
 
