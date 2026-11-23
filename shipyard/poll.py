@@ -35,7 +35,8 @@ query($q: String!, $after: String) {
 DETAIL_FIELDS = """
   id number title url state isDraft createdAt updatedAt mergedAt closedAt body
   headRefName headRefOid baseRefName additions deletions changedFiles
-  baseRef { rules(first: 50) { nodes { type } } }
+  baseRef { rules(first: 50) { nodes { type parameters {
+    ... on RequiredStatusChecksParameters { requiredStatusChecks { context } } } } } }
   repository { nameWithOwner }
   author { __typename login avatarUrl }
   reviewDecision mergeable mergeStateStatus
@@ -290,21 +291,49 @@ def ci_state(rollup):
     return "PENDING" if running else "SUCCESS"
 
 
-def merge_restricted(node):
-    """GitHub blocks the merge and a ruleset restricts updates to the base branch, so only
-    those the ruleset allows can merge, whatever the reviews and checks say."""
+PASSED = {"SUCCESS", "SKIPPED", "NEUTRAL"}
+
+
+def _open_threads(node):
+    return any(not t.get("isResolved") and not t.get("isOutdated")
+               for t in (node.get("reviewThreads") or {}).get("nodes") or [])
+
+
+def required_checks_passed(node, rollup):
+    """Every check the base branch's rulesets require reported and passed. False when the
+    rulesets name none, as when the requirement comes from classic branch protection."""
     base_rules = ((node.get("baseRef") or {}).get("rules") or {}).get("nodes") or []
-    return node.get("mergeStateStatus") == "BLOCKED" and any(r.get("type") == "UPDATE" for r in base_rules)
+    required = {c.get("context") for r in base_rules if r.get("type") == "REQUIRED_STATUS_CHECKS"
+                for c in ((r.get("parameters") or {}).get("requiredStatusChecks") or [])}
+    passed = {c.get("name") if c.get("__typename") == "CheckRun" else c.get("context")
+              for c in current_checks(rollup)
+              if (c.get("conclusion") if c.get("__typename") == "CheckRun" else c.get("state")) in PASSED}
+    return bool(required) and required <= passed
+
+
+def merge_restricted(node):
+    """Why GitHub blocks a merge the reviews and checks don't explain: "ruleset" when a ruleset
+    restricts updates to the base branch, so only those it allows can merge; "blocked" when the
+    PR is approved and every required check passed, so the reason is one GitHub's API doesn't name."""
+    if node.get("mergeStateStatus") != "BLOCKED":
+        return None
+    base_rules = ((node.get("baseRef") or {}).get("rules") or {}).get("nodes") or []
+    if any(r.get("type") == "UPDATE" for r in base_rules):
+        return "ruleset"
+    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    rollup = commit.get("statusCheckRollup")
+    if (node.get("reviewDecision") == "APPROVED" and not node.get("isDraft") and not _open_threads(node)
+            and ci_state(rollup) in (None, "SUCCESS") and required_checks_passed(node, rollup)):
+        return "blocked"
+    return None
 
 
 def pr_ci(node, rollup):
     """The CI state, or EXPECTED when GitHub blocks an approved PR whose checks all passed: a
     required check never reported, as when its workflow run sits in the queue."""
     state = ci_state(rollup)
-    open_threads = any(not t.get("isResolved") and not t.get("isOutdated")
-                       for t in (node.get("reviewThreads") or {}).get("nodes") or [])
     if (state in (None, "SUCCESS") and node.get("mergeStateStatus") == "BLOCKED" and not node.get("isDraft")
-            and node.get("reviewDecision") == "APPROVED" and not open_threads and not merge_restricted(node)):
+            and node.get("reviewDecision") == "APPROVED" and not _open_threads(node) and not merge_restricted(node)):
         return "EXPECTED"
     return state
 

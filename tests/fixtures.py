@@ -25,7 +25,7 @@ def pr_node(number=1, author=VIEWER, head="aaa", state="OPEN", decision=None, ci
         "url": f"https://github.com/{repo}/pull/{number}", "state": state, "isDraft": draft,
         "createdAt": created, "updatedAt": updated, "mergedAt": merged_at, "closedAt": None,
         "body": "Does a thing.", "headRefName": branch, "headRefOid": head, "baseRefName": base,
-        "baseRef": {"rules": {"nodes": [{"type": t} for t in base_rules]}},
+        "baseRef": {"rules": {"nodes": [t if isinstance(t, dict) else {"type": t} for t in base_rules]}},
         "additions": 10, "deletions": 2, "changedFiles": 3,
         "repository": {"nameWithOwner": repo}, "author": {"login": author},
         "reviewDecision": decision, "mergeable": mergeable, "mergeStateStatus": merge_state, "autoMergeRequest": None,

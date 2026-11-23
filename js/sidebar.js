@@ -384,6 +384,9 @@ function derivedCardHtml(pr, chip) {
       : "Every check that reported passed, but GitHub is waiting on required checks that haven't reported yet.";
     actionsHtml = (chip.kind === "restart_runs" ? run("restart_runs", "Cancel and re-run", "primary") : "")
       + `<a class="btn-link" href="${esc(pr.url)}/checks" target="_blank" rel="noopener">View checks</a>`;
+  } else if (chip.kind === "merge_blocked") {
+    body = "Approved and every required check passed, but GitHub still blocks the merge, often for a review rule such as one asking for another approval. GitHub's merge box says why.";
+    actionsHtml = `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>`;
   } else if (chip.kind === "merge_restricted") {
     body = `Approved and checks are green, but a ruleset limits who can merge into ${pr.baseRefName || "the base branch"}, so it can't be merged from here.`;
     actionsHtml = `<a class="btn-link" href="${esc(pr.url)}" target="_blank" rel="noopener">View on GitHub</a>`;
