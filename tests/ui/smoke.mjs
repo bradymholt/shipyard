@@ -227,6 +227,7 @@ try {
   await sb.locator('[data-suggest-dismiss="rerun_checks"]').click();
   check(await sb.locator(".nc-suggest").count() === 0, "dismissing the suggestion hides it");
 
+  await page.keyboard.press("Escape");  // the open sidebar covers the Ready lane
   await page.locator('.card[data-key="o/r#103"] .next-row').click();
   await sb.locator('button.nc-run[data-pr-action="merge"]').click();
   await page.waitForSelector('.card.merged[data-key="o/r#103"]', { timeout: 2000 });
@@ -431,9 +432,12 @@ try {
   check(overflow <= 0, "no horizontal scroll on a phone-width window");
   await narrow.page.setViewportSize({ width: 1100, height: 900 });
   await settled();
-  const beside = await narrow.page.evaluate(() => ["#repo-select", ".list"].map((s) =>
-    document.querySelector(s).getBoundingClientRect().right <= document.querySelector("#sidebar").getBoundingClientRect().left));
-  check(beside.every(Boolean), "the board and header make room for the sidebar on a mid-width window");
+  const under = await narrow.page.evaluate(() => {
+    const list = document.querySelector(".list").getBoundingClientRect();
+    return list.right > document.querySelector("#sidebar").getBoundingClientRect().left
+      && Math.round(list.right) === Math.round(document.querySelector(".container").getBoundingClientRect().right - parseFloat(getComputedStyle(document.querySelector(".container")).paddingRight));
+  });
+  check(under, "the sidebar overlays the board without moving it on a wider window");
   await narrow.page.setViewportSize({ width: 420, height: 900 });
   await settled();
   if (shots) await narrow.page.screenshot({ path: `${shots}/narrow.png`, fullPage: true });
