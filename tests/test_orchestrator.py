@@ -398,6 +398,8 @@ class AfterAction(OrchestratorCase):
         approved = {"databaseId": 7, "state": "APPROVED", "submittedAt": "2026-10-20T11:00:00Z", "commit": {"oid": "aaa"}}
         self.gh.put(self.held_bot_pr(head="bbb", my_review=approved), "reviewed-by:@me")
         self.poll()
+        self.assertFalse(any(c[0] == "graphql" for c in self.gh.calls))  # green has to last a second poll
+        self.poll()
         self.assertEqual(self.gh.calls[-1][2]["head"], "bbb")
         self.assertEqual(self.comp.db.activity("o/r#1")[-1]["text"], "merged (squash)")
 

@@ -1005,29 +1005,36 @@ class Orchestrator:
         self.db.update_card(card_id, auto_wait={"action": "merge", "hold": True, "approved": approved_shape(snap)})
 
     def retry_held_merge(self, card, wait):
-        """Merge a held PR once its checks pass. A merge can't be undone, so the PR is
+        """Merge a held PR once its checks pass. A merge can't be undone, so green has to hold
+        for two polls (a later job may not have started when the first one passes), the PR is
         read again first, and one failed try hands the merge back to you."""
         key, snap = card["key"], self.db.pr(card["key"])
-        fresh = None
-        for attempt in range(2):
+
+        def still_held(snap):
             broken = hold_broken(snap, card, wait)
-            if broken is not None:
-                self.db.update_card(card["id"], status="done", auto_wait=None)
-                if broken:
-                    self.db.log(key, f"stopped holding the merge: {broken}")
-                return
-            if self.held() or not checks_green(snap):
-                return
-            if attempt:
-                break
-            try:
-                fresh = self.poller.details([snap["id"]], self.viewer)
-            except Exception as e:
-                print(f"Warning: re-reading {key} before its held merge failed: {e}")
-                return
-            if not fresh or fresh[0].get("head") != snap.get("head"):
-                return  # the poll hasn't seen this head yet
-            snap = fresh[0]
+            if broken is None:
+                return True
+            self.db.update_card(card["id"], status="done", auto_wait=None)
+            if broken:
+                self.db.log(key, f"stopped holding the merge: {broken}")
+            return False
+
+        if not still_held(snap) or self.held():
+            return
+        green = snap["head"] if checks_green(snap) else None
+        if not green or wait.get("green") != green:
+            if wait.get("green") != green:
+                self.db.update_card(card["id"], auto_wait={**wait, "green": green})
+            return
+        try:
+            fresh = self.poller.details([snap["id"]], self.viewer)
+        except Exception as e:
+            print(f"Warning: re-reading {key} before its held merge failed: {e}")
+            return
+        if not fresh or fresh[0].get("head") != snap["head"]:
+            return  # the poll hasn't seen this head yet
+        if not still_held(fresh[0]) or not checks_green(fresh[0]):
+            return
         self.db.update_card(card["id"], auto_wait=None)
         try:
             self.do_action(key, "merge", {}, card["id"])
