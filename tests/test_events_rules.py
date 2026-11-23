@@ -278,6 +278,17 @@ class NextSteps(unittest.TestCase):
         allowed = snap(decision="APPROVED", merge_state="CLEAN", base_rules=["UPDATE"])
         self.assertEqual([s["kind"] for s in rules.next_steps(allowed, RULES)], ["merge"])
 
+    def test_block_with_every_required_check_passed_isnt_waiting_on_checks(self):
+        required = {"type": "REQUIRED_STATUS_CHECKS",
+                    "parameters": {"requiredStatusChecks": [{"context": "build"}, {"context": "lint"}]}}
+        checks = [{"__typename": "CheckRun", "name": n, "conclusion": "SUCCESS", "status": "COMPLETED"}
+                  for n in ("build", "lint")]
+        blocked = snap(decision="APPROVED", merge_state="BLOCKED", base_rules=[required], contexts=checks)
+        self.assertEqual(blocked["ci"], "SUCCESS")
+        self.assertEqual([s["label"] for s in rules.next_steps(blocked, RULES)], ["Blocked by GitHub"])
+        missing = snap(decision="APPROVED", merge_state="BLOCKED", base_rules=[required], contexts=checks[:1])
+        self.assertEqual([s["label"] for s in rules.next_steps(missing, RULES)], ["Waiting on required checks"])
+
     def test_merge_follows_your_approval_of_a_bot_pr(self):
         def theirs(bot):
             s = snap(author="dependabot", decision="APPROVED", my_review=mine_review("APPROVED"))
