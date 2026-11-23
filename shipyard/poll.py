@@ -37,7 +37,7 @@ DETAIL_FIELDS = """
   headRefName headRefOid baseRefName additions deletions changedFiles
   baseRef { rules(first: 50) { nodes { type parameters {
     ... on RequiredStatusChecksParameters { requiredStatusChecks { context } } } } } }
-  repository { nameWithOwner }
+  repository { nameWithOwner viewerDefaultMergeMethod }
   author { __typename login avatarUrl }
   reviewDecision mergeable mergeStateStatus
   labels(first: 10) { nodes { name color } }
@@ -447,6 +447,7 @@ def snapshot(node, viewer):
         "changed_files": node.get("changedFiles"),
         "decision": node.get("reviewDecision"),
         "auto_merge": bool(node.get("autoMergeRequest")),
+        "merge_method": (node.get("repository") or {}).get("viewerDefaultMergeMethod"),
         "mergeable": node.get("mergeable"),
         "merge_restricted": merge_restricted(node),
         "requested": requested,

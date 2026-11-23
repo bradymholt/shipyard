@@ -49,6 +49,12 @@ class Actions(unittest.TestCase):
             actions.run(gh, "merge", snap(), {})
         self.assertEqual(len(gh.calls), 1)
 
+    def test_merge_and_auto_merge_start_with_your_last_used_method(self):
+        gh = RecordingGitHub()
+        self.assertEqual(actions.run(gh, "merge", {**snap(), "merge_method": "MERGE"}, {}), "merged (merge)")
+        actions.run(gh, "enable_auto_merge", {**snap(), "merge_method": "REBASE"}, {})
+        self.assertEqual(gh.calls[-1][2]["m"], "REBASE")
+
     def test_stacked_pr_merges_through_the_async_api(self):
         gh = RecordingGitHub(graphql_errors=[GitHubError(
             "This pull request is part of a stack and must be merged using the asynchronous merge REST API.")])

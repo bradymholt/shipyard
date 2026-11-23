@@ -121,10 +121,12 @@ def _hold_merge(payload):
     return "holding the merge until the checks pass"
 
 
-def _with_merge_method(run):
-    """Try merge methods in order, moving on only when the repo disallows one; any
-    other failure (branch protection, a network error) stops there."""
-    for method in MERGE_METHODS:
+def _with_merge_method(snap, run):
+    """Try the method you last used on the repo, then the rest in order, moving on only
+    when the repo disallows one; any other failure (branch protection, a network error)
+    stops there."""
+    preferred = snap.get("merge_method")
+    for method in sorted(MERGE_METHODS, key=lambda m: m != preferred):
         try:
             run(method)
             return method
@@ -139,7 +141,7 @@ def _auto_merge(gh, snap, enable):
         gh.graphql("mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) "
                    "{ clientMutationId } }", {"id": snap["id"]})
         return
-    _with_merge_method(lambda m: gh.graphql(
+    _with_merge_method(snap, lambda m: gh.graphql(
         "mutation($id: ID!, $m: PullRequestMergeMethod!, $head: GitObjectID) { enablePullRequestAutoMerge("
         "input: {pullRequestId: $id, mergeMethod: $m, expectedHeadOid: $head}) { clientMutationId } }",
         {"id": snap["id"], "m": m, "head": snap.get("head")}))
@@ -176,7 +178,7 @@ def _merge_with(gh, snap, method):
 
 def merge(gh, snap, payload, ctx):
     done = {}
-    method = _with_merge_method(lambda m: done.update(verb=_merge_with(gh, snap, m)))
+    method = _with_merge_method(snap, lambda m: done.update(verb=_merge_with(gh, snap, m)))
     return f"{done['verb']} ({method.lower()})"
 
 
