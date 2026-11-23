@@ -22,6 +22,7 @@ from .settings import MISSING, SECTIONS, fields as setting_fields, save as save_
 from .state import State, now_iso
 
 POLL_SECONDS = 60
+BASE_CHECKS_SECONDS = 300
 PASS_WORKERS = 2
 # Which passes may propose an action the server presses itself, and on whose PRs.
 # Anything else stays a button, even when its trust flag is on.
@@ -51,6 +52,32 @@ PASS_ACTIVITY = {
     "pre_review": "ran a pre-review",
     "re_review": "asked for a re-check of the review threads",
 }
+
+
+def approved_shape(snap):
+    return [snap.get("title"), snap.get("additions"), snap.get("deletions"), snap.get("changed_files")]
+
+
+def checks_green(snap):
+    """Every check passed. A head with no checks yet doesn't count: they may not have started."""
+    return (snap.get("ci") == "SUCCESS" and not snap.get("checks_running")
+            and snap.get("mergeable") != "CONFLICTING" and not snap.get("merge_restricted"))
+
+
+def hold_broken(snap, card, wait):
+    """Why a held merge no longer applies ("" when there is nothing to say), or None while it does.
+    A bot's rebase moves the head without changing what you approved, so the hold follows it
+    while the title and the size of the diff stay the same."""
+    if not snap or snap.get("state") != "OPEN" or snap.get("dropped") or snap.get("auto_merge"):
+        return ""
+    if snap.get("draft"):
+        return "the PR went back to draft"
+    if (snap.get("my_review") or {}).get("state") != "APPROVED":
+        return "your approval no longer stands"
+    if snap.get("head") != card.get("head") and not (
+            snap.get("author_bot") and approved_shape(snap) == wait.get("approved")):
+        return "the PR changed after you approved it"
+    return None
 
 
 def reply_context(snap, comment_id):
@@ -117,6 +144,8 @@ class Orchestrator:
         self.pin_misses = {}  # PR key -> the transcripts a lookup found no session in
         self.stacks = {}  # PR key -> the open PR it's stacked on and how far behind it the branch is
         self.behind_cache = {}  # (repo, parent head, child head) -> commits the child is missing
+        self.base_checks = {}  # (repo, base branch) -> (when it was read, the checks failing on its head)
+        self.base_failures = {}  # PR key -> its failing checks that fail on the base too
         self.recent_merged = {kind: [] for kind in MERGED_SEARCHES}
         self.merged_version = 0  # bumped when recent_merged changes, so the page gets it only then
         self.merged_checked = 0
@@ -296,6 +325,7 @@ class Orchestrator:
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
         self.refresh_stacks()
+        self.refresh_base_failures()
         self.status = {"github": "ok", "lastPoll": now_iso()}
         self.db.set_poll_memory({**self.poller.memory(), "viewer": viewer, "lastPoll": self.status["lastPoll"]})
         self.publish()  # open PRs first; merged history goes out as its own event
@@ -325,6 +355,28 @@ class Orchestrator:
             cache[pair] = self.behind_cache[pair]
             stacks[snap["key"]] = {"stack_parent": parent["number"], "behind_parent": cache[pair]}
         self.stacks, self.behind_cache = stacks, cache
+
+    def refresh_base_failures(self):
+        """Which of each open PR's failing checks also fail on the head of its base branch.
+        The base's checks move without touching the PR, so each base is asked again after a while."""
+        now, bases, found = time.monotonic(), {}, {}
+        for snap in self.db.prs():
+            if snap.get("state") != "OPEN" or snap.get("dropped") or not snap.get("failing"):
+                continue
+            pair = (snap["repo"], snap.get("base"))
+            if pair not in bases:
+                at, failing = self.base_checks.get(pair, (None, set()))
+                if at is None or now - at > BASE_CHECKS_SECONDS:
+                    try:
+                        at, failing = now, self.poller.failing_on(*pair)
+                    except Exception as e:
+                        print(f"Warning: reading {pair[1]}'s checks in {pair[0]} failed: {e}")
+                bases[pair] = (at, failing)
+            names = [c["name"] for c in snap["failing"] if (c.get("workflow"), c.get("name")) in bases[pair][1]]
+            if names:
+                found[snap["key"]] = {"failing_on_base": names}
+        self.base_checks = {pair: seen for pair, seen in bases.items() if seen[0] is not None}
+        self.base_failures = found
 
     def ingest(self, snap):
         prev = self.db.pr(snap["key"])
@@ -785,11 +837,14 @@ class Orchestrator:
         return datetime.fromisoformat(seen.replace("Z", "+00:00")) + timedelta(minutes=minutes)
 
     def retry_waiting_actions(self):
-        """Approvals wait out the time after a push; re-runs wait for running checks."""
+        """Approvals wait out the time after a push; re-runs wait for running checks;
+        held merges wait for every check to pass."""
         now = now_iso()
         for card in self.db.cards(statuses=("open",)):
             wait = card.get("auto_wait")
-            if wait and wait.get("manual"):
+            if wait and wait.get("hold"):
+                self.retry_held_merge(card, wait)
+            elif wait and wait.get("manual"):
                 self.retry_queued_rerun(card, wait)
             elif wait and (wait.get("until") or "") <= now:
                 self.db.update_card(card["id"], auto_wait=None)
@@ -921,6 +976,8 @@ class Orchestrator:
         self.record_pending(snap, action, payload)
         self.reread_for_page(snap)
         self.db.log(key, result)
+        if payload.get("hold_merge"):
+            self.hold_merge(snap)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
         self.poke()
@@ -928,9 +985,61 @@ class Orchestrator:
         out = {"ok": True, "result": result}
         if payload.get("merged"):
             out["merged"] = payload["merged"]
+        elif payload.get("hold_merge"):
+            out["held"] = True
         elif payload.get("merge"):
             out["warning"] = result  # approved, but the merge after it failed
         return out
+
+    def hold_merge(self, snap):
+        """A card that merges the PR once its checks pass, for when GitHub's auto-merge
+        has no required check to wait on. It remembers what you approved."""
+        key = snap["key"]
+        if any((c.get("auto_wait") or {}).get("hold") for c in self.db.cards(key, ("open",))):
+            return
+        card_id = self.db.add_card(key, {
+            "kind": "proposal", "action": "merge", "title": "Merge once the checks pass",
+            "summary": "GitHub's auto-merge only waits on required checks, and none is left here. "
+                       "Shipyard merges this when every check passes.",
+            "payload": {}, "head": snap.get("head")})
+        self.db.update_card(card_id, auto_wait={"action": "merge", "hold": True, "approved": approved_shape(snap)})
+
+    def retry_held_merge(self, card, wait):
+        """Merge a held PR once its checks pass. A merge can't be undone, so green has to hold
+        for two polls (a later job may not have started when the first one passes), the PR is
+        read again first, and one failed try hands the merge back to you."""
+        key, snap = card["key"], self.db.pr(card["key"])
+
+        def still_held(snap):
+            broken = hold_broken(snap, card, wait)
+            if broken is None:
+                return True
+            self.db.update_card(card["id"], status="done", auto_wait=None)
+            if broken:
+                self.db.log(key, f"stopped holding the merge: {broken}")
+            return False
+
+        if not still_held(snap) or self.held():
+            return
+        green = snap["head"] if checks_green(snap) else None
+        if not green or wait.get("green") != green:
+            if wait.get("green") != green:
+                self.db.update_card(card["id"], auto_wait={**wait, "green": green})
+            return
+        try:
+            fresh = self.poller.details([snap["id"]], self.viewer)
+        except Exception as e:
+            print(f"Warning: re-reading {key} before its held merge failed: {e}")
+            return
+        if not fresh or fresh[0].get("head") != snap["head"]:
+            return  # the poll hasn't seen this head yet
+        if not still_held(fresh[0]) or not checks_green(fresh[0]):
+            return
+        self.db.update_card(card["id"], auto_wait=None)
+        try:
+            self.do_action(key, "merge", {}, card["id"])
+        except Exception as e:
+            self.db.log(key, f"tried the held merge: {e}")
 
     def queue_rerun(self, snap, card_id, runs):
         self.db.update_card(card_id, status="open", auto_wait={
@@ -1248,7 +1357,8 @@ class Orchestrator:
         prs = {}
         for snap in self.db.prs():
             key = snap["key"]
-            view = {**snap, **(snap.get("pending") or {}), **self.stacks.get(key, {})}
+            on_base = {} if "failing" in (snap.get("pending") or {}) else self.base_failures.get(key, {})
+            view = {**snap, **(snap.get("pending") or {}), **self.stacks.get(key, {}), **on_base}
             pin = self.db.pin(key)
             session = None
             if pin and pin.get("session_id") and pin.get("path"):
@@ -1271,6 +1381,7 @@ class Orchestrator:
                 # What the server last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
                 "state": snap.get("state"), "dropped": bool(snap.get("dropped")),
+                "failingOnBase": on_base.get("failing_on_base") or [],
                 "openThreads": sum(1 for t in snap.get("threads") or [] if not t.get("resolved")),
                 "snoozedUntil": self.db.snooze(key),
                 "waitingSince": ((snap.get("requested_at") or {}).get(snap.get("viewer")) or snap.get("ready_at")

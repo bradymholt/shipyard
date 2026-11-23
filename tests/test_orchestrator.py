@@ -27,6 +27,7 @@ class FakeGitHub:
         self.compare = {"files": [{"filename": "a.py", "status": "modified", "additions": 3, "deletions": 1}]}
         self.pr_files = [{"filename": "a.py"}]
         self.running_runs = set()
+        self.base_contexts = []
 
     def put(self, node, *lists):
         self.nodes[node["id"]] = node
@@ -45,6 +46,8 @@ class FakeGitHub:
                     "search": {"pageInfo": {"hasNextPage": False}, "nodes": copy.deepcopy(nodes)}}
         if "nodes(ids" in query:
             return {"nodes": [copy.deepcopy(self.nodes[i]) for i in variables["ids"]]}
+        if "ref(qualifiedName" in query:
+            return {"repository": {"ref": {"target": {"statusCheckRollup": {"contexts": {"nodes": self.base_contexts}}}}}}
         self.calls.append(("graphql", query.split("(")[0].split()[-1], variables))
         return {}
 
@@ -375,12 +378,63 @@ class AfterAction(OrchestratorCase):
         self.assertTrue(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
         self.assertEqual(self.comp.db.pr("o/r#1")["my_review"]["state"], "APPROVED")
 
+    def held_bot_pr(self, **kw):
+        node = pr_node(author="bot", **kw)
+        node["author"]["__typename"] = "Bot"
+        node["viewerCanEnableAutoMerge"] = False
+        return node
+
+    def test_merge_once_green_holds_the_merge_until_the_checks_pass(self):
+        self.gh.put(self.held_bot_pr(ci="FAILURE", contexts=[check_run("test", "FAILURE")], requested=[VIEWER]),
+                    "review-requested:@me")
+        self.poll()
+        out = self.comp.do_action("o/r#1", "approve", {"merge": True})
+        self.assertTrue(out["held"])
+        self.assertNotIn("warning", out)
+        state = self.poll()["o/r#1"]
+        self.assertEqual([s["kind"] for s in state["steps"]], ["merge_held"])
+        self.assertFalse(any(c[0] == "graphql" for c in self.gh.calls))
+        # a bot's rebase moves the head; the hold follows it and merges once it is green
+        approved = {"databaseId": 7, "state": "APPROVED", "submittedAt": "2026-10-20T11:00:00Z", "commit": {"oid": "aaa"}}
+        self.gh.put(self.held_bot_pr(head="bbb", my_review=approved), "reviewed-by:@me")
+        self.poll()
+        self.assertFalse(any(c[0] == "graphql" for c in self.gh.calls))  # green has to last a second poll
+        self.poll()
+        self.assertEqual(self.gh.calls[-1][2]["head"], "bbb")
+        self.assertEqual(self.comp.db.activity("o/r#1")[-1]["text"], "merged (squash)")
+
+    def test_a_held_merge_stops_when_the_pr_changes(self):
+        self.gh.put(self.held_bot_pr(ci="FAILURE", contexts=[check_run("test", "FAILURE")], requested=[VIEWER]),
+                    "review-requested:@me")
+        self.poll()
+        self.comp.do_action("o/r#1", "approve", {"merge": True})
+        approved = {"databaseId": 7, "state": "APPROVED", "submittedAt": "2026-10-20T11:00:00Z", "commit": {"oid": "aaa"}}
+        self.gh.put(self.held_bot_pr(head="bbb", my_review=approved, title="Bump x to 3"), "reviewed-by:@me")
+        self.poll()
+        self.assertFalse(any(c[0] == "graphql" for c in self.gh.calls))
+        self.assertEqual(self.comp.db.activity("o/r#1")[-1]["text"],
+                         "stopped holding the merge: the PR changed after you approved it")
+
     def test_turns_auto_merge_off_for_the_page(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()
         self.comp.do_action("o/r#1", "disable_auto_merge", {})
         self.assertEqual(self.gh.calls[-1][2], {"id": "PR_o/r_1"})
         self.assertFalse(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
+
+
+class BaseFailures(OrchestratorCase):
+    def test_a_check_that_also_fails_on_the_base_is_marked(self):
+        self.gh.put(pr_node(ci="FAILURE", contexts=[check_run("test", "FAILURE"), check_run("lint", "FAILURE", job=12)]),
+                    "author:@me")
+        self.gh.base_contexts = [check_run("test", "FAILURE", job=90), check_run("lint", "SUCCESS", job=91)]
+        state = self.poll()["o/r#1"]
+        self.assertEqual(state["failingOnBase"], ["test"])
+        self.assertEqual(next(s for s in state["steps"] if s["kind"] == "fix_ci")["title"],
+                         "test (also failing on main), lint")
+        self.gh.base_contexts = []
+        self.comp.base_checks = {}
+        self.assertEqual(self.poll()["o/r#1"]["failingOnBase"], [])
 
 
 class Stacks(OrchestratorCase):

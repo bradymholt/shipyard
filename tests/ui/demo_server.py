@@ -106,6 +106,7 @@ def main():
                              "path": "webhooks.py", "line": 12,
                              "hunk": "@@ -10,2 +10,3 @@\n def send(event):\n-    retries = 3\n+    retries = 5"}],
                    updated=ago(hours=1)), "author:@me")
+    gh.base_contexts = [check_run("rspec", "FAILURE", job=70, run=71)]
     gh.put(pr_node(102, head="h102", branch="me/ci-cache", ci="FAILURE",
                    contexts=[check_run("rspec", "FAILURE", job=7, run=8)], requested=["jm"],
                    requested_at={"jm": ago(hours=3)}, updated=ago(hours=2)), "author:@me")

@@ -149,8 +149,11 @@ def next_steps(snap, rules, cards=(), now=None):
             if unasked:
                 step.update(unasked=unasked, since=review.get("submitted"))
             out.append(step)
+        if any((c.get("auto_wait") or {}).get("hold") for c in cards):
+            out.append({"kind": "merge_held", "label": "Merges when green", "tone": "muted",
+                        "title": "Shipyard merges this once every check passes"})
         # A bot's PR has no author to merge it, so whoever approved it does.
-        if snap.get("author_bot") and (review or {}).get("state") == "APPROVED" and _mergeable(snap, rules):
+        elif snap.get("author_bot") and (review or {}).get("state") == "APPROVED" and _mergeable(snap, rules):
             out.append(dict(MERGE_STEP))
         return out
     pending = set(snap.get("requested") or [])
@@ -204,7 +207,9 @@ def next_steps(snap, rules, cards=(), now=None):
                     "title": "Re-runs the failed jobs once the running checks finish"})
     elif snap.get("ci") in events.FAILING and rules.get("fix_ci"):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
-        out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
+        on_base = set(snap.get("failing_on_base") or [])
+        titles = [f"{n} (also failing on {snap.get('base')})" if n in on_base else n for n in names]
+        out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(titles),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
     waiting = _required_checks_step(snap, now or datetime.now(timezone.utc))
     if waiting:

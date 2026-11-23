@@ -158,6 +158,17 @@ query($id: ID!) { node(id: $id) { ... on PullRequest {
   } }
 } } }"""
 
+BASE_CHECKS_QUERY = """
+query($owner: String!, $name: String!, $ref: String!) {
+  repository(owner: $owner, name: $name) { ref(qualifiedName: $ref) { target { ... on Commit {
+    statusCheckRollup { contexts(first: 100) { nodes {
+      __typename
+      ... on CheckRun { name conclusion status databaseId checkSuite { workflowRun { databaseId workflow { name } } } }
+      ... on StatusContext { context state }
+    } } }
+  } } } }
+}"""
+
 OWNER_QUERY = "query($login: String!) { repositoryOwner(login: $login) { __typename } }"
 
 FAILING = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
@@ -231,6 +242,22 @@ def current_checks(rollup):
         if k and (k not in latest or ctx["databaseId"] > latest[k]["databaseId"]):
             latest[k] = ctx
     return [c for c in nodes if not key(c) or latest[key(c)] is c]
+
+
+def failing_checks(rollup):
+    """The checks failing now, each with the workflow it belongs to."""
+    out = []
+    for ctx in current_checks(rollup):
+        if not is_failing(ctx):
+            continue
+        if ctx.get("__typename") == "CheckRun":
+            run = (ctx.get("checkSuite") or {}).get("workflowRun") or {}
+            out.append({"name": ctx.get("name"), "url": ctx.get("detailsUrl"), "job_id": ctx.get("databaseId"),
+                        "run_id": run.get("databaseId"), "workflow": (run.get("workflow") or {}).get("name")})
+        else:
+            out.append({"name": ctx.get("context"), "url": ctx.get("targetUrl"), "job_id": None, "run_id": None,
+                        "workflow": None})
+    return out
 
 
 def ci_state(rollup):
@@ -317,16 +344,7 @@ def snapshot(node, viewer):
     repo = node["repository"]["nameWithOwner"]
     commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
     rollup = commit.get("statusCheckRollup") or {}
-    failing = []
-    for ctx in current_checks(rollup):
-        if ctx.get("__typename") == "CheckRun" and ctx.get("conclusion") in FAILING:
-            failing.append({
-                "name": ctx.get("name"), "url": ctx.get("detailsUrl"), "job_id": ctx.get("databaseId"),
-                "run_id": (((ctx.get("checkSuite") or {}).get("workflowRun")) or {}).get("databaseId"),
-            })
-        elif ctx.get("__typename") == "StatusContext" and ctx.get("state") in ("FAILURE", "ERROR"):
-            failing.append({"name": ctx.get("context"), "url": ctx.get("targetUrl"),
-                            "job_id": None, "run_id": None})
+    failing = failing_checks(rollup)
     requested = [n for n in (reviewer_name(r.get("requestedReviewer"))
                              for r in (node.get("reviewRequests") or {}).get("nodes") or []) if n]
     requested_at, ready_at, dismissed_from = {}, None, {}
@@ -514,6 +532,13 @@ class Poller:
         if not node:
             raise LookupError("GitHub has no such PR, or the token can't see it.")
         return node
+
+    def failing_on(self, repo, branch):
+        """The (workflow, name) of each check failing on a branch's head."""
+        owner, name = repo.split("/", 1)
+        data = self.github.graphql(BASE_CHECKS_QUERY, {"owner": owner, "name": name, "ref": f"refs/heads/{branch}"})
+        target = ((data.get("repository") or {}).get("ref") or {}).get("target") or {}
+        return {(c["workflow"], c["name"]) for c in failing_checks(target.get("statusCheckRollup"))}
 
     def details(self, ids, viewer):
         ids = list(ids)

@@ -94,7 +94,7 @@ class Snapshot(unittest.TestCase):
         self.assertEqual(s["key"], "o/r#1")
         self.assertTrue(s["mine"])
         self.assertEqual(s["failing"], [{"name": "rspec", "url": node["commits"]["nodes"][0]["commit"][
-            "statusCheckRollup"]["contexts"]["nodes"][0]["detailsUrl"], "job_id": 5, "run_id": 6}])
+            "statusCheckRollup"]["contexts"]["nodes"][0]["detailsUrl"], "job_id": 5, "run_id": 6, "workflow": None}])
         self.assertEqual(s["requested"], ["jm"])
         self.assertEqual(s["requested_at"], {"jm": "2026-10-20T00:00:00Z"})
         # the author's own review comments don't count as reviews of their PR
