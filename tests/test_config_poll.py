@@ -109,6 +109,14 @@ class Snapshot(unittest.TestCase):
         other = check_run("rspec", "FAILURE", job=3)
         self.assertEqual(snapshot(pr_node(ci="FAILURE", contexts=[failed, passed, other]), VIEWER)["ci"], "FAILURE")
 
+    def test_a_newer_run_supersedes_the_jobs_it_cancelled(self):
+        cancelled = check_run("lint", "CANCELLED", job=5, run=2)
+        building = {**check_run("build", None, job=9, run=1), "status": "IN_PROGRESS"}
+        s = snapshot(pr_node(ci="FAILURE", contexts=[cancelled, building]), VIEWER)
+        self.assertEqual((s["ci"], s["failing"]), ("PENDING", []))
+        failed = check_run("lint", "FAILURE", job=5, run=2)
+        self.assertEqual(snapshot(pr_node(ci="FAILURE", contexts=[failed, building]), VIEWER)["ci"], "FAILURE")
+
     def test_team_requests(self):
         node = pr_node()
         node["reviewRequests"]["nodes"] = [{"requestedReviewer": {"__typename": "Team", "slug": "web"}}]
