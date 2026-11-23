@@ -57,7 +57,7 @@ DETAIL_FIELDS = """
   commits(last: 1) { nodes { commit {
     oid committedDate
     checkSuites(first: 30) { nodes { status workflowRun { databaseId url updatedAt workflow { name } } } }
-    statusCheckRollup { state contexts(first: 50) {
+    statusCheckRollup { state contexts(first: 100) {
       totalCount checkRunCountsByState { state count } statusContextCountsByState { state count }
       nodes {
       __typename
@@ -227,21 +227,35 @@ def is_failing(ctx):
 
 
 def current_checks(rollup):
-    """The rollup's checks less any run a later run of the same workflow job replaced."""
+    """The rollup's checks less any run a later run of the same workflow job replaced, and less
+    the jobs a later run of the workflow cancelled before it has reached them itself."""
     nodes = ((rollup or {}).get("contexts") or {}).get("nodes") or []
+
+    def run_of(ctx):
+        return (ctx.get("checkSuite") or {}).get("workflowRun") or {}
 
     def key(ctx):
         if ctx.get("__typename") != "CheckRun" or not ctx.get("databaseId"):
             return None
-        workflow = (((ctx.get("checkSuite") or {}).get("workflowRun") or {}).get("workflow") or {}).get("name")
-        return workflow, ctx.get("name")
+        return (run_of(ctx).get("workflow") or {}).get("name"), ctx.get("name")
 
-    latest = {}
+    latest, newest_job = {}, {}
     for ctx in nodes:
         k = key(ctx)
-        if k and (k not in latest or ctx["databaseId"] > latest[k]["databaseId"]):
+        if not k:
+            continue
+        if k not in latest or ctx["databaseId"] > latest[k]["databaseId"]:
             latest[k] = ctx
-    return [c for c in nodes if not key(c) or latest[key(c)] is c]
+        run = (k[0], run_of(ctx).get("databaseId"))
+        newest_job[run] = max(newest_job.get(run, 0), ctx["databaseId"])
+
+    # Run ids don't follow the order runs started in, so a later run is one still adding jobs.
+    def superseded(ctx):
+        workflow, run = key(ctx)[0], run_of(ctx).get("databaseId")
+        return ctx.get("conclusion") == "CANCELLED" and any(
+            w == workflow and r != run and job > ctx["databaseId"] for (w, r), job in newest_job.items())
+
+    return [c for c in nodes if not key(c) or (latest[key(c)] is c and not superseded(c))]
 
 
 def failing_checks(rollup):
