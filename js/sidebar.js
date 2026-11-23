@@ -326,7 +326,7 @@ function serverCardHtml(pr, card, first) {
   const leadContinue = leads && lead < 0 && list.some((p) => p.action === "continue");
   const proposals = list.map((p, i) => proposalHtml(pr, card, p, i, i === vi, i === lead)).join("");
   return `<div class="${cls}"><div class="nc-head">${title}${dismiss}</div>${verdict}${held}
-    ${verdict ? '<div class="nc-label">Summary</div>' : ""}<p>${fmtCode(card.summary || "")}</p>${proposals}
+    ${verdict ? "" : `<p>${fmtCode(card.summary || "")}</p>`}${proposals}
     ${review && !openKept ? "" : `<div class="nc-actions">${openKept}${review ? "" : continueButton(pr, leadContinue ? "primary" : "")}${rerun}${rerequest}${viewLog}</div>`}
     ${list.some((p) => p.action === "rerun_checks") ? suggestHtml("rerun_checks") : ""}</div>`;
 }

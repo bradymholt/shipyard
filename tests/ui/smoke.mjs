@@ -270,6 +270,7 @@ try {
   check((await sb.locator('a.btn-link:has-text("Finish review on GitHub")').getAttribute("href")).endsWith("/files"), "pre-review drafts on GitHub and links to the diff");
   check(await sb.locator('.next-card :text("Continue in")').count() === 0, "a review card has no Continue button");
   check((await sb.locator(".nc-verdict").textContent()).includes("Request changes"), "the pre-review leads with its verdict");
+  check(!(await sb.locator(".next-card.first").textContent()).includes("Solid overall"), "a review card with a verdict leaves out the summary");
   const auto = sb.locator("input[data-auto-approve]");
   check(await auto.isChecked() && (await sb.locator(".sb-auto .auto-why").textContent()).startsWith("Set by the pre-review"),
     "the pre-review turns auto-approve on for small asks");
