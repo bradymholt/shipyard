@@ -22,6 +22,7 @@ from .settings import MISSING, SECTIONS, fields as setting_fields, save as save_
 from .state import State, now_iso
 
 POLL_SECONDS = 60
+BASE_CHECKS_SECONDS = 300
 PASS_WORKERS = 2
 # Which passes may propose an action the server presses itself, and on whose PRs.
 # Anything else stays a button, even when its trust flag is on.
@@ -143,6 +144,8 @@ class Orchestrator:
         self.pin_misses = {}  # PR key -> the transcripts a lookup found no session in
         self.stacks = {}  # PR key -> the open PR it's stacked on and how far behind it the branch is
         self.behind_cache = {}  # (repo, parent head, child head) -> commits the child is missing
+        self.base_checks = {}  # (repo, base branch) -> (when it was read, the checks failing on its head)
+        self.base_failures = {}  # PR key -> its failing checks that fail on the base too
         self.recent_merged = {kind: [] for kind in MERGED_SEARCHES}
         self.merged_version = 0  # bumped when recent_merged changes, so the page gets it only then
         self.merged_checked = 0
@@ -322,6 +325,7 @@ class Orchestrator:
                                             for p in self.db.passes(snap["key"])):
                     self.ensure_pin(snap)
         self.refresh_stacks()
+        self.refresh_base_failures()
         self.status = {"github": "ok", "lastPoll": now_iso()}
         self.db.set_poll_memory({**self.poller.memory(), "viewer": viewer, "lastPoll": self.status["lastPoll"]})
         self.publish()  # open PRs first; merged history goes out as its own event
@@ -351,6 +355,28 @@ class Orchestrator:
             cache[pair] = self.behind_cache[pair]
             stacks[snap["key"]] = {"stack_parent": parent["number"], "behind_parent": cache[pair]}
         self.stacks, self.behind_cache = stacks, cache
+
+    def refresh_base_failures(self):
+        """Which of each open PR's failing checks also fail on the head of its base branch.
+        The base's checks move without touching the PR, so each base is asked again after a while."""
+        now, bases, found = time.monotonic(), {}, {}
+        for snap in self.db.prs():
+            if snap.get("state") != "OPEN" or snap.get("dropped") or not snap.get("failing"):
+                continue
+            pair = (snap["repo"], snap.get("base"))
+            if pair not in bases:
+                at, failing = self.base_checks.get(pair, (None, set()))
+                if at is None or now - at > BASE_CHECKS_SECONDS:
+                    try:
+                        at, failing = now, self.poller.failing_on(*pair)
+                    except Exception as e:
+                        print(f"Warning: reading {pair[1]}'s checks in {pair[0]} failed: {e}")
+                bases[pair] = (at, failing)
+            names = [c["name"] for c in snap["failing"] if (c.get("workflow"), c.get("name")) in bases[pair][1]]
+            if names:
+                found[snap["key"]] = {"failing_on_base": names}
+        self.base_checks = {pair: seen for pair, seen in bases.items() if seen[0] is not None}
+        self.base_failures = found
 
     def ingest(self, snap):
         prev = self.db.pr(snap["key"])
@@ -1324,7 +1350,8 @@ class Orchestrator:
         prs = {}
         for snap in self.db.prs():
             key = snap["key"]
-            view = {**snap, **(snap.get("pending") or {}), **self.stacks.get(key, {})}
+            on_base = {} if "failing" in (snap.get("pending") or {}) else self.base_failures.get(key, {})
+            view = {**snap, **(snap.get("pending") or {}), **self.stacks.get(key, {}), **on_base}
             pin = self.db.pin(key)
             session = None
             if pin and pin.get("session_id") and pin.get("path"):
@@ -1347,6 +1374,7 @@ class Orchestrator:
                 # What the server last saw, so the page can tell which of them is behind.
                 "updated": snap.get("updated"), "head": snap.get("head"), "ci": snap.get("ci"),
                 "state": snap.get("state"), "dropped": bool(snap.get("dropped")),
+                "failingOnBase": on_base.get("failing_on_base") or [],
                 "openThreads": sum(1 for t in snap.get("threads") or [] if not t.get("resolved")),
                 "snoozedUntil": self.db.snooze(key),
                 "waitingSince": ((snap.get("requested_at") or {}).get(snap.get("viewer")) or snap.get("ready_at")

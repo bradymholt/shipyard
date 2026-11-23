@@ -215,6 +215,7 @@ try {
 
   await page.locator('.card[data-key="o/r#102"] .next-row').click();
   await page.waitForSelector('#sidebar [data-show-diff]');
+  check((await sb.locator(".sb-state").textContent()).includes("also failing on main"), "a check that fails on the base branch too says so");
   check(await sb.locator('button.nc-run[data-action="apply_fix"]').count() === 0, "Apply fix stays hidden until the diff is shown");
   await sb.locator("[data-show-diff]").click();
   check((await sb.locator(".next-card pre").textContent()).includes("registry=https://mirror.example/"), "diff shows first");

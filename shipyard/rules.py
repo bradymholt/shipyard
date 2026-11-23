@@ -207,7 +207,9 @@ def next_steps(snap, rules, cards=(), now=None):
                     "title": "Re-runs the failed jobs once the running checks finish"})
     elif snap.get("ci") in events.FAILING and rules.get("fix_ci"):
         names = [c["name"] for c in snap.get("failing") or [] if c.get("name")]
-        out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(names),
+        on_base = set(snap.get("failing_on_base") or [])
+        titles = [f"{n} (also failing on {snap.get('base')})" if n in on_base else n for n in names]
+        out.append({"kind": "fix_ci", "tone": "red", "title": ", ".join(titles),
                     "label": f"Fix CI · {_clip(names[0], 18)}" if names else "Fix CI"})
     waiting = _required_checks_step(snap, now or datetime.now(timezone.utc))
     if waiting:

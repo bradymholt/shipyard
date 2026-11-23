@@ -112,8 +112,9 @@ function checksText(pr) {
   const s = rollupState(pr);
   if (!s) return "";
   const failing = failingChecks(pr);
+  const onBase = (serverPr(pr)?.failingOnBase || []).length;
   const text = { SUCCESS: "Checks passing", PENDING: "Checks running", EXPECTED: "Waiting on required checks" }[s]
-    || `${failing.length || "Checks"} failing`;
+    || `${failing.length || "Checks"} failing${onBase ? ` · ${onBase < failing.length ? `${onBase} ` : ""}also failing on ${pr.baseRefName}` : ""}`;
   return `<span class="ci ${s === "SUCCESS" ? "success" : s === "PENDING" || s === "EXPECTED" ? "pending" : "failure"}">${ciHtml(pr).replace(/<\/?span[^>]*>/g, "")}${esc(text)}</span>`;
 }
 

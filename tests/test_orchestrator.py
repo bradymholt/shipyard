@@ -27,6 +27,7 @@ class FakeGitHub:
         self.compare = {"files": [{"filename": "a.py", "status": "modified", "additions": 3, "deletions": 1}]}
         self.pr_files = [{"filename": "a.py"}]
         self.running_runs = set()
+        self.base_contexts = []
 
     def put(self, node, *lists):
         self.nodes[node["id"]] = node
@@ -45,6 +46,8 @@ class FakeGitHub:
                     "search": {"pageInfo": {"hasNextPage": False}, "nodes": copy.deepcopy(nodes)}}
         if "nodes(ids" in query:
             return {"nodes": [copy.deepcopy(self.nodes[i]) for i in variables["ids"]]}
+        if "ref(qualifiedName" in query:
+            return {"repository": {"ref": {"target": {"statusCheckRollup": {"contexts": {"nodes": self.base_contexts}}}}}}
         self.calls.append(("graphql", query.split("(")[0].split()[-1], variables))
         return {}
 
@@ -416,6 +419,20 @@ class AfterAction(OrchestratorCase):
         self.comp.do_action("o/r#1", "disable_auto_merge", {})
         self.assertEqual(self.gh.calls[-1][2], {"id": "PR_o/r_1"})
         self.assertFalse(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
+
+
+class BaseFailures(OrchestratorCase):
+    def test_a_check_that_also_fails_on_the_base_is_marked(self):
+        self.gh.put(pr_node(ci="FAILURE", contexts=[check_run("test", "FAILURE"), check_run("lint", "FAILURE", job=12)]),
+                    "author:@me")
+        self.gh.base_contexts = [check_run("test", "FAILURE", job=90), check_run("lint", "SUCCESS", job=91)]
+        state = self.poll()["o/r#1"]
+        self.assertEqual(state["failingOnBase"], ["test"])
+        self.assertEqual(next(s for s in state["steps"] if s["kind"] == "fix_ci")["title"],
+                         "test (also failing on main), lint")
+        self.gh.base_contexts = []
+        self.comp.base_checks = {}
+        self.assertEqual(self.poll()["o/r#1"]["failingOnBase"], [])
 
 
 class Stacks(OrchestratorCase):
