@@ -375,6 +375,41 @@ class AfterAction(OrchestratorCase):
         self.assertTrue(self.comp.db.pr("o/r#1")["pending"]["auto_merge"])
         self.assertEqual(self.comp.db.pr("o/r#1")["my_review"]["state"], "APPROVED")
 
+    def held_bot_pr(self, **kw):
+        node = pr_node(author="bot", **kw)
+        node["author"]["__typename"] = "Bot"
+        node["viewerCanEnableAutoMerge"] = False
+        return node
+
+    def test_merge_once_green_holds_the_merge_until_the_checks_pass(self):
+        self.gh.put(self.held_bot_pr(ci="FAILURE", contexts=[check_run("test", "FAILURE")], requested=[VIEWER]),
+                    "review-requested:@me")
+        self.poll()
+        out = self.comp.do_action("o/r#1", "approve", {"merge": True})
+        self.assertTrue(out["held"])
+        self.assertNotIn("warning", out)
+        state = self.poll()["o/r#1"]
+        self.assertEqual([s["kind"] for s in state["steps"]], ["merge_held"])
+        self.assertFalse(any(c[0] == "graphql" for c in self.gh.calls))
+        # a bot's rebase moves the head; the hold follows it and merges once it is green
+        approved = {"databaseId": 7, "state": "APPROVED", "submittedAt": "2026-10-20T11:00:00Z", "commit": {"oid": "aaa"}}
+        self.gh.put(self.held_bot_pr(head="bbb", my_review=approved), "reviewed-by:@me")
+        self.poll()
+        self.assertEqual(self.gh.calls[-1][2]["head"], "bbb")
+        self.assertEqual(self.comp.db.activity("o/r#1")[-1]["text"], "merged (squash)")
+
+    def test_a_held_merge_stops_when_the_pr_changes(self):
+        self.gh.put(self.held_bot_pr(ci="FAILURE", contexts=[check_run("test", "FAILURE")], requested=[VIEWER]),
+                    "review-requested:@me")
+        self.poll()
+        self.comp.do_action("o/r#1", "approve", {"merge": True})
+        approved = {"databaseId": 7, "state": "APPROVED", "submittedAt": "2026-10-20T11:00:00Z", "commit": {"oid": "aaa"}}
+        self.gh.put(self.held_bot_pr(head="bbb", my_review=approved, title="Bump x to 3"), "reviewed-by:@me")
+        self.poll()
+        self.assertFalse(any(c[0] == "graphql" for c in self.gh.calls))
+        self.assertEqual(self.comp.db.activity("o/r#1")[-1]["text"],
+                         "stopped holding the merge: the PR changed after you approved it")
+
     def test_turns_auto_merge_off_for_the_page(self):
         self.gh.put(pr_node(), "author:@me")
         self.poll()

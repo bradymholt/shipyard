@@ -53,6 +53,32 @@ PASS_ACTIVITY = {
 }
 
 
+def approved_shape(snap):
+    return [snap.get("title"), snap.get("additions"), snap.get("deletions"), snap.get("changed_files")]
+
+
+def checks_green(snap):
+    """Every check passed. A head with no checks yet doesn't count: they may not have started."""
+    return (snap.get("ci") == "SUCCESS" and not snap.get("checks_running")
+            and snap.get("mergeable") != "CONFLICTING" and not snap.get("merge_restricted"))
+
+
+def hold_broken(snap, card, wait):
+    """Why a held merge no longer applies ("" when there is nothing to say), or None while it does.
+    A bot's rebase moves the head without changing what you approved, so the hold follows it
+    while the title and the size of the diff stay the same."""
+    if not snap or snap.get("state") != "OPEN" or snap.get("dropped") or snap.get("auto_merge"):
+        return ""
+    if snap.get("draft"):
+        return "the PR went back to draft"
+    if (snap.get("my_review") or {}).get("state") != "APPROVED":
+        return "your approval no longer stands"
+    if snap.get("head") != card.get("head") and not (
+            snap.get("author_bot") and approved_shape(snap) == wait.get("approved")):
+        return "the PR changed after you approved it"
+    return None
+
+
 def reply_context(snap, comment_id):
     """Where a reply lands: the file, line and code of the thread holding that comment."""
     if not comment_id:
@@ -785,11 +811,14 @@ class Orchestrator:
         return datetime.fromisoformat(seen.replace("Z", "+00:00")) + timedelta(minutes=minutes)
 
     def retry_waiting_actions(self):
-        """Approvals wait out the time after a push; re-runs wait for running checks."""
+        """Approvals wait out the time after a push; re-runs wait for running checks;
+        held merges wait for every check to pass."""
         now = now_iso()
         for card in self.db.cards(statuses=("open",)):
             wait = card.get("auto_wait")
-            if wait and wait.get("manual"):
+            if wait and wait.get("hold"):
+                self.retry_held_merge(card, wait)
+            elif wait and wait.get("manual"):
                 self.retry_queued_rerun(card, wait)
             elif wait and (wait.get("until") or "") <= now:
                 self.db.update_card(card["id"], auto_wait=None)
@@ -921,6 +950,8 @@ class Orchestrator:
         self.record_pending(snap, action, payload)
         self.reread_for_page(snap)
         self.db.log(key, result)
+        if payload.get("hold_merge"):
+            self.hold_merge(snap)
         if card_id:
             self.db.update_card(card_id, status="done", result=result)
         self.poke()
@@ -928,9 +959,54 @@ class Orchestrator:
         out = {"ok": True, "result": result}
         if payload.get("merged"):
             out["merged"] = payload["merged"]
+        elif payload.get("hold_merge"):
+            out["held"] = True
         elif payload.get("merge"):
             out["warning"] = result  # approved, but the merge after it failed
         return out
+
+    def hold_merge(self, snap):
+        """A card that merges the PR once its checks pass, for when GitHub's auto-merge
+        has no required check to wait on. It remembers what you approved."""
+        key = snap["key"]
+        if any((c.get("auto_wait") or {}).get("hold") for c in self.db.cards(key, ("open",))):
+            return
+        card_id = self.db.add_card(key, {
+            "kind": "proposal", "action": "merge", "title": "Merge once the checks pass",
+            "summary": "GitHub's auto-merge only waits on required checks, and none is left here. "
+                       "Shipyard merges this when every check passes.",
+            "payload": {}, "head": snap.get("head")})
+        self.db.update_card(card_id, auto_wait={"action": "merge", "hold": True, "approved": approved_shape(snap)})
+
+    def retry_held_merge(self, card, wait):
+        """Merge a held PR once its checks pass. A merge can't be undone, so the PR is
+        read again first, and one failed try hands the merge back to you."""
+        key, snap = card["key"], self.db.pr(card["key"])
+        fresh = None
+        for attempt in range(2):
+            broken = hold_broken(snap, card, wait)
+            if broken is not None:
+                self.db.update_card(card["id"], status="done", auto_wait=None)
+                if broken:
+                    self.db.log(key, f"stopped holding the merge: {broken}")
+                return
+            if self.held() or not checks_green(snap):
+                return
+            if attempt:
+                break
+            try:
+                fresh = self.poller.details([snap["id"]], self.viewer)
+            except Exception as e:
+                print(f"Warning: re-reading {key} before its held merge failed: {e}")
+                return
+            if not fresh or fresh[0].get("head") != snap.get("head"):
+                return  # the poll hasn't seen this head yet
+            snap = fresh[0]
+        self.db.update_card(card["id"], auto_wait=None)
+        try:
+            self.do_action(key, "merge", {}, card["id"])
+        except Exception as e:
+            self.db.log(key, f"tried the held merge: {e}")
 
     def queue_rerun(self, snap, card_id, runs):
         self.db.update_card(card_id, status="open", auto_wait={

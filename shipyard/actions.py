@@ -110,6 +110,17 @@ def _nothing_to_wait_for(error):
     return "clean status" in str(error).lower()
 
 
+def _unstable(error):
+    # GitHub: "Pull request is in unstable status": no required check is left to wait on,
+    # but one that isn't required is failing or still running.
+    return "unstable status" in str(error).lower()
+
+
+def _hold_merge(payload):
+    payload["hold_merge"] = True
+    return "holding the merge until the checks pass"
+
+
 def _with_merge_method(run):
     """Try merge methods in order, moving on only when the repo disallows one; any
     other failure (branch protection, a network error) stops there."""
@@ -235,7 +246,8 @@ def _review(gh, snap, event, body, comments=()):
 
 def _merge_after_approval(gh, snap, payload):
     """Turn auto-merge on, or merge now when GitHub has nothing left to wait for.
-    payload["merged"] tells the orchestrator which happened."""
+    payload["merged"] tells the orchestrator which happened. With checks failing or running
+    that auto-merge won't wait on, payload["hold_merge"] asks it to merge once they pass."""
     if snap.get("auto_merge"):
         payload["merged"] = "auto_merge"
         return "auto-merge was already on"
@@ -245,8 +257,12 @@ def _merge_after_approval(gh, snap, payload):
             payload["merged"] = "auto_merge"
             return "enabled auto-merge"
         except ActionError as e:
+            if _unstable(e):
+                return _hold_merge(payload)
             if not _nothing_to_wait_for(e):
                 raise
+    elif snap.get("ci") not in (None, "SUCCESS") or snap.get("checks_running"):
+        return _hold_merge(payload)
     result = merge(gh, snap, payload, {})
     payload["merged"] = "merged"
     return result

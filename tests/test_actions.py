@@ -75,6 +75,12 @@ class Actions(unittest.TestCase):
         self.assertEqual(actions.run(RecordingGitHub(), "approve", {**snap(author="bob"), "auto_merge": True}, payload),
                          "approved and auto-merge was already on")
         self.assertEqual(payload["merged"], "auto_merge")
+        gh = RecordingGitHub(graphql_errors=[GitHubError("Pull request Pull request is in unstable status")])
+        payload = {"merge": True}
+        self.assertEqual(actions.run(gh, "approve", snap(author="bob", ci="FAILURE"), payload),
+                         "approved and holding the merge until the checks pass")
+        self.assertTrue(payload["hold_merge"])
+        self.assertFalse(any("mergePullRequest" in c[1] for c in gh.calls))
         gh = RecordingGitHub()
         self.assertEqual(actions.run(gh, "approve", snap(author="bob"), {}), "approved")
         self.assertEqual(len(gh.calls), 1)

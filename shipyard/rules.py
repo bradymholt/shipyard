@@ -149,8 +149,11 @@ def next_steps(snap, rules, cards=(), now=None):
             if unasked:
                 step.update(unasked=unasked, since=review.get("submitted"))
             out.append(step)
+        if any((c.get("auto_wait") or {}).get("hold") for c in cards):
+            out.append({"kind": "merge_held", "label": "Merges when green", "tone": "muted",
+                        "title": "Shipyard merges this once every check passes"})
         # A bot's PR has no author to merge it, so whoever approved it does.
-        if snap.get("author_bot") and (review or {}).get("state") == "APPROVED" and _mergeable(snap, rules):
+        elif snap.get("author_bot") and (review or {}).get("state") == "APPROVED" and _mergeable(snap, rules):
             out.append(dict(MERGE_STEP))
         return out
     pending = set(snap.get("requested") or [])

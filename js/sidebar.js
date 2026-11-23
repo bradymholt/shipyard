@@ -233,7 +233,7 @@ function proposalHtml(pr, card, p, i, bare = false, lead = false) {
   }
   if (TEXT_ACTIONS.has(p.action)) body += textField(field, p.payload?.body);
   if (p.action === "approve" && !pr.autoMergeRequest && pr.author?.__typename === "Bot") {
-    body += `<label class="nc-check" title="Turns auto-merge on with the approval, or merges right away when GitHub has nothing left to wait for.">
+    body += `<label class="nc-check" title="Turns auto-merge on with the approval, or merges right away when GitHub has nothing left to wait for. When a check GitHub doesn't require is failing or running, Shipyard merges once it passes.">
       <input type="checkbox" data-merge-on-approve="${field}"${mergeOnApprove() ? " checked" : ""}> Merge once green</label>`;
   }
   if (p.action === "submit_review") {
@@ -299,10 +299,11 @@ function serverCardHtml(pr, card, first) {
       <p class="${card.kind === "error" ? "nc-error" : "nc-reason"}">${esc(card.error || "")}</p>${raw}${retry}</div>`;
   }
   if (card.kind === "proposal") {
+    const hold = card.auto_wait?.hold;
     return `<div class="${cls}"><div class="nc-head">${fmtCode(card.title)}${dismiss}</div>
       <p class="nc-reason">${fmtCode(card.summary || "")}</p>
-      <div class="nc-actions"><button type="button" class="nc-run${first ? " primary" : ""}" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${esc(ACTION_LABELS[card.action] || "Do it")}</button>
-        <button type="button" data-dismiss="${card.id}">Dismiss</button></div></div>`;
+      <div class="nc-actions"><button type="button" class="nc-run${first && !hold ? " primary" : ""}" data-card="${card.id}" data-index="0" data-action="${esc(card.action)}">${hold ? "Merge now" : esc(ACTION_LABELS[card.action] || "Do it")}</button>
+        <button type="button" data-dismiss="${card.id}">${hold ? "Don't merge" : "Dismiss"}</button></div></div>`;
   }
   const chip = card.pass === "feedback"
     ? serverSteps(pr).find((s) => s.kind === "address_feedback" || s.kind === "rerequest_review") : null;
