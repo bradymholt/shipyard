@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Server for Shipyard.
 
-Serves the dashboard and a /worktrees.json endpoint so the page can offer links that
-open branches in your configured app or IDE, and watches your PRs on GitHub: it turns
+Serves the dashboard and its state, including your local checkouts so the page can open
+branches in your configured app or IDE, and watches your PRs on GitHub: it turns
 what changed into named events, runs your coding agent on the ones worth a look, and
 shows the result as a card in the dashboard's sidebar. You decide; it prepares.
 

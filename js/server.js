@@ -88,7 +88,7 @@ async function apiJson(res) {
 
 // The server re-scans checkouts with every poll and after its own branch actions;
 // this asks for one now, for changes made outside Shipyard.
-export const rescanWorktrees = () => apiCall("api/rescan-worktrees").catch(() => {});
+const rescanWorktrees = () => apiCall("api/rescan-worktrees").catch(() => {});
 
 function applyWorktrees() {
   const map = {};
@@ -174,7 +174,6 @@ export function serverStatusHtml() {
 const FOCUS_POLL_MS = 10 * 1000;
 let lastFocusCheck = 0;
 
-// A poll re-scans checkouts too, so ask for one or the other.
 // New page code is on disk: reload once nothing would be lost, right away for a hidden tab.
 let reloadTimer = null;
 
@@ -192,6 +191,7 @@ export function refreshOnFocus() {
   // Showing a tab also focuses its window, so the two events arrive together.
   if (document.hidden || Date.now() - lastFocusCheck < 1000) return;
   lastFocusCheck = Date.now();
+  // A poll re-scans checkouts too, so ask for one or the other.
   if (serverLive() && Date.now() - lastPollAt() >= FOCUS_POLL_MS) {
     apiCall("api/check-now").catch(() => {});
   } else {

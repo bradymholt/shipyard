@@ -50,7 +50,6 @@ html { font-size: 17px; }
   --on-light: #12263a;
   --on-dark: #ffffff;
   --avatar-bg: #7a5fc0;
-  --shadow: 0 0.0625rem 0.125rem light-dark(rgba(18,38,58,.06), rgba(0,0,0,.3));
 
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   --display: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -183,8 +182,6 @@ button.icon-btn svg { fill: var(--fg-muted); }
 /* ---------- page body ---------- */
 .container { max-width: 71.25rem; margin: 0 auto; padding: 1rem 1.25rem 3.5rem; }
 
-.hint { color: var(--fg-muted); font-size: 0.75rem; }
-.hint code { font-family: var(--mono); font-size: 0.6875rem; background: var(--bg-inset); padding: 0 0.3125rem; border-radius: 0.25rem; }
 .hidden { display: none !important; }
 
 dialog#error-dialog, dialog#shortcuts-dialog {
@@ -381,8 +378,6 @@ dialog#welcome-dialog::backdrop { background: var(--scrim); }
   margin-top: 0.1875rem;
 }
 .pr-icon { flex: none; margin-top: 0.1875rem; }
-.pr-icon.open svg { fill: var(--green); }
-.pr-icon.draft svg { fill: var(--fg-muted); }
 .pr-icon.merged svg { fill: var(--purple); }
 .card-title code, .sb-title code, .next-card code, .sess-exchange code {
   font-family: var(--mono); font-size: 0.85em; font-weight: 500;

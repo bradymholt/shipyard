@@ -217,11 +217,11 @@ def main():
                            "payload": {"body": "Thanks! Empty exports still crash (export.py:40)."}}]},
     }
     wts = [{"repo": "o/r", "branch": "me/webhook-retry", "path": str(checkout), "main": False,
-            "workspace": None, "dirty": False, "activity": 0, "session": {"id": "s-open", "updated": 0}},
+            "workspace": None, "dirty": False, "activity": 0},
            {"repo": "o/r", "branch": "me/ci-cache", "path": str(checkout), "main": False,
-            "workspace": None, "dirty": False, "activity": 0, "session": {"id": "s-open", "updated": 0}},
+            "workspace": None, "dirty": False, "activity": 0},
            {"repo": "o/r", "branch": "me/old-feature", "path": str(merged_wt), "main": False,
-            "workspace": None, "dirty": False, "activity": 0, "session": None}]
+            "workspace": None, "dirty": False, "activity": 0}]
     for target in ("shipyard.orchestrator.adapter_for", "shipyard.server.worktrees.discover",
                    "shipyard.orchestrator.worktrees.discover", "shipyard.orchestrator.worktrees.review_worktree",
                    "shipyard.orchestrator.worktrees.ensure_clone"):

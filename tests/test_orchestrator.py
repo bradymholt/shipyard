@@ -298,7 +298,7 @@ class Settings(OrchestratorCase):
         with mock.patch("shipyard.orchestrator.worktrees.discover", return_value=[]) as scan:
             comp.save_setting(["roots"], self.checkout)
         self.assertEqual(comp.roots, [os.path.realpath(self.checkout)])
-        scan.assert_called_once_with(comp.roots, None)
+        scan.assert_called_once_with(comp.roots)
 
     def test_views_saved_in_the_database_move_to_the_config_file(self):
         self.comp.db.set_current_view("")

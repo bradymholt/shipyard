@@ -124,7 +124,7 @@ export function ciHtml(pr) {
   return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
 }
 
-export const launchTarget = (checkout) => state.launcher.target === "workspace"
+const launchTarget = (checkout) => state.launcher.target === "workspace"
   ? (checkout.workspace || checkout.path)
   : checkout.path;
 
@@ -418,22 +418,14 @@ function renderBoard() {
     [prKey(pr), pr]
   )).values()];
   const stepsFor = (prs) => prs.filter(needsYou).length;
-  const mineCount = state.serverState
-    ? stepsFor(state.prs.filter((pr) => pr.author?.login === state.viewer))
-    : state.prs.filter((pr) => {
-      if (pr.author?.login !== state.viewer || pr.isDraft) return false;
-      const lane = laneOf(pr);
-      return lane === 0 || (lane === 2 && !pr.autoMergeRequest);
-    }).length;
+  const mineCount = stepsFor(state.prs.filter((pr) => pr.author?.login === state.viewer));
   const mineCountEl = $("#count-mine");
   mineCountEl.textContent = mineCount || "";
   mineCountEl.classList.toggle("hidden", mineCount === 0);
   mineCountEl.title = mineCount
     ? `${mineCount} pull request${mineCount === 1 ? "" : "s"} ${mineCount === 1 ? "needs" : "need"} your attention`
     : "";
-  const reviewCount = state.serverState
-    ? stepsFor(reviewSet.filter(reviewItem))
-    : reviewSet.filter((pr) => reviewItem(pr) && reviewLaneOf(pr) === 0).length;
+  const reviewCount = stepsFor(reviewSet.filter(reviewItem));
   const reviewCountEl = $("#count-review");
   reviewCountEl.textContent = reviewCount || "";
   reviewCountEl.classList.toggle("hidden", reviewCount === 0);
@@ -510,7 +502,7 @@ function renderBoard() {
     if (i === (reviewBoard ? 1 : 2) && recentMerged.length) {
       laneHtml += '<div class="merged-divider"></div>' + mergedSection(recentMerged, mergedCard);
     }
-    const needs = state.serverState ? stepsFor(inLane) : 0;
+    const needs = stepsFor(inLane);
     const laneCount = `<span class="lane-count">${needs
       ? `<span class="lane-needs">${needs}${needs < inLane.length ? ` of ${inLane.length}` : ""} need${needs === 1 ? "s" : ""} you</span>`
       : inLane.length}</span>`;
@@ -562,15 +554,6 @@ function loadErrorHtml() {
   return `<div class="error-box">${esc(githubProblem())}</div>`;
 }
 
-// List view hangs merges off their own card outside #list-body, so both roots listen.
-function handleMergedClick(e) {
-  const btn = e.target.closest("button.merged-more");
-  if (!btn) return false;
-  if (btn.dataset.merged === "less") { state.mergedExtra = 0; render(); }
-  else revealMoreMerged();
-  return true;
-}
-
 listBody.addEventListener("click", async (e) => {
   const chip = e.target.closest("button.next-row");
   if (chip) { openSidebar(chip.dataset.open); return; }
@@ -584,7 +567,12 @@ listBody.addEventListener("click", async (e) => {
   if (laneHeader) { toggleLane(laneHeader.dataset.lane); return; }
   const snoozedToggle = e.target.closest("button.snoozed-toggle");
   if (snoozedToggle) { toggleSnoozed(snoozedToggle.dataset.snoozedLane); return; }
-  if (handleMergedClick(e)) return;
+  const mergedMore = e.target.closest("button.merged-more");
+  if (mergedMore) {
+    if (mergedMore.dataset.merged === "less") { state.mergedExtra = 0; render(); }
+    else revealMoreMerged();
+    return;
+  }
 
   const openBtn = e.target.closest("button.wt-open");
   if (openBtn) {
@@ -602,7 +590,7 @@ listBody.addEventListener("click", async (e) => {
   if (agentBtn) {
     agentBtn.disabled = true;
     try {
-      await openAgent(agentBtn.dataset.path || agentBtn.dataset.agentPath, agentBtn.dataset.session || agentBtn.dataset.agentSession);
+      await openAgent(agentBtn.dataset.path, agentBtn.dataset.session);
     } finally {
       agentBtn.disabled = false;
     }
