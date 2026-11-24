@@ -191,8 +191,20 @@ def checks_running(rollup):
     return sum(c.get("count") or 0 for c in counts if c.get("state") in RUNNING)
 
 
+def last_commit(node):
+    return ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+
+
+def branch_rules(node):
+    return ((node.get("baseRef") or {}).get("rules") or {}).get("nodes") or []
+
+
+def run_of(ctx):
+    return (ctx.get("checkSuite") or {}).get("workflowRun") or {}
+
+
 def signature(node):
-    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    commit = last_commit(node)
     rollup = commit.get("statusCheckRollup") or {}
     return "|".join(str(v) for v in (node.get("updatedAt"), node.get("headRefOid"), rollup.get("state"),
                                      checks_running(rollup), node.get("reviewDecision"), node.get("isDraft"),
@@ -202,7 +214,7 @@ def signature(node):
 def blocked_after_approval(node):
     """Search can keep returning BLOCKED for a PR GitHub has since cleared to merge, so
     these are re-read every poll rather than trusted from the signature."""
-    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    commit = last_commit(node)
     state = (commit.get("statusCheckRollup") or {}).get("state")
     return (node.get("mergeStateStatus") == "BLOCKED" and node.get("reviewDecision") == "APPROVED"
             and not node.get("isDraft") and state in (None, "SUCCESS"))
@@ -231,9 +243,6 @@ def current_checks(rollup):
     """The rollup's checks less any run a later run of the same workflow job replaced, and less
     the jobs a later run of the workflow cancelled before it has reached them itself."""
     nodes = ((rollup or {}).get("contexts") or {}).get("nodes") or []
-
-    def run_of(ctx):
-        return (ctx.get("checkSuite") or {}).get("workflowRun") or {}
 
     def key(ctx):
         if ctx.get("__typename") != "CheckRun" or not ctx.get("databaseId"):
@@ -266,7 +275,7 @@ def failing_checks(rollup):
         if not is_failing(ctx):
             continue
         if ctx.get("__typename") == "CheckRun":
-            run = (ctx.get("checkSuite") or {}).get("workflowRun") or {}
+            run = run_of(ctx)
             out.append({"name": ctx.get("name"), "url": ctx.get("detailsUrl"), "job_id": ctx.get("databaseId"),
                         "run_id": run.get("databaseId"), "workflow": (run.get("workflow") or {}).get("name")})
         else:
@@ -302,7 +311,7 @@ def _open_threads(node):
 def required_checks_passed(node, rollup):
     """Every check the base branch's rulesets require reported and passed. False when the
     rulesets name none, as when the requirement comes from classic branch protection."""
-    base_rules = ((node.get("baseRef") or {}).get("rules") or {}).get("nodes") or []
+    base_rules = branch_rules(node)
     required = {c.get("context") for r in base_rules if r.get("type") == "REQUIRED_STATUS_CHECKS"
                 for c in ((r.get("parameters") or {}).get("requiredStatusChecks") or [])}
     passed = {c.get("name") if c.get("__typename") == "CheckRun" else c.get("context")
@@ -317,10 +326,10 @@ def merge_restricted(node):
     PR is approved and every required check passed, so the reason is one GitHub's API doesn't name."""
     if node.get("mergeStateStatus") != "BLOCKED":
         return None
-    base_rules = ((node.get("baseRef") or {}).get("rules") or {}).get("nodes") or []
+    base_rules = branch_rules(node)
     if any(r.get("type") == "UPDATE" for r in base_rules):
         return "ruleset"
-    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    commit = last_commit(node)
     rollup = commit.get("statusCheckRollup")
     if (node.get("reviewDecision") == "APPROVED" and not node.get("isDraft") and not _open_threads(node)
             and ci_state(rollup) in (None, "SUCCESS") and required_checks_passed(node, rollup)):
@@ -358,7 +367,7 @@ def first_author(conn):
 
 def page_pr(node):
     """The PR in the shape the page's own GitHub queries return, so the page can draw it as is."""
-    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    commit = last_commit(node)
     rollup = commit.get("statusCheckRollup")
     ci = pr_ci(node, rollup)
     comments = node.get("comments") or {}
@@ -385,7 +394,7 @@ def page_pr(node):
 def snapshot(node, viewer):
     """Flatten a PullRequest node into what events and rules need."""
     repo = node["repository"]["nameWithOwner"]
-    commit = ((node.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {}
+    commit = last_commit(node)
     rollup = commit.get("statusCheckRollup") or {}
     failing = failing_checks(rollup)
     requested = [n for n in (reviewer_name(r.get("requestedReviewer"))
