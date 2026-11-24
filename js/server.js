@@ -80,7 +80,7 @@ export async function apiGet(url) {
   return apiJson(res);
 }
 
-async function apiJson(res) {
+export async function apiJson(res) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ok === false) throw new Error(data.error || `Shipyard request failed (${res.status}).`);
   return data;

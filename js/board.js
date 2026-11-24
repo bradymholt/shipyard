@@ -1,7 +1,7 @@
 // The board: lanes, cards, and Recently merged.
 import { $, listBody, LS, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
-import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
+import { AGENT_ICONS, agoSpan, busy, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
+import { apiCall, apiJson, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
 import { agentName, stackParents, ciOk, serverPr, hasNewCommitsSinceReview, changedFor, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
@@ -139,19 +139,15 @@ export async function openInApp(target) {
     return;
   }
   try {
-    const res = await apiPost(`open-app?path=${encodeURIComponent(target)}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) showError(data.error || `Open in ${state.launcher.name} failed (${res.status}).`);
+    await apiJson(await apiPost(`open-app?path=${encodeURIComponent(target)}`));
   } catch (err) {
     showError(err.message);
   }
 }
 
-async function openAgent(path, session) {
+export async function openAgent(path, session) {
   try {
-    const res = await apiPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) showError(data.error || `Open in ${state.agent.name} failed (${res.status}).`);
+    await apiJson(await apiPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`));
   } catch (err) {
     showError(err.message);
   }
@@ -599,57 +595,22 @@ listBody.addEventListener("click", async (e) => {
 
   const mainBtn = e.target.closest("button.wt-main");
   if (mainBtn) {
-    mainBtn.disabled = true;
-    const original = mainBtn.innerHTML;
-    mainBtn.textContent = "…";
-    try {
-      const res = await apiPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        await openInApp(launchTarget(data));
-      } else {
-        showError(data.error || `Couldn't open in your main clone (${res.status}).`, "Can't open in main clone");
-      }
-    } catch (err) {
-      showError(err.message, "Can't open in main clone");
-    } finally {
-      mainBtn.disabled = false;
-      mainBtn.innerHTML = original;
-    }
-    return;
+    return busy(mainBtn, async () => {
+      const data = await apiJson(await apiPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`));
+      await openInApp(launchTarget(data));
+    }, "Can't open in main clone");
   }
 
-  const draftBtn = e.target.closest("button.draft-toggle");
-  if (draftBtn) {
-    const draftPr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
-    if (!draftPr) return;
-    draftBtn.disabled = true;
-    draftBtn.textContent = "…";
-    try {
-      await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(draftPr))}&action=mark_ready`, { payload: {} });
-      markSeen(draftPr);
-      render();
-    } catch (err) {
-      alert(`Mark ready: ${err.message}`);
-      render();
-    }
-    return;
-  }
-
-  const btn = e.target.closest("button.am-toggle");
-  const amPr = btn && state.prs.find((p) => p.id === btn.dataset.pr);
-  if (!amPr) return;
-  btn.disabled = true;
-  btn.textContent = "…";
-  const action = btn.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
-  try {
-    await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(amPr))}&action=${action}`, { payload: {} });
-    markSeen(amPr);
-    render();
-  } catch (err) {
-    alert(`Auto-merge: ${err.message}`);
-    render();
-  }
+  const toggle = e.target.closest("button.draft-toggle, button.am-toggle");
+  const togglePr = toggle && state.prs.find((p) => p.id === toggle.dataset.pr);
+  if (!togglePr) return;
+  const ready = toggle.classList.contains("draft-toggle");
+  const action = ready ? "mark_ready" : toggle.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
+  await busy(toggle, async () => {
+    await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(togglePr))}&action=${action}`, { payload: {} });
+    markSeen(togglePr);
+  }, ready ? "Couldn't mark it ready" : "Couldn't change auto-merge");
+  render();
 });
 
 $("#sort-select").addEventListener("change", (e) => {

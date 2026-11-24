@@ -1,10 +1,10 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
 import { $, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, BACK_ICON, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
-import { apiCall, apiGet, apiPost, automationHeld, saveSetting, worktreeFor } from "./server.js";
+import { AGENT_ICONS, agoSpan, BACK_ICON, busy, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
+import { apiCall, apiGet, apiJson, apiPost, automationHeld, saveSetting, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
 import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markSeen, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
-import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
+import { ciHtml, openAgent, openCheckoutButton, openInApp, render } from "./board.js";
 
 // One component whose sections appear when the server is connected, like the
 // worktree icons: Header, Next, Auto-approve, PR session, Activity.
@@ -556,18 +556,6 @@ export function renderSidebar() {
 }
 
 // Run a server request from a button, showing progress on it and any error in a dialog.
-async function busy(btn, fn, title = "Couldn't do that") {
-  const original = btn ? btn.innerHTML : "";
-  if (btn) { btn.disabled = true; btn.textContent = "…"; }
-  try {
-    await fn();
-  } catch (err) {
-    showError(err.message, title);
-  } finally {
-    if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = original; }
-  }
-}
-
 const fieldValue = (field) => {
   const el = $("#sidebar").querySelector(`[data-field="${CSS.escape(field)}"]`);
   return el ? el.value : drafts.get(field);
@@ -603,18 +591,12 @@ $("#sidebar").addEventListener("click", async (e) => {
     if (btn.dataset.makeWorktree && pr) {
       e.preventDefault();
       await busy(btn, async () => {
-        const res = await apiPost(`branch-worktree?repo=${encodeURIComponent(pr.repository?.nameWithOwner || "")}&branch=${encodeURIComponent(pr.headRefName || "")}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) throw new Error(data.error || `Creating a worktree failed (${res.status}).`);
+        const data = await apiJson(await apiPost(`branch-worktree?repo=${encodeURIComponent(pr.repository?.nameWithOwner || "")}&branch=${encodeURIComponent(pr.headRefName || "")}`));
         window.location.href = btn.dataset.makeWorktree.replaceAll("{path}", encodeURIComponent(data.path));
       });
     } else if (btn.dataset.agentSession) {
       e.preventDefault();
-      await busy(btn, async () => {
-        const res = await apiPost(`open-agent?path=${encodeURIComponent(btn.dataset.agentPath)}&session=${encodeURIComponent(btn.dataset.agentSession)}`);
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) throw new Error(data.error || `Open in ${agentName()} failed (${res.status}).`);
-      });
+      await busy(btn, () => openAgent(btn.dataset.agentPath, btn.dataset.agentSession));
     }
     return;
   }
