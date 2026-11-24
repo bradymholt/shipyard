@@ -2,9 +2,9 @@
 import { state } from "./base.js";
 import { mergeMergedLists, prKey } from "./data.js";
 
-export function reviewRequestedForViewer(pr) {
-  return (pr.reviewRequests?.nodes || []).some((r) => r.requestedReviewer?.login === state.viewer);
-}
+const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
+export const reviewRequestedForViewer = (pr) => reviewRequested(pr, state.viewer);
+export const awaitingReview = (pr) => (pr.reviewRequests?.nodes || []).length > 0;
 
 // GitHub has no diff comment outside a review: "Add single comment" still creates a
 // review with state COMMENTED, so reviewed-by:@me matches PRs you merely chimed in
@@ -54,7 +54,7 @@ export function matchesFilter(pr) {
 }
 
 export function ciOk(pr) {
-  const ci = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state;
+  const ci = rollupState(pr);
   return !ci || ci === "SUCCESS";
 }
 
@@ -62,7 +62,7 @@ export function ciOk(pr) {
 function sortRank(pr) {
   if (pr.reviewDecision === "APPROVED") return ciOk(pr) ? 0 : 1;
   if (pr.reviewDecision === "CHANGES_REQUESTED") return 1;
-  return (pr.reviewRequests?.nodes || []).length > 0 ? 3 : 2;
+  return awaitingReview(pr) ? 3 : 2;
 }
 
 function reviewSortRank(pr) {
@@ -106,7 +106,7 @@ export function stackParents(prs) {
 export function laneOf(pr) {
   if (pr.isDraft) return 0;
   if (pr.reviewDecision === "APPROVED") return rollupState(pr) === "EXPECTED" || pr.mergeRestricted ? 1 : 2;
-  if ((pr.reviewRequests?.nodes || []).length > 0) return 1;
+  if (awaitingReview(pr)) return 1;
   return 0;
 }
 
@@ -134,8 +134,6 @@ export function failingChecks(pr) {
     .filter((c) => c.__typename === "CheckRun" ? FAILING_CONCLUSIONS.has(c.conclusion) : c.state === "FAILURE" || c.state === "ERROR")
     .map((c) => ({ name: c.name || c.context || "check", url: c.detailsUrl || c.targetUrl }));
 }
-
-const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
 export const REVIEW_STATES = { approve: "APPROVED", APPROVE: "APPROVED", comment_unresolved: "COMMENTED",
   COMMENT: "COMMENTED", REQUEST_CHANGES: "CHANGES_REQUESTED" };

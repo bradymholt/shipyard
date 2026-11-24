@@ -141,6 +141,10 @@ def view_targets(view):
     return targets
 
 
+def view_key(view):
+    return ", ".join(view_targets(view)) if view else ""
+
+
 def validate_views(raw):
     if not isinstance(raw, list):
         raise ValueError('"views" must be an array')
@@ -263,6 +267,8 @@ def validate_auto(raw):
         value = raw.get(name, AUTO_DEFAULTS[name])
         if value is not False and name in HARD_LOCKED:
             raise ValueError(f'auto "{name}" is locked: it posts under your name, so it stays manual')
+        if value is True:
+            value = {}
         if isinstance(value, dict):
             allowed = ({"when", "max_per_pr"} | ({"max_lines"} if name in MAX_LINES else set())
                        | ({"min_wait_minutes"} if name == "approve_rereview" else set()))
@@ -286,12 +292,6 @@ def validate_auto(raw):
                 if not isinstance(wait, (int, float)) or isinstance(wait, bool) or wait < 0:
                     raise ValueError(f'auto "{name}" "min_wait_minutes" must be a non-negative number')
                 auto[name]["min_wait_minutes"] = wait
-        elif value is True:
-            auto[name] = {"min_confidence": "high", "max_per_pr": 2}
-            if name in MAX_LINES:
-                auto[name]["max_lines"] = MAX_LINES[name]
-            if name == "approve_rereview":
-                auto[name]["min_wait_minutes"] = REREVIEW_MIN_WAIT_MINUTES
         elif value is False:
             auto[name] = None
         else:

@@ -40,8 +40,12 @@ KEEP_DAYS = 14
 ACTIVITY_PER_PR = 100
 
 
+def iso(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def now_iso():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return iso(datetime.now(timezone.utc))
 
 
 class State:
@@ -79,12 +83,11 @@ class State:
             self.db.close()
 
     def poll_memory(self):
-        rows = self._rows("SELECT value FROM meta WHERE key = 'poll'")
-        return json.loads(rows[0]["value"]) if rows else None
+        value = self._meta("poll")
+        return json.loads(value) if value else None
 
     def set_poll_memory(self, memory):
-        self._exec("INSERT INTO meta (key, value) VALUES ('poll', ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(memory),))
+        self._set_meta("poll", json.dumps(memory))
 
     def session_token(self):
         """The token the page sends with every POST. It outlives restarts, so an open tab
@@ -101,46 +104,48 @@ class State:
     def automation(self):
         """"on" once you've let Shipyard act on its own, "held" until then, None before the
         first start decides."""
-        rows = self._rows("SELECT value FROM meta WHERE key = 'automation'")
-        return rows[0]["value"] if rows else None
+        return self._meta("automation")
 
     def set_automation(self, value):
-        self._exec("INSERT INTO meta (key, value) VALUES ('automation', ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (value,))
+        self._set_meta("automation", value)
 
     def welcomed(self):
         """True once the welcome was dismissed, False while it shows, None before the first start decides."""
-        rows = self._rows("SELECT value FROM meta WHERE key = 'welcomed'")
-        return rows[0]["value"] == "1" if rows else None
+        value = self._meta("welcomed")
+        return value == "1" if value is not None else None
 
     def set_welcomed(self, done=True):
-        self._exec("INSERT INTO meta (key, value) VALUES ('welcomed', ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", ("1" if done else "0",))
+        self._set_meta("welcomed", "1" if done else "0")
 
     def has_history(self):
-        return bool(self._rows("SELECT 1 FROM prs LIMIT 1") or self._rows("SELECT 1 FROM meta WHERE key = 'poll'"))
+        return bool(self._rows("SELECT 1 FROM prs LIMIT 1") or self._meta("poll") is not None)
 
     def current_view(self):
-        rows = self._rows("SELECT value FROM meta WHERE key = 'current_view'")
-        return rows[0]["value"] if rows else ""
+        return self._meta("current_view", "")
 
     def set_current_view(self, view):
-        self._exec("INSERT INTO meta (key, value) VALUES ('current_view', ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (view,))
+        self._set_meta("current_view", view)
 
     def insights_history(self, view):
-        rows = self._rows("SELECT value FROM meta WHERE key = ?", (f"insights:{view}",))
-        return json.loads(rows[0]["value"]) if rows else None
+        value = self._meta(f"insights:{view}")
+        return json.loads(value) if value else None
 
     def set_insights_history(self, view, value):
-        self._exec("INSERT INTO meta (key, value) VALUES (?, ?) "
-                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (f"insights:{view}", json.dumps(value)))
+        self._set_meta(f"insights:{view}", json.dumps(value))
 
     def take_old_views(self):
         """Views saved here before they moved to the config file, once."""
-        rows = self._rows("SELECT value FROM meta WHERE key = 'views'")
+        value = self._meta("views")
         self._exec("DELETE FROM meta WHERE key = 'views'")
-        return json.loads(rows[0]["value"]) if rows else None
+        return json.loads(value) if value else None
+
+    def _meta(self, key, default=None):
+        rows = self._rows("SELECT value FROM meta WHERE key = ?", (key,))
+        return rows[0]["value"] if rows else default
+
+    def _set_meta(self, key, value):
+        self._exec("INSERT INTO meta (key, value) VALUES (?, ?) "
+                   "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
     def _exec(self, sql, args=()):
         with self.lock:
@@ -172,7 +177,7 @@ class State:
         merged PR whose approval comments still hold a card keeps being read until you
         answer."""
         out = set()
-        since = datetime.fromtimestamp(time.time() - KEEP_DAYS * 86400, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        since = iso(datetime.fromtimestamp(time.time() - KEEP_DAYS * 86400, timezone.utc))
         for r in self._rows("SELECT key, snapshot FROM prs"):
             snap = json.loads(r["snapshot"])
             if snap.get("state") == "OPEN" and not snap.get("dropped"):
@@ -186,7 +191,7 @@ class State:
         """Closed or dropped PRs stay a while for Recently Merged cleanup, then go with
         everything kept about them. Finished cards and old activity go sooner."""
         cutoff = time.time() - days * 86400
-        cutoff_iso = datetime.fromtimestamp(cutoff, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff_iso = iso(datetime.fromtimestamp(cutoff, timezone.utc))
         with self.lock:
             self.db.execute("DELETE FROM prs WHERE seen < ? AND (json_extract(snapshot, '$.state') != 'OPEN' "
                             "OR json_extract(snapshot, '$.dropped'))", (cutoff,))

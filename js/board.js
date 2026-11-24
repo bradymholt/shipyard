@@ -1,9 +1,9 @@
 // The board: lanes, cards, and Recently merged.
-import { $, listBody, LS, narrowViewport, state } from "./base.js";
-import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
-import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
+import { $, listBody, LS, narrowViewport, saveStoredSet, state, storedSet } from "./base.js";
+import { AGENT_ICONS, agoSpan, busy, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
+import { apiCall, apiJson, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, stackParents, ciOk, serverPr, hasNewCommitsSinceReview, changedFor, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, awaitingReview, stackParents, ciOk, rollupState, serverPr, hasNewCommitsSinceReview, changedFor, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -12,19 +12,17 @@ const laneEmptyText = (name, reviewBoard) => reviewBoard
   ? (name === "To review" ? "You're all caught up" : "Nothing reviewed yet")
   : ({ Working: "Nothing in progress", Waiting: "Nothing awaiting review", Ready: "Nothing ready to merge" }[name] || "Nothing here");
 
+const avatarHtml = (login, avatarUrl) => avatarUrl
+  ? `<img src="${esc(avatarUrl)}&s=48" alt="${esc(login)}">`
+  : `<span class="team-avatar">${esc(login.slice(0, 2).toUpperCase())}</span>`;
+
 function reviewerHtml(login, avatarUrl, stateClass, stateIcon, title) {
-  const avatar = avatarUrl
-    ? `<img src="${esc(avatarUrl)}&s=48" alt="${esc(login)}">`
-    : `<span class="team-avatar">${esc(login.slice(0, 2).toUpperCase())}</span>`;
-  return `<span class="reviewer" title="${esc(title)}">${avatar}<span class="state-dot ${stateClass}">${stateIcon}</span></span>`;
+  return `<span class="reviewer" title="${esc(title)}">${avatarHtml(login, avatarUrl)}<span class="state-dot ${stateClass}">${stateIcon}</span></span>`;
 }
 
 function authorAvatar(pr) {
   const login = pr.author?.login || "ghost";
-  const avatar = pr.author?.avatarUrl
-    ? `<img src="${esc(pr.author.avatarUrl)}&s=48" alt="${esc(login)}">`
-    : `<span class="team-avatar">${esc(login.slice(0, 2).toUpperCase())}</span>`;
-  return `<span class="reviewer" title="opened by ${esc(login)}">${avatar}</span>`;
+  return `<span class="reviewer" title="opened by ${esc(login)}">${avatarHtml(login, pr.author?.avatarUrl)}</span>`;
 }
 
 function buildReviewers(pr) {
@@ -59,7 +57,7 @@ function reviewBadge(pr) {
     return `<span class="review-badge approved">${ICONS.check} Approved</span>`;
   if (pr.reviewDecision === "CHANGES_REQUESTED")
     return `<span class="review-badge changes">${ICONS.changes} Changes requested</span>`;
-  return (pr.reviewRequests?.nodes || []).length > 0
+  return awaitingReview(pr)
     ? `<span class="review-badge pending">${ICONS.clock} Awaiting review</span>`
     : `<span class="review-badge none">Needs review</span>`;
 }
@@ -110,17 +108,20 @@ function pendingReviewBadge(pr) {
     : "";
 }
 
+const CI_STATES = {
+  SUCCESS: ["success", ICONS.check, "Checks passing"],
+  FAILURE: ["failure", ICONS.x, "Checks failing"],
+  ERROR: ["failure", ICONS.x, "Checks errored"],
+  PENDING: ["pending", ICONS.dot, "Checks running"],
+  EXPECTED: ["pending", ICONS.dot, "Waiting on required checks"],
+};
+
+export const ciLook = (rollup) => CI_STATES[rollup] || CI_STATES.PENDING;
+
 export function ciHtml(pr) {
-  const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
-  if (!rollup) return "";
-  const map = {
-    SUCCESS: ["success", ICONS.check, "Checks passing"],
-    FAILURE: ["failure", ICONS.x, "Checks failing"],
-    ERROR: ["failure", ICONS.x, "Checks errored"],
-    PENDING: ["pending", ICONS.dot, "Checks running"],
-    EXPECTED: ["pending", ICONS.dot, "Waiting on required checks"],
-  };
-  const [cls, icon, title] = map[rollup.state] || map.PENDING;
+  const s = rollupState(pr);
+  if (!s) return "";
+  const [cls, icon, title] = ciLook(s);
   return `<span class="ci ${cls}" title="${title}">${icon}</span>`;
 }
 
@@ -128,10 +129,11 @@ const launchTarget = (checkout) => state.launcher.target === "workspace"
   ? (checkout.workspace || checkout.path)
   : checkout.path;
 
-const launcherUrl = (target) => {
-  const encodedPath = String(target).split("/").map(encodeURIComponent).join("/");
-  return state.launcher.url.replaceAll("{path}", encodedPath);
-};
+const encodePath = (path) => String(path).split("/").map(encodeURIComponent).join("/");
+const launcherUrl = (target) => state.launcher.url.replaceAll("{path}", encodePath(target));
+export const agentUrl = (path, sessionId) => state.agent.url
+  .replaceAll("{session}", encodeURIComponent(sessionId))
+  .replaceAll("{path}", encodePath(path));
 
 export async function openInApp(target) {
   if (state.launcher.mode === "url") {
@@ -139,19 +141,15 @@ export async function openInApp(target) {
     return;
   }
   try {
-    const res = await apiPost(`open-app?path=${encodeURIComponent(target)}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) showError(data.error || `Open in ${state.launcher.name} failed (${res.status}).`);
+    await apiJson(await apiPost(`open-app?path=${encodeURIComponent(target)}`));
   } catch (err) {
     showError(err.message);
   }
 }
 
-async function openAgent(path, session) {
+export async function openAgent(path, session) {
   try {
-    const res = await apiPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) showError(data.error || `Open in ${state.agent.name} failed (${res.status}).`);
+    await apiJson(await apiPost(`open-agent?path=${encodeURIComponent(path)}${session ? `&session=${encodeURIComponent(session)}` : ""}`));
   } catch (err) {
     showError(err.message);
   }
@@ -166,10 +164,7 @@ function agentButton(pr) {
   if (agent.mode === "command") {
     return `<button class="wt-link wt-agent" data-path="${esc(checkout.path)}" data-session="${esc(checkout.session.id)}" title="${esc(title)}">${icon}</button>`;
   }
-  const url = agent.url
-    .replaceAll("{session}", encodeURIComponent(checkout.session.id))
-    .replaceAll("{path}", String(checkout.path).split("/").map(encodeURIComponent).join("/"));
-  return `<a class="wt-link wt-agent" href="${esc(url)}" title="${esc(title)}">${icon}</a>`;
+  return `<a class="wt-link wt-agent" href="${esc(agentUrl(checkout.path, checkout.session.id))}" title="${esc(title)}">${icon}</a>`;
 }
 
 export function openCheckoutButton(wt, label = "") {
@@ -241,29 +236,26 @@ function repoPullsUrl(pr) {
   return state.viewer ? `${base}/${state.viewer}` : base;
 }
 
-function mergedRepoPrefix(pr) {
+function repoPrefix(pr, bold = false) {
   const repoName = pr.repository?.nameWithOwner;
-  return repoName && repoName !== getCurrentRepo()
-    ? `<a href="${esc(repoPullsUrl(pr))}" target="_blank" rel="noopener"><strong>${esc(repoName)}</strong></a> ` : "";
+  if (!repoName || repoName === getCurrentRepo()) return "";
+  const name = bold ? `<strong>${esc(repoName)}</strong>` : esc(repoName);
+  return `<a href="${esc(repoPullsUrl(pr))}" target="_blank" rel="noopener">${name}</a> `;
 }
 
 function mergedCard(pr) {
   return `
     <div class="${cardClasses(pr, "merged")}" data-key="${esc(prKey(pr))}" tabindex="0"${glowAttr(pr)}>
       <div class="card-title"><span class="pr-icon merged">${ICONS.merged}</span><a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a></div>
-      <div class="card-meta">${mergedRepoPrefix(pr)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
+      <div class="card-meta">${repoPrefix(pr, true)}<span class="pr-num">#${pr.number}</span> merged ${agoSpan(pr.mergedAt)} ${pr.author?.login !== state.viewer ? authorRepliedBadge(pr) : ""}</div>
       ${mergedWorktreeLinks(pr)}
       ${nextRowHtml(pr)}
     </div>`;
 }
 
-function storedSet(name) {
-  try { return new Set(JSON.parse(localStorage.getItem(name) || "[]")); } catch { return new Set(); }
-}
-
 function toggleStored(set, name, key) {
   if (!set.delete(key)) set.add(key);
-  try { localStorage.setItem(name, JSON.stringify([...set])); } catch { /* storage unavailable */ }
+  saveStoredSet(name, set);
   render();
 }
 
@@ -327,10 +319,6 @@ function autoMergeChip(pr) {
 }
 
 function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
-  const repoName = pr.repository?.nameWithOwner;
-  const repoPrefix = repoName && repoName !== getCurrentRepo()
-    ? `<a href="${esc(repoPullsUrl(pr))}" target="_blank" rel="noopener">${esc(repoName)}</a> `
-    : "";
   const basedOn = parent
     ? `<a class="card-stack" href="${esc(parent.url)}" target="_blank" rel="noopener" title="Stacked on #${parent.number}">↳ #${parent.number}</a>`
     : "";
@@ -348,11 +336,11 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   // The Next row names the next step for changes requested or approved-but-red, so the
   // state badge would only repeat it. Once review is re-requested, the PR is waiting on
   // the reviewer, and "Changes requested" would read as yours to act on.
-  const awaitingReview = (pr.reviewRequests?.nodes || []).length > 0;
+  const waitingOnReview = awaitingReview(pr);
   const nextKind = nextChip(pr)?.kind;
   const badge = reviewMode
     ? nextKind === "review" || nextKind === "re_review" ? "" : viewerReviewBadge(pr)
-    : !chip && ((pr.reviewDecision === "CHANGES_REQUESTED" && !awaitingReview) ||
+    : !chip && ((pr.reviewDecision === "CHANGES_REQUESTED" && !waitingOnReview) ||
         (pr.reviewDecision === "APPROVED" && !ciOk(pr)))
       ? reviewBadge(pr)
       : "";
@@ -366,7 +354,7 @@ function prCard(pr, parent, showAutoMerge = false, reviewMode = false) {
   return `
     <div class="${cardClasses(pr, pr.isDraft ? "draft" : "")}" data-key="${esc(prKey(pr))}" tabindex="0"${glowAttr(pr)}>
       <div class="card-title">${unseen}<a href="${esc(pr.url)}" target="_blank" rel="noopener">${fmtCode(pr.title)}</a>${draft}${labels}</div>
-      <div class="card-meta">${repoPrefix}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}${size}</div>
+      <div class="card-meta">${repoPrefix(pr)}<span class="pr-num">#${pr.number}</span> by ${esc(pr.author?.login || "ghost")} · ${agoSpan(pr.updatedAt)}${size}</div>
       <div class="card-icons">
         ${ciHtml(pr)}
         ${comments}
@@ -404,6 +392,14 @@ function sizeSortSelect() {
   probe.remove();
 }
 
+const LOADING_HTML = '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+
+function setTabCount(el, n, what) {
+  el.textContent = n || "";
+  el.classList.toggle("hidden", n === 0);
+  el.title = n ? `${n} pull request${n === 1 ? " needs" : "s need"} ${what}` : "";
+}
+
 export function render() {
   renderBoard();
   renderSidebar();
@@ -419,26 +415,16 @@ function renderBoard() {
   )).values()];
   const stepsFor = (prs) => prs.filter(needsYou).length;
   const mineCount = stepsFor(state.prs.filter((pr) => pr.author?.login === state.viewer));
-  const mineCountEl = $("#count-mine");
-  mineCountEl.textContent = mineCount || "";
-  mineCountEl.classList.toggle("hidden", mineCount === 0);
-  mineCountEl.title = mineCount
-    ? `${mineCount} pull request${mineCount === 1 ? "" : "s"} ${mineCount === 1 ? "needs" : "need"} your attention`
-    : "";
+  setTabCount($("#count-mine"), mineCount, "your attention");
   const reviewCount = stepsFor(reviewSet.filter(reviewItem));
-  const reviewCountEl = $("#count-review");
-  reviewCountEl.textContent = reviewCount || "";
-  reviewCountEl.classList.toggle("hidden", reviewCount === 0);
-  reviewCountEl.title = reviewCount
-    ? `${reviewCount} pull request${reviewCount === 1 ? "" : "s"} ${reviewCount === 1 ? "needs" : "need"} your review`
-    : "";
+  setTabCount($("#count-review"), reviewCount, "your review");
   const attention = mineCount + reviewCount;
   document.title = attention ? `Shipyard (${attention})` : "Shipyard";
   $("#sort-select").classList.toggle("hidden", state.filter === "insights");
   if (state.filter === "insights") {
     $("#list-title").innerHTML = `Insights · ${targetLinkHtml()}`;
     listBody.innerHTML = state.targetedLoaded ? insightsHtml(render)
-      : githubProblem() ? loadErrorHtml() : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+      : githubProblem() ? loadErrorHtml() : LOADING_HTML;
     return;
   }
   const reviewBoard = state.filter === "review";
@@ -526,7 +512,7 @@ function renderBoard() {
     $("#list-title").innerHTML = `Pull requests · ${targetLink}`;
     listBody.innerHTML = githubProblem()
       ? loadErrorHtml()
-      : '<div class="loading"><div class="spinner"></div>Loading pull requests…</div>';
+      : LOADING_HTML;
     return;
   }
   const needs = reviewBoard ? reviewCount : mineCount;
@@ -599,57 +585,22 @@ listBody.addEventListener("click", async (e) => {
 
   const mainBtn = e.target.closest("button.wt-main");
   if (mainBtn) {
-    mainBtn.disabled = true;
-    const original = mainBtn.innerHTML;
-    mainBtn.textContent = "…";
-    try {
-      const res = await apiPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`);
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok) {
-        await openInApp(launchTarget(data));
-      } else {
-        showError(data.error || `Couldn't open in your main clone (${res.status}).`, "Can't open in main clone");
-      }
-    } catch (err) {
-      showError(err.message, "Can't open in main clone");
-    } finally {
-      mainBtn.disabled = false;
-      mainBtn.innerHTML = original;
-    }
-    return;
+    return busy(mainBtn, async () => {
+      const data = await apiJson(await apiPost(`open-in-main?repo=${encodeURIComponent(mainBtn.dataset.repo)}&branch=${encodeURIComponent(mainBtn.dataset.branch)}`));
+      await openInApp(launchTarget(data));
+    }, "Can't open in main clone");
   }
 
-  const draftBtn = e.target.closest("button.draft-toggle");
-  if (draftBtn) {
-    const draftPr = state.prs.find((p) => p.id === draftBtn.dataset.pr);
-    if (!draftPr) return;
-    draftBtn.disabled = true;
-    draftBtn.textContent = "…";
-    try {
-      await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(draftPr))}&action=mark_ready`, { payload: {} });
-      markSeen(draftPr);
-      render();
-    } catch (err) {
-      alert(`Mark ready: ${err.message}`);
-      render();
-    }
-    return;
-  }
-
-  const btn = e.target.closest("button.am-toggle");
-  const amPr = btn && state.prs.find((p) => p.id === btn.dataset.pr);
-  if (!amPr) return;
-  btn.disabled = true;
-  btn.textContent = "…";
-  const action = btn.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
-  try {
-    await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(amPr))}&action=${action}`, { payload: {} });
-    markSeen(amPr);
-    render();
-  } catch (err) {
-    alert(`Auto-merge: ${err.message}`);
-    render();
-  }
+  const toggle = e.target.closest("button.draft-toggle, button.am-toggle");
+  const togglePr = toggle && state.prs.find((p) => p.id === toggle.dataset.pr);
+  if (!togglePr) return;
+  const ready = toggle.classList.contains("draft-toggle");
+  const action = ready ? "mark_ready" : toggle.dataset.action === "enable" ? "enable_auto_merge" : "disable_auto_merge";
+  await busy(toggle, async () => {
+    await apiCall(`api/pr-action?key=${encodeURIComponent(prKey(togglePr))}&action=${action}`, { payload: {} });
+    markSeen(togglePr);
+  }, ready ? "Couldn't mark it ready" : "Couldn't change auto-merge");
+  render();
 });
 
 $("#sort-select").addEventListener("change", (e) => {

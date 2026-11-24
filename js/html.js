@@ -67,6 +67,18 @@ export function labelColors(hex) {
   return `color: ${luma > 160 ? "var(--on-light)" : "var(--on-dark)"}; background: #${hex}`;
 }
 
+export async function busy(btn, fn, title = "Couldn't do that") {
+  const original = btn ? btn.innerHTML : "";
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+  try {
+    await fn();
+  } catch (err) {
+    showError(err.message, title);
+  } finally {
+    if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = original; }
+  }
+}
+
 export function showError(message, title = "Can't open") {
   $("#error-title").textContent = title;
   $("#error-message").textContent = message;

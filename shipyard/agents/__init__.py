@@ -104,6 +104,15 @@ def parse_json_answer(text):
     raise AgentError("the agent's answer was not a JSON object")
 
 
+def json_lines(lines):
+    """Each line that parses as JSON, skipping the rest."""
+    for line in lines:
+        try:
+            yield json.loads(line)
+        except ValueError:
+            continue
+
+
 class Adapter:
     key = ""
     process_name = ""

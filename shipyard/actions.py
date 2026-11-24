@@ -210,7 +210,7 @@ def post_reply(gh, snap, payload, ctx):
     if comment:
         gh.rest("POST", f"{_pulls(snap)}/comments/{int(comment)}/replies", {"body": body})
         return "posted a reply on a review thread"
-    gh.rest("POST", f"/repos/{snap['repo']}/issues/{snap['number']}/comments", {"body": body})
+    _comment(gh, snap, body)
     return "posted a comment"
 
 
@@ -218,8 +218,12 @@ NUDGED = "nudged the reviewers"
 
 
 def nudge(gh, snap, payload, ctx):
-    gh.rest("POST", f"/repos/{snap['repo']}/issues/{snap['number']}/comments", {"body": _text(payload)})
+    _comment(gh, snap, _text(payload))
     return NUDGED
+
+
+def _comment(gh, snap, body):
+    gh.rest("POST", f"/repos/{snap['repo']}/issues/{snap['number']}/comments", {"body": body})
 
 
 def _review(gh, snap, event, body, comments=()):
@@ -359,7 +363,7 @@ def push_merge(gh, snap, payload, ctx):
     if error:
         raise ActionError(error)
     worktrees.mutate_git(clone, "worktree", "remove", "--force",
-                         os.path.join(worktrees.managed_worktree_dir(clone), f"merge-{int(snap['number'])}"), timeout=60)
+                         worktrees.merge_worktree_path(clone, snap["number"]), timeout=60)
     return f"resolved the conflicts with {snap.get('base')} and pushed the merge"
 
 
