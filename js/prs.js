@@ -90,24 +90,16 @@ function innerComparator() {
   return (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt);
 }
 
-export function buildStacks(prs) {
+export function stackParents(prs) {
   const branchKey = (pr, ref) => `${pr.repository?.nameWithOwner || ""}#${ref}`;
   const byHead = new Map();
   for (const pr of prs) if (!byHead.has(branchKey(pr, pr.headRefName))) byHead.set(branchKey(pr, pr.headRefName), pr);
-  const children = new Map();
   const parents = new Map();
-  const roots = [];
   for (const pr of prs) {
     const parent = byHead.get(branchKey(pr, pr.baseRefName));
-    if (parent && parent !== pr) {
-      if (!children.has(parent.number)) children.set(parent.number, []);
-      children.get(parent.number).push(pr);
-      parents.set(pr.number, parent);
-    } else {
-      roots.push(pr);
-    }
+    if (parent && parent !== pr) parents.set(prKey(pr), parent);
   }
-  return { roots, children, parents };
+  return parents;
 }
 
 // Board lanes: 0 Working (incl. drafts), 1 Waiting (on reviewer), 2 Ready (approved).

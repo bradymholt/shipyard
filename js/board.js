@@ -3,7 +3,7 @@ import { $, listBody, LS, narrowViewport, state } from "./base.js";
 import { AGENT_ICONS, agoSpan, DEFAULT_AGENT_ICON, EMPTY_ICON, esc, fmtCode, ICONS, labelColors, LANE_CHEVRON, LAUNCH_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiPost, getCurrentRepo, serverStatusHtml, worktreeFor } from "./server.js";
 import { applyServerPrs, fetchMergedPage, githubProblem, MERGED_INITIAL, MERGED_MAX_PAGES_PER_CLICK, MERGED_SEARCHES, MERGED_STEP, mergeMergedLists, ownerType, prKey, viewTargets } from "./data.js";
-import { agentName, buildStacks, ciOk, serverPr, hasNewCommitsSinceReview, changedFor, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
+import { agentName, stackParents, ciOk, serverPr, hasNewCommitsSinceReview, changedFor, isSnoozed, isUnseen, laneOf, markSeen, matchesFilter, needsYou, nextChip, reviewedMergedItems, reviewItem, reviewLaneOf, reviewRequestedForViewer, sortComparator } from "./prs.js";
 import { insightsHtml, stackedPanels } from "./insights.js";
 import { maybeShowWelcome } from "./welcome.js";
 import { closeSidebar, openSidebar, PASS_LABELS, renderSidebar, sessionTarget, sidebarKey } from "./sidebar.js";
@@ -454,7 +454,7 @@ function renderBoard() {
   $("#sort-select").value = state.sort;
   sizeSortSelect();  // a native select sizes to its widest option; shrink to the selected one so the caret hugs the text
 
-  const { parents } = buildStacks(dataset);
+  const parents = stackParents(dataset);
   const matches = dataset.filter(reviewBoard ? reviewItem : matchesFilter);
   const count = matches.length;
   const laneItems = reviewBoard ? [[], []] : [[], [], []];
@@ -465,14 +465,14 @@ function renderBoard() {
   const recentMerged = mergedItems();
   let html = `<div class="board${reviewBoard ? " two-lane" : ""}">` + defs.map(([name, color], i) => {
     const inLane = laneItems[i];
-    const laneNums = new Set(inLane.map((p) => p.number));
+    const laneKeys = new Set(inLane.map(prKey));
     const kids = new Map();
     const roots = [];
     for (const pr of inLane) {
-      const parent = parents.get(pr.number);
-      if (parent && laneNums.has(parent.number) && isSnoozed(parent) === isSnoozed(pr)) {
-        if (!kids.has(parent.number)) kids.set(parent.number, []);
-        kids.get(parent.number).push(pr);
+      const parent = parents.get(prKey(pr));
+      if (parent && laneKeys.has(prKey(parent)) && isSnoozed(parent) === isSnoozed(pr)) {
+        if (!kids.has(prKey(parent))) kids.set(prKey(parent), []);
+        kids.get(prKey(parent)).push(pr);
       } else {
         roots.push(pr);
       }
@@ -480,21 +480,21 @@ function renderBoard() {
     roots.sort(sortComparator());
     const seen = new Set();
     const renderCardTree = (pr, depth) => {
-      if (seen.has(pr.number)) return "";
-      seen.add(pr.number);
-      const parent = parents.get(pr.number);
-      const chipParent = parent && !laneNums.has(parent.number) ? parent : null;
+      if (seen.has(prKey(pr))) return "";
+      seen.add(prKey(pr));
+      const parent = parents.get(prKey(pr));
+      const chipParent = parent && !laneKeys.has(prKey(parent)) ? parent : null;
       const showAutoMerge = !reviewBoard && i >= 1;
       let out = depth === 0
         ? prCard(pr, chipParent, showAutoMerge, reviewBoard)
         : `<div class="card-nest" style="margin-left: ${(depth - 1) * 14 / 16}rem"><span class="stack-elbow" title="Stacked PR"></span>${prCard(pr, chipParent, showAutoMerge, reviewBoard)}</div>`;
-      for (const kid of kids.get(pr.number) || []) out += renderCardTree(kid, depth + 1);
+      for (const kid of kids.get(prKey(pr)) || []) out += renderCardTree(kid, depth + 1);
       return out;
     };
     // Non-drafts first; group drafts at the bottom under a labeled divider (Working lane).
     const renderGroup = (keep) => {
       let out = roots.filter(keep).map((r) => renderCardTree(r, 0)).join("");
-      for (const pr of inLane) if (keep(pr) && !seen.has(pr.number)) out += renderCardTree(pr, 0);
+      for (const pr of inLane) if (keep(pr) && !seen.has(prKey(pr))) out += renderCardTree(pr, 0);
       return out;
     };
     let laneHtml = renderGroup((p) => !p.isDraft && !isSnoozed(p));
