@@ -65,7 +65,6 @@ def main(argv=None):
     config = load_config()
     # Folders on the command line hold for the run; otherwise the "roots" setting applies,
     # and Shipyard runs without any: the board needs only GitHub.
-    Handler.config = config
     Handler.orchestrator = Orchestrator(config, normalize_roots(cli_roots), REPO_DIR / DB_FILE, github=GitHub(),
                                         first_run_hold=True)
     roots = Handler.orchestrator.roots

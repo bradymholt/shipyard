@@ -196,7 +196,6 @@ def main():
                                          "rules": {"passes": {"feedback": "auto"}}, "auto": {"rerun_checks": False}}),
                         [str(tmp / "dev")], tmp / "demo.db", github=gh, config_path=tmp / "shipyard.config.json")
     comp.poll_once()
-    Handler.config = comp.config
     Handler.session_token = "demo-token"
     Handler.orchestrator = comp
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),
