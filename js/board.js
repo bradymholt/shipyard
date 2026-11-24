@@ -116,7 +116,7 @@ const CI_STATES = {
   EXPECTED: ["pending", ICONS.dot, "Waiting on required checks"],
 };
 
-export const ciLook = (state) => CI_STATES[state] || CI_STATES.PENDING;
+export const ciLook = (rollup) => CI_STATES[rollup] || CI_STATES.PENDING;
 
 export function ciHtml(pr) {
   const s = rollupState(pr);
