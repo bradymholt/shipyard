@@ -48,3 +48,11 @@ export const state = {
 
 // On a phone the lanes stack, so each can be collapsed to keep the next one in reach.
 export const narrowViewport = matchMedia("(max-width: 700px)");
+
+export function storedSet(name) {
+  try { return new Set(JSON.parse(localStorage.getItem(name) || "[]")); } catch { return new Set(); }
+}
+
+export function saveStoredSet(name, set) {
+  try { localStorage.setItem(name, JSON.stringify([...set])); } catch { /* storage unavailable */ }
+}

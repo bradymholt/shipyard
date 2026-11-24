@@ -1,10 +1,10 @@
 // The PR sidebar: next steps, proposals, the pinned session, and activity.
-import { $, state } from "./base.js";
+import { $, saveStoredSet, state, storedSet } from "./base.js";
 import { AGENT_ICONS, agoSpan, BACK_ICON, busy, clip, CLOSE_ICON, DEFAULT_AGENT_ICON, esc, fmtCode, GITHUB_ICON, showError, timeAgo } from "./html.js";
 import { apiCall, apiGet, apiJson, apiPost, automationHeld, saveSetting, worktreeFor } from "./server.js";
 import { prKey } from "./data.js";
 import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, markMerged, markSeen, markRequested, markReviewed, REVIEW_STATES, rollupState, stageOf } from "./prs.js";
-import { ciHtml, openAgent, openCheckoutButton, openInApp, render } from "./board.js";
+import { agentUrl, ciLook, openAgent, openCheckoutButton, openInApp, render } from "./board.js";
 
 // One component whose sections appear when the server is connected, like the
 // worktree icons: Header, Next, Auto-approve, PR session, Activity.
@@ -47,9 +47,7 @@ const SUGGESTIONS = {
     text: () => "Pre-review on its own whenever your review is requested?" },
 };
 const SUGGEST_DISMISSED_KEY = "ghpr.dismissedSuggestions";
-const dismissedSuggestions = () => {
-  try { return new Set(JSON.parse(localStorage.getItem(SUGGEST_DISMISSED_KEY) || "[]")); } catch { return new Set(); }
-};
+const dismissedSuggestions = () => storedSet(SUGGEST_DISMISSED_KEY);
 const suggestionOn = (name) => {
   const config = state.serverState?.config || {};
   return name === "pre_review" ? config.rules?.passes?.pre_review === "auto" : !!config.auto?.[name];
@@ -114,7 +112,8 @@ function checksText(pr) {
   const onBase = (serverPr(pr)?.failingOnBase || []).length;
   const text = { SUCCESS: "Checks passing", PENDING: "Checks running", EXPECTED: "Waiting on required checks" }[s]
     || `${failing.length || "Checks"} failing${onBase ? ` · ${onBase < failing.length ? `${onBase} ` : ""}also failing on ${pr.baseRefName}` : ""}`;
-  return `<span class="ci ${s === "SUCCESS" ? "success" : s === "PENDING" || s === "EXPECTED" ? "pending" : "failure"}">${ciHtml(pr).replace(/<\/?span[^>]*>/g, "")}${esc(text)}</span>`;
+  const [cls, icon] = ciLook(s);
+  return `<span class="ci ${cls}">${icon}${esc(text)}</span>`;
 }
 
 // Resume a specific session (the pinned one) in the agent's app.
@@ -125,10 +124,7 @@ function sessionLink(path, sessionId, inner, cls, key) {
   if (agent.mode === "command") {
     return `<button type="button" class="${cls}" ${data} data-agent-path="${esc(path)}" data-agent-session="${esc(sessionId)}" title="Open the PR session in ${esc(agent.name)}">${inner}</button>`;
   }
-  const url = agent.url
-    .replaceAll("{session}", encodeURIComponent(sessionId))
-    .replaceAll("{path}", String(path).split("/").map(encodeURIComponent).join("/"));
-  return `<a class="${cls}" ${data} href="${esc(url)}" title="Open the PR session in ${esc(agent.name)}">${inner}</a>`;
+  return `<a class="${cls}" ${data} href="${esc(agentUrl(path, sessionId))}" title="Open the PR session in ${esc(agent.name)}">${inner}</a>`;
 }
 
 // The session every link for a PR opens: the pinned one, or none if nothing is pinned.
@@ -622,8 +618,7 @@ $("#sidebar").addEventListener("click", async (e) => {
     return busy(btn, () => saveSetting(path, { value }), "Couldn't turn it on");
   }
   if ((btn = t("[data-suggest-dismiss]"))) {
-    const names = dismissedSuggestions().add(btn.dataset.suggestDismiss);
-    try { localStorage.setItem(SUGGEST_DISMISSED_KEY, JSON.stringify([...names])); } catch {}
+    saveStoredSet(SUGGEST_DISMISSED_KEY, dismissedSuggestions().add(btn.dataset.suggestDismiss));
     lastSidebarHtml = "";
     return renderSidebar();
   }
