@@ -246,7 +246,6 @@ def main():
                                              "author": {"login": "jm"}, "commit": {"oid": "h98"}}]})
     gh.put(lookups)
     comp.poll_once()
-    Handler.config = comp.config
     Handler.session_token = "demo-token"
     Handler.orchestrator = comp
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port),

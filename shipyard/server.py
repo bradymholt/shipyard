@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import worktrees
-from .config import DEFAULT_CONFIG, page_config
+from .config import page_config
 from .settings import MISSING
 
 MAX_BODY = 1_000_000
@@ -44,7 +44,6 @@ class Server(http.server.ThreadingHTTPServer):
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
-    config = DEFAULT_CONFIG
     session_token = ""
     orchestrator = None
     # Every response, errors included, names Shipyard and nothing else: a second copy reads
@@ -252,9 +251,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         elif parsed.path == "/branch-worktree":
             result = worktrees.branch_worktree(arg("repo"), arg("branch"), self.orchestrator.roots)
         elif parsed.path == "/open-app":
-            result = worktrees.launch_app(arg("path"), self.orchestrator.roots, self.config)
+            result = worktrees.launch_app(arg("path"), self.orchestrator.roots, self.orchestrator.config)
         else:
-            result = worktrees.launch_agent(arg("path"), self.orchestrator.roots, self.config, arg("session") or None)
+            result = worktrees.launch_agent(arg("path"), self.orchestrator.roots, self.orchestrator.config, arg("session") or None)
         if result.get("ok") and parsed.path in self.CHECKOUT_ACTIONS:
             self.orchestrator.rescan_worktrees()
         return self._json(result, 200 if result.get("ok") else 500)

@@ -124,6 +124,13 @@ class Endpoints(ServerCase):
         self.assertEqual((status, out), (200, {"ok": True}))
         self.assertEqual(self.orchestrator.calls, [("snooze", "o/r#1", 4)])
 
+    def test_open_app_uses_the_config_saved_since_startup(self):
+        self.orchestrator.roots = []
+        self.orchestrator.config = {**self.orchestrator.config, "launcher": {"mode": "command"}}
+        with mock.patch("shipyard.server.worktrees.launch_app", return_value={"ok": True}) as launch:
+            self.request("POST", "/open-app?path=/x")
+        self.assertEqual(launch.call_args.args[2]["launcher"], {"mode": "command"})
+
     def test_card_action_body_and_errors(self):
         status, _ = self.request("POST", "/api/card-action?card=3&index=1", {"payload": {"body": "x"}})
         self.assertEqual(status, 200)
