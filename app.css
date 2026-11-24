@@ -105,7 +105,7 @@ header .icon-btn {
   padding: 0.4375rem; display: inline-flex; align-items: center; cursor: pointer;
 }
 header .icon-btn:hover { background: var(--navy-2); }
-header .icon-btn svg { fill: var(--on-navy-muted); }
+header button.icon-btn svg { fill: var(--on-navy-muted); }
 
 /* ---------- controls ---------- */
 select, input[type="text"], input[type="password"] {
