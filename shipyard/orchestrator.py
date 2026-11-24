@@ -91,6 +91,19 @@ def reply_context(snap, comment_id):
     return None
 
 
+def clean_merge_answer(snap):
+    return {"answer": {"summary": f"{snap.get('base')} merges in without conflicts here.", "proposals": [
+        {"action": "push_merge", "confidence": "high", "reason": "Git merged it cleanly.", "payload": {"files": []}}]}}
+
+
+def pass_session_title(name, snap, pinned, kept):
+    """A session Shipyard keeps gets a title, so it reads the same here and in the agent's app."""
+    pr = f'{snap["title"]} (#{snap["number"]})'
+    if pinned:
+        return pr
+    return f"{passes.TITLES[name]}: {pr}" if kept else None
+
+
 def transcripts_stamp(adapter, path):
     mtimes = []
     for _, f in adapter.session_files(path):
@@ -651,15 +664,14 @@ class Orchestrator:
             values["conflicts"] = passes.conflicts_text(merge["files"])
         prompt = passes.render(name, values, self.config["rules"]["instructions"].get(name, ""))
         try:
-            # The PR's own code may carry agent settings (hooks, permissions); on someone
-            # else's PR, only yours apply.
-            # A session Shipyard keeps gets a title, so it reads the same here and in the agent's app.
-            result = {"answer": {"summary": f"{snap.get('base')} merges in without conflicts here.", "proposals": [
-                {"action": "push_merge", "confidence": "high", "reason": "Git merged it cleanly.",
-                 "payload": {"files": []}}]}} if merge and not merge["files"] else adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
-                                 untrusted=not snap["mine"],
-                                 name=f'{snap["title"]} (#{snap["number"]})' if pin_after else
-                                 f'{passes.TITLES[name]}: {snap["title"]} (#{snap["number"]})' if kept else None)
+            if merge and not merge["files"]:
+                result = clean_merge_answer(snap)
+            else:
+                # The PR's own code may carry agent settings (hooks, permissions); on someone
+                # else's PR, only yours apply.
+                result = adapter.run(cwd, prompt, passes.ANSWER_SCHEMA, mode, session, new_session,
+                                     untrusted=not snap["mine"],
+                                     name=pass_session_title(name, snap, pin_after, kept))
         except AgentError as e:
             return self.fail_pass(row, str(e))
         answer = passes.clean_answer(result["answer"])
