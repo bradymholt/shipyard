@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import actions, passes, rules, worktrees
 from .agents import AgentError, adapter_for, process_cwds, read_text
-from .config import CONFIDENCE, CONFIG_PATH, HARD_LOCKED, config_mtime, page_config, read_config, read_raw, view_targets
+from .config import CONFIDENCE, CONFIG_PATH, HARD_LOCKED, config_mtime, page_config, read_config, read_raw, view_key
 from .events import derive
 from .github import GitHub, GitHubError
 from .poll import INSIGHTS_ROW_VERSION, INSIGHTS_SETTLED_DAYS, INSIGHTS_WEEKS, MERGED_SEARCHES, Poller
@@ -109,6 +109,20 @@ def session_used(mode, pinned_after, kept=False):
     if mode == "resume":
         return "in the pinned session"
     return "in a new session, now pinned" if pinned_after else "in a new throwaway session"
+
+
+
+def cached(cache, key, ttl, fetch):
+    """`fetch()`'s answer, reused for `ttl` seconds; stale entries are dropped on a miss."""
+    now = time.time()
+    hit = cache.get(key)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    for k in [k for k, v in list(cache.items()) if now - v[0] >= ttl]:
+        cache.pop(k, None)
+    value = fetch()
+    cache[key] = (now, value)
+    return value
 
 
 class Orchestrator:
@@ -415,19 +429,25 @@ class Orchestrator:
         elif do == "review_worktree":
             result = worktrees.review_worktree(snap["repo"], snap["number"], snap["head"], self.roots)
             if result["ok"]:
-                pin = self.db.pin(key)
-                self.db.set_pin(key, result["path"], pin["session_id"] if pin else None,
-                                pin["how"] if pin else "review")
+                self.repin_path(key, result["path"])
         elif do == "pass":
             mode = "ask" if self.held() and reaction["mode"] == "auto" else reaction["mode"]
             self.offer_or_queue(snap, reaction["pass"], mode, reaction.get("head"))
+
+    def worktree_for(self, snap):
+        return self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
+
+    def repin_path(self, key, path):
+        """Point a PR's pin at `path`, keeping its session."""
+        pin = self.db.pin(key)
+        self.db.set_pin(key, path, pin["session_id"] if pin else None, pin["how"] if pin else "review")
 
     def checkout_for(self, snap):
         """Where a PR's code lives locally: its branch's checkout, or the review worktree."""
         pin = self.db.pin(snap["key"])
         if pin and pin.get("path") and os.path.isdir(pin["path"]):
             return pin["path"]
-        wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
+        wt = self.worktree_for(snap)
         if wt and snap["mine"]:
             return wt["path"]
         return None
@@ -435,7 +455,7 @@ class Orchestrator:
     def ensure_pin(self, snap, force=False):
         key = snap["key"]
         adapter = self.adapter
-        wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
+        wt = self.worktree_for(snap)
         if not adapter:
             return None
         current = self.db.pin(key)
@@ -586,9 +606,7 @@ class Orchestrator:
             if not made["ok"]:
                 return self.fail_pass(row, made["error"])
             review_path = made["path"]
-            pin = self.db.pin(snap["key"])
-            self.db.set_pin(snap["key"], review_path, pin["session_id"] if pin else None,
-                            pin["how"] if pin else "review")
+            self.repin_path(snap["key"], review_path)
         merge = None
         if name == "conflicts":
             merge = worktrees.merge_worktree(snap["repo"], snap["number"], snap["head"], snap.get("base"), self.roots)
@@ -943,7 +961,7 @@ class Orchestrator:
         return None
 
     def action_context(self, snap):
-        wt = self.worktree_map.get(f"{snap['repo']}#{snap['branch']}")
+        wt = self.worktree_for(snap)
         return {"worktree": wt if snap["mine"] else None, "roots": self.roots}
 
     # ---------- page requests
@@ -1128,7 +1146,7 @@ class Orchestrator:
         return {"ok": True, "fields": fields}
 
     def set_current_view(self, view):
-        self.db.set_current_view(", ".join(view_targets(view)) if view else "")
+        self.db.set_current_view(view_key(view))
         self.publish()
         return {"ok": True, **self.views()}
 
@@ -1144,27 +1162,15 @@ class Orchestrator:
     def merged_history(self, view, kind, after=None):
         """A page of a view's older merges, for Show more; kept a few minutes so other tabs
         reuse it."""
-        key = (", ".join(view_targets(view)) if view else "", kind, after or "")
-        now = time.time()
-        hit = self.merged_cache.get(key)
-        if hit and now - hit[0] < MERGED_CACHE_SECONDS:
-            page = hit[1]
-        else:
-            page = self.poller.merged(view, kind, after)
-            self.merged_cache = {k: v for k, v in self.merged_cache.items() if now - v[0] < MERGED_CACHE_SECONDS}
-            self.merged_cache[key] = (now, page)
+        page = cached(self.merged_cache, (view_key(view), kind, after or ""), MERGED_CACHE_SECONDS,
+                      lambda: self.poller.merged(view, kind, after))
         return {"ok": True, **page, "owners": dict(self.poller.owner_types)}
 
     def insights(self, view):
-        key = ", ".join(view_targets(view)) if view else ""
-        now = time.time()
-        hit = self.insights_cache.get(key)
-        if not hit or now - hit[0] >= INSIGHTS_CACHE_SECONDS:
-            hit = (now, self.insights_merges(key, view))
-            self.insights_cache = {k: v for k, v in self.insights_cache.items() if now - v[0] < INSIGHTS_CACHE_SECONDS}
-            self.insights_cache[key] = hit
+        key = view_key(view)
+        merges = cached(self.insights_cache, key, INSIGHTS_CACHE_SECONDS, lambda: self.insights_merges(key, view))
         work = self.db.work_since(iso(datetime.now(timezone.utc) - timedelta(days=SHIPYARD_WORK_DAYS)))
-        return {"ok": True, **hit[1], "shipyard": work}
+        return {"ok": True, **merges, "shipyard": work}
 
     def insights_merges(self, key, view):
         """The last 12 weeks of merges. Ones merged before the last two weeks don't change,

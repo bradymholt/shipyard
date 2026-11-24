@@ -141,6 +141,10 @@ def view_targets(view):
     return targets
 
 
+def view_key(view):
+    return ", ".join(view_targets(view)) if view else ""
+
+
 def validate_views(raw):
     if not isinstance(raw, list):
         raise ValueError('"views" must be an array')
