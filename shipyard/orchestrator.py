@@ -19,7 +19,7 @@ from .events import derive
 from .github import GitHub, GitHubError
 from .poll import INSIGHTS_ROW_VERSION, INSIGHTS_SETTLED_DAYS, INSIGHTS_WEEKS, MERGED_SEARCHES, Poller
 from .settings import MISSING, SECTIONS, fields as setting_fields, save as save_setting_file
-from .state import State, now_iso
+from .state import State, iso, now_iso
 
 POLL_SECONDS = 60
 BASE_CHECKS_SECONDS = 300
@@ -810,7 +810,7 @@ class Orchestrator:
             ready_at = self.approve_ready_at(snap, rule["min_wait_minutes"])
             if ready_at > datetime.now(timezone.utc):
                 self.db.update_card(card_id, auto_wait={
-                    "until": ready_at.strftime("%Y-%m-%dT%H:%M:%SZ"), "action": action,
+                    "until": iso(ready_at), "action": action,
                     "confidence": confidence, "reason": reason, "source": source})
                 return False
             payload = {}  # an automatic approval carries no words you haven't read
@@ -1163,7 +1163,7 @@ class Orchestrator:
             hit = (now, self.insights_merges(key, view))
             self.insights_cache = {k: v for k, v in self.insights_cache.items() if now - v[0] < INSIGHTS_CACHE_SECONDS}
             self.insights_cache[key] = hit
-        work = self.db.work_since((datetime.now(timezone.utc) - timedelta(days=SHIPYARD_WORK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        work = self.db.work_since(iso(datetime.now(timezone.utc) - timedelta(days=SHIPYARD_WORK_DAYS)))
         return {"ok": True, **hit[1], "shipyard": work}
 
     def insights_merges(self, key, view):
@@ -1252,7 +1252,7 @@ class Orchestrator:
     def snooze(self, key, hours):
         until = None
         if hours:
-            until = (datetime.now(timezone.utc) + timedelta(hours=float(hours))).strftime("%Y-%m-%dT%H:%M:%SZ")
+            until = iso(datetime.now(timezone.utc) + timedelta(hours=float(hours)))
         self.db.set_snooze(key, until)
         self.db.log(key, f"snoozed until {until}" if until else "unsnoozed")
         self.publish()
