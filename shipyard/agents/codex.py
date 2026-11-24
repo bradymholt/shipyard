@@ -35,21 +35,6 @@ class Codex(Adapter):
         want = os.path.realpath(path)
         return [(sid, f) for f, cwd, sid in self.rollouts() if os.path.realpath(cwd) == want]
 
-    def sessions(self, paths):
-        # One walk of the rollouts for every checkout rather than one per path.
-        wanted = {os.path.realpath(p): p for p in paths}
-        by_path = {}
-        for f, cwd, sid in self.rollouts():
-            path = wanted.get(os.path.realpath(cwd))
-            if path:
-                by_path.setdefault(path, {})[f] = sid
-        found = {}
-        for path, files in by_path.items():
-            best = max(((os.path.getmtime(f), f) for f in files if f.exists()), default=None)
-            if best:
-                found[path] = {"id": files[best[1]], "updated": int(best[0])}
-        return found
-
     def user_messages(self, text):
         out = []
         for line in text.splitlines():

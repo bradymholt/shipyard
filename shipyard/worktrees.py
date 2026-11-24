@@ -197,14 +197,11 @@ def clone_dirs(roots):
                 yield repo_dir
 
 
-def discover(roots, agent=None):
+def discover(roots):
     repo_dirs = list(dict.fromkeys(os.path.realpath(d) for d in clone_dirs(roots)))
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         out = [w for worktrees in pool.map(worktrees_for_repo, repo_dirs) for w in worktrees]
     with_dirty_state(out)
-    sessions = latest_sessions([w["path"] for w in out], agent)
-    for w in out:
-        w["session"] = sessions.get(w["path"])
     return out
 
 

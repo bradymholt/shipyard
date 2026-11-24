@@ -184,8 +184,7 @@ def main():
                    "notification-email", "view-transitions"):
         (worktrees / branch).mkdir(parents=True)
         wts.append({"repo": REPO, "branch": branch, "path": str(worktrees / branch), "main": False,
-                    "workspace": None, "dirty": False, "activity": 0,
-                    "session": {"id": sessions[branch][0], "updated": 0} if branch in sessions else None})
+                    "workspace": None, "dirty": False, "activity": 0})
     for target in ("shipyard.server.worktrees.discover", "shipyard.orchestrator.worktrees.discover"):
         mock.patch(target, return_value=wts).start()
     mock.patch("shipyard.orchestrator.adapter_for", return_value=agent).start()

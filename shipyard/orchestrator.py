@@ -31,8 +31,8 @@ AUTO_POLICY = {
     "apply_fix": {"sources": {"ci_failed"}, "mine": True},
     "approve": {"sources": {"re_review"}, "mine": False},
 }
-# How the log names an automatic action it held back, and one it already took.
 REVIEW_STATES = {"APPROVE": "APPROVED", "COMMENT": "COMMENTED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}
+# How the log names an automatic action it held back, and one it already took.
 AUTO_WORDS = {
     "approve": ("the approval", "approved"),
     "rerun_checks": ("the re-run", "re-ran checks on"),
@@ -291,7 +291,7 @@ class Orchestrator:
     # ---------- polling
     def refresh_worktrees(self):
         try:
-            found = worktrees.discover(self.roots, None)
+            found = worktrees.discover(self.roots)
             self.worktree_map = {f"{w['repo'] or ''}#{w['branch']}": w for w in found}
         except Exception as e:
             print(f"Warning: worktree discovery failed: {e}")
