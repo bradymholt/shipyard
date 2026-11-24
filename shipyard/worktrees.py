@@ -103,10 +103,18 @@ def validate_branch(branch):
     return branch, None
 
 
+def no_clone(repo):
+    return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+
+
+def origin_repo(repo_dir):
+    return parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url"))
+
+
 def worktree_path(clone, branch):
     slug = re.sub(r"[^A-Za-z0-9._-]", "-", branch).strip(".-") or "branch"
     digest = hashlib.sha256(branch.encode()).hexdigest()[:10]
-    return os.path.join(clone, ".claude", "worktrees", f"{slug[:80]}-{digest}")
+    return os.path.join(managed_worktree_dir(clone), f"{slug[:80]}-{digest}")
 
 
 def workspace_in(path):
@@ -154,7 +162,7 @@ def is_dirty(path):
 
 
 def worktrees_for_repo(repo_dir):
-    repo = parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url"))
+    repo = origin_repo(repo_dir)
     out, cur = [], {}
     try:
         worktree_list = git(repo_dir, "worktree", "list", "--porcelain")
@@ -280,7 +288,7 @@ def folder_candidates(pr_repos, exclude=()):
         if not clones:
             continue
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            origins = list(pool.map(lambda d: parse_origin(try_git(str(d), "config", "--get", "remote.origin.url")), clones))
+            origins = list(pool.map(lambda d: origin_repo(str(d)), clones))
         matching = sum(1 for o in origins if o and o in pr_repos)
         if pr_repos and not matching:
             continue
@@ -291,7 +299,7 @@ def folder_candidates(pr_repos, exclude=()):
 
 def find_clone(repo, roots):
     for repo_dir in clone_dirs(roots):
-        if parse_origin(try_git(repo_dir, "config", "--get", "remote.origin.url")) == repo:
+        if origin_repo(repo_dir) == repo:
             return repo_dir
     return None
 
@@ -335,7 +343,7 @@ def branch_worktree(repo, branch, roots):
     tracking origin/<branch>."""
     clone = find_clone(repo, roots)
     if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+        return no_clone(repo)
     branch, error = validate_branch(branch or "")
     if error:
         return {"ok": False, "error": error}
@@ -427,7 +435,7 @@ def open_in_main(repo, branch, roots):
     already checked out in a linked worktree, open that checkout instead."""
     clone = find_clone(repo, roots)
     if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+        return no_clone(repo)
     branch, error = validate_branch(branch)
     if error:
         return {"ok": False, "error": error}
@@ -462,6 +470,10 @@ def managed_worktree_dir(clone):
     return os.path.join(clone, ".claude", "worktrees")
 
 
+def merge_worktree_path(clone, number):
+    return os.path.join(managed_worktree_dir(clone), f"merge-{int(number)}")
+
+
 def review_ref(number):
     return f"refs/shipyard/review/{int(number)}"
 
@@ -489,7 +501,7 @@ def review_worktree(repo, number, head, roots, clone_missing=False):
     else:
         clone = find_clone(repo, roots)
     if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+        return no_clone(repo)
     path = os.path.join(managed_worktree_dir(clone), f"review-{int(number)}")
     if os.path.isdir(path):
         try:
@@ -540,7 +552,7 @@ def merge_worktree(repo, number, head, base, roots):
     blocks; a conflict with no text blocks (a delete, a binary file) is listed apart."""
     clone = find_clone(repo, roots)
     if not clone:
-        return {"ok": False, "error": f"No local clone of {repo} found under the configured roots."}
+        return no_clone(repo)
     base, error = validate_branch(base or "")
     if error:
         return {"ok": False, "error": error}
@@ -549,7 +561,7 @@ def merge_worktree(repo, number, head, base, roots):
     if error:
         return {"ok": False, "error": f"Couldn't fetch the PR and {base}: {error}"}
     target = head or try_git(clone, "rev-parse", merge_ref(number)).strip()
-    path = os.path.join(managed_worktree_dir(clone), f"merge-{int(number)}")
+    path = merge_worktree_path(clone, number)
     if os.path.isdir(path):
         run_git(path, "merge", "--abort")
         error = (mutate_git(path, "reset", "--hard", "--quiet", target, timeout=60)
