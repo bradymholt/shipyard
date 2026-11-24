@@ -650,13 +650,11 @@ $("#sidebar").addEventListener("click", async (e) => {
   if ((btn = t("[data-undo]"))) return busy(btn, () => apiCall(`api/undo?card=${btn.dataset.undo}`), "Couldn't undo");
   if ((btn = t("[data-repin]"))) {
     return busy(btn, async () => {
-      const res = await fetch(`api/sessions?key=${encodeURIComponent(btn.dataset.repin)}`, { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't list sessions.");
+      const data = await apiGet(`api/sessions?key=${encodeURIComponent(btn.dataset.repin)}`);
       sessionChoices = { key: btn.dataset.repin, sessions: data.sessions };
       lastSidebarHtml = "";
       renderSidebar();
-    });
+    }, "Couldn't list sessions");
   }
   if (t("[data-repin-cancel]")) { sessionChoices = null; return renderSidebar(); }
   if ((btn = t("[data-unpin]"))) return busy(btn, () => apiCall(`api/unpin?key=${encodeURIComponent(btn.dataset.unpin)}`));
