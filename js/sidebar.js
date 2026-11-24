@@ -7,7 +7,7 @@ import { agentName, serverPr, serverSteps, failingChecks, findPr, isReviewPr, ma
 import { ciHtml, openCheckoutButton, openInApp, render } from "./board.js";
 
 // One component whose sections appear when the server is connected, like the
-// worktree icons: Header, Next, PR session, Review, Activity.
+// worktree icons: Header, Next, Auto-approve, PR session, Activity.
 export let sidebarKey = null;
 
 const drafts = new Map();       // unsent text (edited replies), by field id

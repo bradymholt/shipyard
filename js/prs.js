@@ -120,8 +120,6 @@ export function reviewLaneOf(pr) {
   return reviewRequestedForViewer(pr) || viewerReviewDismissed(pr) || unaskedRereview(pr) ? 0 : 1;
 }
 
-// A card gets one chip, only when there is a next step. The server decides every
-// one, so a page without it shows none.
 const FAILING_CONCLUSIONS = new Set(["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"]);
 
 export const serverPr = (pr) => state.serverState?.prs?.[prKey(pr)] || null;
@@ -136,9 +134,6 @@ export function failingChecks(pr) {
     .filter((c) => c.__typename === "CheckRun" ? FAILING_CONCLUSIONS.has(c.conclusion) : c.state === "FAILURE" || c.state === "ERROR")
     .map((c) => ({ name: c.name || c.context || "check", url: c.detailsUrl || c.targetUrl }));
 }
-
-// The Reviews tab's copy of a PR carries viewerLatestReview; the targeted copy doesn't.
-const reviewedCopy = (pr) => state.reviewedPrs.find((r) => prKey(r) === prKey(pr)) || pr;
 
 const reviewRequested = (pr, login) => (pr.reviewRequests?.nodes || []).some((n) => n.requestedReviewer?.login === login);
 
@@ -184,6 +179,8 @@ export function serverSteps(pr) {
   return pr.mergedAt ? steps.filter((s) => s.approval) : steps;
 }
 
+// A card gets one chip, only when there is a next step. The server decides every
+// one, so a page without it shows none.
 export function nextChip(pr) {
   const cp = serverPr(pr);
   if (isSnoozed(pr)) return { ...cp.chip, tone: "muted" };

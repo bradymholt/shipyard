@@ -31,11 +31,7 @@ function removeView(v) {
   if (wasCurrent) resetData();
   renderRepoSelect();
   renderViewsList();
-  if (wasCurrent) {
-    render();
-  } else {
-    render();
-  }
+  render();
 }
 
 $("#views-list").addEventListener("click", (e) => {
