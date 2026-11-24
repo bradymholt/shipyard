@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import PASS_TIMEOUT, Adapter, AgentError, parse_json_answer
+from . import PASS_TIMEOUT, Adapter, AgentError, json_lines, parse_json_answer
 
 _meta = {}  # rollout file -> (cwd, session id); a rollout's first line never changes
 
@@ -37,11 +37,7 @@ class Codex(Adapter):
 
     def user_messages(self, text):
         out = []
-        for line in text.splitlines():
-            try:
-                record = json.loads(line)
-            except ValueError:
-                continue
+        for record in json_lines(text.splitlines()):
             payload = record.get("payload") or {}
             if record.get("type") != "response_item" or payload.get("role") != "user":
                 continue
@@ -78,11 +74,7 @@ class Codex(Adapter):
             if r.returncode != 0:
                 raise AgentError((r.stderr or r.stdout or f"codex exited {r.returncode}").strip()[-500:])
             thread = session_id if mode == "resume" else None
-            for line in r.stdout.splitlines():
-                try:
-                    event = json.loads(line)
-                except ValueError:
-                    continue
+            for event in json_lines(r.stdout.splitlines()):
                 if event.get("type") == "thread.started" and event.get("thread_id"):
                     thread = event["thread_id"]
             try:

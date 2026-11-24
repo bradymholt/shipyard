@@ -643,7 +643,7 @@ class Orchestrator:
         kept = False
         if mode == "resume" and adapter.is_live(cwd, session):
             mode, kept = "fork" if adapter.can_fork else "fresh", True
-        if mode == "fresh" and adapter.key == "claude-code":
+        if mode == "fresh":
             new_session = str(uuid.uuid4())
 
         values = passes.inputs(name, snap, self.github, earlier)

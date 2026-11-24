@@ -4,7 +4,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from . import PASS_TIMEOUT, Adapter, AgentError, parse_json_answer
+from . import PASS_TIMEOUT, Adapter, AgentError, json_lines, parse_json_answer
 
 # Passes only read: files and the PR on GitHub. Only the interactive session you open
 # yourself edits files. git log/show are left out because --output writes a file.
@@ -39,11 +39,7 @@ class ClaudeCode(Adapter):
 
     def user_messages(self, text):
         out = []
-        for line in text.splitlines():
-            try:
-                record = json.loads(line)
-            except ValueError:
-                continue
+        for record in json_lines(text.splitlines()):
             if record.get("type") != "user" or record.get("isMeta") or record.get("isSidechain"):
                 continue
             content = (record.get("message") or {}).get("content")
@@ -61,13 +57,7 @@ class ClaudeCode(Adapter):
         # Desktop records each title (auto or renamed) as a "custom-title" line; the last one is current.
         found = None
         if '"custom-title"' in text:
-            for line in text.splitlines():
-                if '"custom-title"' not in line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except ValueError:
-                    continue
+            for record in json_lines(line for line in text.splitlines() if '"custom-title"' in line):
                 if record.get("type") == "custom-title" and record.get("customTitle"):
                     found = record["customTitle"]
         return found
